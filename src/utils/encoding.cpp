@@ -1,6 +1,7 @@
 #include "utils/encoding.hpp"
 
 #include <vector>
+#include <cstdint>
 
 namespace duckdb {
 
