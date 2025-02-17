@@ -1,7 +1,7 @@
 #include "utils/helpers.hpp"
-#include <duckdb/main/extension_util.hpp>
 
 namespace duckdb {
+namespace internal {
 
 bool ShouldRun(TableFunctionInput &input) {
 	auto state = dynamic_cast<RunOnceTableFunctionState *>(input.global_state.get());
@@ -22,9 +22,5 @@ unique_ptr<FunctionData> ResultBind(ClientContext &, TableFunctionBindInput &,
 	return nullptr;
 }
 
-void RegisterTF(DatabaseInstance &instance, const char* name, table_function_t func) {
-	TableFunction tf(name, {}, func, ResultBind, RunOnceTableFunctionState::Init);
-	ExtensionUtil::RegisterFunction(instance, tf);
-}
-
+} // namespace internal
 } // namespace duckdb

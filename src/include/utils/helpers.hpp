@@ -1,8 +1,12 @@
 #pragma once
 
 #include <duckdb.hpp>
+#include <duckdb/main/extension_util.hpp>
+#include <type_traits>
 
 namespace duckdb {
+
+typedef std::string (*simple_tf_t) (ClientContext &);
 
 struct RunOnceTableFunctionState : GlobalTableFunctionState {
 	RunOnceTableFunctionState() : run(false) {};
@@ -20,8 +24,56 @@ T GetSetting(const ClientContext &context, const char *setting_name, const T def
 	return context.TryGetCurrentSetting(setting_name, value) ? value.GetValue<T>() : default_value;
 }
 
+namespace internal {
+unique_ptr<FunctionData> ResultBind(ClientContext &, TableFunctionBindInput &,
+	vector<LogicalType> &,
+	vector<std::string> &);
+
 bool ShouldRun(TableFunctionInput &input);
 
-void RegisterTF(DatabaseInstance &instance, const char* name, table_function_t func);
+template <typename Func>
+struct CallFunctionHelper;
+
+template <>
+struct CallFunctionHelper<std::string(*)()> {
+    static std::string call(ClientContext &context, TableFunctionInput &input, std::string(*f)()) {
+        return f();
+    }
+};
+
+template <>
+struct CallFunctionHelper<std::string(*)(ClientContext &)> {
+    static std::string call(ClientContext &context, TableFunctionInput &input, std::string(*f)(ClientContext &)) {
+        return f(context);
+    }
+};
+
+template <>
+struct CallFunctionHelper<std::string(*)(ClientContext &, TableFunctionInput &)> {
+    static std::string call(ClientContext &context, TableFunctionInput &input, std::string(*f)(ClientContext &, TableFunctionInput &)) {
+        return f(context, input);
+    }
+};
+
+template <typename Func, Func func>
+void TableFunc(ClientContext &context, TableFunctionInput &input, DataChunk &output) {
+	if (!ShouldRun(input)) {
+		return;
+	}
+
+	const std::string result = CallFunctionHelper<Func>::call(context, input, func);
+	output.SetCardinality(1);
+	output.SetValue(0, 0, result);
+}
+
+template <typename Func, Func func>
+void RegisterTF(DatabaseInstance &instance, const char* name) {
+	TableFunction tf(name, {}, internal::TableFunc<Func, func>, internal::ResultBind, RunOnceTableFunctionState::Init);
+	ExtensionUtil::RegisterFunction(instance, tf);
+}
+
+}
+
+#define RESISTER_TF(name, func) internal::RegisterTF<decltype(&func), &func>(instance, name)
 
 } // namespace duckdb

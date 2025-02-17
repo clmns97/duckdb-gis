@@ -40,47 +40,23 @@ std::string GetHttpServerLocalURL() {
 
 } // namespace internal
 
-void OutputResult(const std::string &result, DataChunk &out_chunk) {
-	out_chunk.SetCardinality(1);
-	out_chunk.SetValue(0, 0, result);
-}
-
-void StartUIFunction(ClientContext &context, TableFunctionInput &input,
-							DataChunk &out_chunk) {
-	if (!ShouldRun(input)) {
-		return;
-	}
-
+std::string StartUIFunction(ClientContext &context) {
 	internal::StartHttpServer(context);
 	auto local_url = internal::GetHttpServerLocalURL();
 
 	const std::string command = StringUtil::Format("%s %s", OPEN_COMMAND, local_url);
-	std::string result = system(command.c_str()) ?
+	return system(command.c_str()) ?
 		  StringUtil::Format("Navigate browser to %s", local_url) // open command failed
 	 	: StringUtil::Format("MotherDuck UI started at %s", local_url);
-	OutputResult(result, out_chunk);
 }
 
-void StartUIServerFunction(ClientContext &context, TableFunctionInput &input,
-									DataChunk &out_chunk) {
-	if (!ShouldRun(input)) {
-		return;
-	}
-
-	const bool already = internal::StartHttpServer(context);
-	const char* already_str = already ? "already " : "";
-	auto result = StringUtil::Format("MotherDuck UI server %sstarted at %s", already_str, internal::GetHttpServerLocalURL());
-	OutputResult(result, out_chunk);
+std::string StartUIServerFunction(ClientContext &context) {
+	const char* already = internal::StartHttpServer(context) ? "already " : "";
+	return StringUtil::Format("MotherDuck UI server %sstarted at %s", already, internal::GetHttpServerLocalURL());
 }
 
-void StopUIServerFunction(ClientContext &, TableFunctionInput &input,
-									DataChunk &out_chunk) {
-	if (!ShouldRun(input)) {
-		return;
-	}
-
-	auto result = ui::HttpServer::instance()->Stop() ? "UI server stopped" : "UI server already stopped";
-	OutputResult(result, out_chunk);
+std::string StopUIServerFunction() {
+	return ui::HttpServer::instance()->Stop() ? "UI server stopped" : "UI server already stopped";
 }
 
 // FIXME
@@ -103,9 +79,9 @@ static void LoadInternal(DatabaseInstance &instance) {
 		UI_REMOTE_URL_SETTING_NAME, UI_REMOTE_URL_SETTING_DESCRIPTION, LogicalType::VARCHAR,
 		Value(GetEnvOrDefault(UI_REMOTE_URL_SETTING_NAME, UI_REMOTE_URL_SETTING_DEFAULT)));
 
-	RegisterTF(instance, "start_ui", StartUIFunction);
-	RegisterTF(instance, "start_ui_server", StartUIServerFunction);
-	RegisterTF(instance, "stop_ui_server", StopUIServerFunction);
+	RESISTER_TF("start_ui", StartUIFunction);
+	RESISTER_TF("start_ui_server", StartUIServerFunction);
+	RESISTER_TF("stop_ui_server", StopUIServerFunction);
 }
 
 void UiExtension::Load(DuckDB &db) {
