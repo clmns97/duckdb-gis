@@ -25,6 +25,20 @@ set(EXTENSION_SOURCES
   src/utils/serialization.cpp
 )
 
+find_package(Git)
+if (NOT Git_FOUND)
+  message(FATAL_ERROR "Git not found, unable to determine git sha")
+endif()
+
+execute_process(
+        COMMAND ${GIT_EXECUTABLE} rev-parse --short=10 HEAD
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+        OUTPUT_VARIABLE UI_EXTENSION_GIT_SHA
+)
+
+message(STATUS "UI_EXTENSION_GIT_SHA=${UI_EXTENSION_GIT_SHA}")
+add_definitions(-DUI_EXTENSION_GIT_SHA="${UI_EXTENSION_GIT_SHA}")
+
 build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})
 build_loadable_extension(${TARGET_NAME} " " ${EXTENSION_SOURCES})
 

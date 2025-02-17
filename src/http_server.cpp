@@ -94,10 +94,10 @@ bool HttpServer::Start(const uint16_t local_port, const std::string &remote_url,
 	local_port_ = local_port;
 	remote_url_ = remote_url;
 	ddb_instance_ = ddb_instance;
-#ifndef EXT_VERSION_UI
-#error "EXT_VERSION_UI must be defined"
+#ifndef UI_EXTENSION_GIT_SHA
+#error "UI_EXTENSION_GIT_SHA must be defined"
 #endif
-	user_agent_ = StringUtil::Format("duckdb-ui/%s(%s)", EXT_VERSION_UI, DuckDB::Platform());
+	user_agent_ = StringUtil::Format("duckdb-ui/%s(%s)", UI_EXTENSION_GIT_SHA, DuckDB::Platform());
 	event_dispatcher_ = make_uniq<EventDispatcher>();
 	thread_ = make_uniq<std::thread>(&HttpServer::Run, this);
 	return true;

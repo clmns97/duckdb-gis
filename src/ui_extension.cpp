@@ -115,8 +115,8 @@ std::string UiExtension::Name() {
 }
 
 std::string UiExtension::Version() const {
-#ifdef EXT_VERSION_UI
-	return EXT_VERSION_UI;
+#ifdef UI_EXTENSION_GIT_SHA
+	return UI_EXTENSION_GIT_SHA;
 #else
 	return "";
 #endif
