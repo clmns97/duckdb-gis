@@ -72,8 +72,16 @@ void RegisterTF(DatabaseInstance &instance, const char* name) {
 	ExtensionUtil::RegisterFunction(instance, tf);
 }
 
+template <typename Func, Func func>
+void RegisterTFWithArgs(DatabaseInstance &instance, const char* name, vector<LogicalType> arguments, table_function_bind_t bind) {
+	TableFunction tf(name, arguments, internal::TableFunc<Func, func>, bind, RunOnceTableFunctionState::Init);
+	ExtensionUtil::RegisterFunction(instance, tf);
+}
+
 }
 
 #define RESISTER_TF(name, func) internal::RegisterTF<decltype(&func), &func>(instance, name)
+
+#define RESISTER_TF_ARGS(name, args, func, bind) internal::RegisterTFWithArgs<decltype(&func), &func>(instance, name, args, bind)
 
 } // namespace duckdb

@@ -59,10 +59,31 @@ std::string StopUIServerFunction() {
 	return ui::HttpServer::instance()->Stop() ? "UI server stopped" : "UI server already stopped";
 }
 
-// FIXME
-// void HandleConnected(const std::string &token) {
-// 	ui::HttpServer::instance()->SendConnectedEvent(token);
-// }
+// Connected notification
+struct NotifyConnectedFunctionData : public TableFunctionData {
+	NotifyConnectedFunctionData(std::string _token) : token(_token) {}
+
+	std::string token;
+};
+
+static unique_ptr<FunctionData> NotifyConnectedBind(ClientContext &, TableFunctionBindInput &input,
+	vector<LogicalType> &out_types, vector<string> &out_names) {
+	if (input.inputs[0].IsNull()) {
+		throw BinderException("Must provide a token");
+	}
+
+	out_names.emplace_back("result");
+	out_types.emplace_back(LogicalType::VARCHAR);
+	return make_uniq<NotifyConnectedFunctionData>(input.inputs[0].ToString());
+}
+
+std::string NotifyConnectedFunction(ClientContext &context, TableFunctionInput &input) {
+	auto &inputs = input.bind_data->Cast<NotifyConnectedFunctionData>();
+	ui::HttpServer::instance()->SendConnectedEvent(inputs.token);
+	return "OK";
+}
+
+// - connected notification
 
 std::string NotifyCatalogChangedFunction() {
 	ui::HttpServer::instance()->SendCatalogChangedEvent();
@@ -83,6 +104,7 @@ static void LoadInternal(DatabaseInstance &instance) {
 	RESISTER_TF("start_ui_server", StartUIServerFunction);
 	RESISTER_TF("stop_ui_server", StopUIServerFunction);
 	RESISTER_TF("notify_ui_catalog_changed", NotifyCatalogChangedFunction);
+	RESISTER_TF_ARGS("notify_ui_connected", {LogicalType::VARCHAR}, NotifyConnectedFunction, NotifyConnectedBind);
 }
 
 void UiExtension::Load(DuckDB &db) {
