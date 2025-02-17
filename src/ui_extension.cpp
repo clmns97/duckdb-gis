@@ -64,10 +64,10 @@ std::string StopUIServerFunction() {
 // 	ui::HttpServer::instance()->SendConnectedEvent(token);
 // }
 
-// FIXME
-// void HandleCatalogChanged() {
-// 	ui::HttpServer::instance()->SendCatalogChangedEvent();
-// }
+std::string NotifyCatalogChangedFunction() {
+	ui::HttpServer::instance()->SendCatalogChangedEvent();
+	return "OK";
+}
 
 static void LoadInternal(DatabaseInstance &instance) {
     auto &config = DBConfig::GetConfig(instance);
@@ -82,6 +82,7 @@ static void LoadInternal(DatabaseInstance &instance) {
 	RESISTER_TF("start_ui", StartUIFunction);
 	RESISTER_TF("start_ui_server", StartUIServerFunction);
 	RESISTER_TF("stop_ui_server", StopUIServerFunction);
+	RESISTER_TF("notify_ui_catalog_changed", NotifyCatalogChangedFunction);
 }
 
 void UiExtension::Load(DuckDB &db) {
