@@ -18,7 +18,7 @@ jobs:
     with:
       ci_tools_version: main
       duckdb_version: main
-      exclude_archs: 'wasm_mvp;wasm_eh;wasm_threads'
+      exclude_archs: 'wasm_mvp;wasm_eh;wasm_threads;windows_amd64_rtools;windows_amd64_mingw'
       extension_name: ui
 
   duckdb-stable-build:
@@ -27,5 +27,5 @@ jobs:
     with:
       ci_tools_version: v1.2.0
       duckdb_version: v1.2.0
-      exclude_archs: 'wasm_mvp;wasm_eh;wasm_threads'
+      exclude_archs: 'wasm_mvp;wasm_eh;wasm_threads;windows_amd64_rtools;windows_amd64_mingw'
       extension_name: ui
