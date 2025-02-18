@@ -167,8 +167,7 @@ void HttpServer::HandleGetLocalEvents(const httplib::Request &req, httplib::Resp
 
 void HttpServer::HandleGetLocalToken(const httplib::Request &req, httplib::Response &res) {
 	if (!ddb_instance_->ExtensionIsLoaded("motherduck")) {
-		res.status = 500;
-		res.set_content("MotherDuck extension is not loaded", "text/plain");
+		res.set_content("", "text/plain"); // UI expects an empty response if the extension is not loaded
 		return;
 	}
 
