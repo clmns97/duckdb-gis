@@ -166,10 +166,24 @@ void HttpServer::HandleGetLocalEvents(const httplib::Request &req, httplib::Resp
 }
 
 void HttpServer::HandleGetLocalToken(const httplib::Request &req, httplib::Response &res) {
-	throw new std::runtime_error("Not implemented"); // FIXME
-	// auto md_config = ClientExtension::GetState(*ddb_instance_).GetConfig();
-	// std::string md_token = md_config ? md_config->token : "";
-	// res.set_content(md_token, "text/plain");
+	if (!ddb_instance_->ExtensionIsLoaded("motherduck")) {
+		res.status = 500;
+		res.set_content("MotherDuck extension is not loaded", "text/plain");
+		return;
+	}
+
+	Connection connection(*ddb_instance_);
+	auto query_res = connection.Query("CALL get_md_token()");
+	if (query_res->HasError()) {
+		res.status = 500;
+		res.set_content("Could not get token: " + query_res->GetError(), "text/plain");
+		return;
+	}
+
+	auto chunk = query_res->Fetch();
+	auto token = chunk->GetValue(0, 0).GetValue<std::string>();
+	res.status = 200;
+	res.set_content(token, "text/plain");
 }
 
 void HttpServer::HandleGet(const httplib::Request &req, httplib::Response &res) {
