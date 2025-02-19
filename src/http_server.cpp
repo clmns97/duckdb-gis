@@ -2,6 +2,7 @@
 
 #include <duckdb/common/serializer/memory_stream.hpp>
 #include <duckdb/common/serializer/binary_serializer.hpp>
+#include <duckdb/main/attached_database.hpp>
 #include <duckdb/parser/parser.hpp>
 #include "utils/env.hpp"
 #include "utils/serialization.hpp"
@@ -104,6 +105,11 @@ bool HttpServer::Start(const uint16_t _local_port,
                                   DuckDB::Platform());
   event_dispatcher = make_uniq<EventDispatcher>();
   main_thread = make_uniq<std::thread>(&HttpServer::Run, this);
+  {
+    std::lock_guard<std::mutex> guard(watcher_mutex);
+    watcher_should_run = true;
+  }
+  watcher_thread = make_uniq<std::thread>(&HttpServer::Watch, this);
   return true;
 }
 
@@ -114,6 +120,17 @@ bool HttpServer::Stop() {
 
   event_dispatcher->Close();
   server.stop();
+
+  if (watcher_thread) {
+    {
+      std::lock_guard<std::mutex> guard(watcher_mutex);
+      watcher_should_run = false;
+    }
+    watcher_cv.notify_all();
+    watcher_thread->join();
+    watcher_thread.reset();
+  }
+
   main_thread->join();
   main_thread.reset();
   event_dispatcher.reset();
@@ -137,6 +154,62 @@ void HttpServer::SendCatalogChangedEvent() {
 void HttpServer::SendEvent(const std::string &message) {
   if (event_dispatcher) {
     event_dispatcher->SendEvent(message);
+  }
+}
+
+void HttpServer::WatchForCatalogUpdate(CatalogState &last_state) {
+  bool has_change = false;
+  duckdb::Connection con{*ddb_instance};
+  auto &context = *con.context;
+  con.BeginTransaction();
+  const auto &databases =
+      ddb_instance->GetDatabaseManager().GetDatabases(context);
+  std::set<idx_t> db_oids;
+
+  // Check currently attached databases
+  for (const auto &db_ref : databases) {
+    auto &db = db_ref.get();
+    if (db.IsTemporary()) {
+      continue; // ignore temp databases
+    }
+
+    db_oids.insert(db.oid);
+    auto &catalog = db.GetCatalog();
+    auto current_version = catalog.GetCatalogVersion(context);
+    auto last_version_it = last_state.db_to_catalog_version.find(db.oid);
+    if (last_version_it == last_state.db_to_catalog_version.end() // first time
+        || !(last_version_it->second == current_version)) {       // updated
+      has_change = true;
+      last_state.db_to_catalog_version[db.oid] = current_version;
+    }
+  }
+
+  // Now check if any databases have been detached
+  for (auto it = last_state.db_to_catalog_version.begin();
+       it != last_state.db_to_catalog_version.end();) {
+    if (db_oids.find(it->first) == db_oids.end()) {
+      has_change = true;
+      it = last_state.db_to_catalog_version.erase(it);
+    } else {
+      ++it;
+    }
+  }
+
+  // If there was any change, notify the UI
+  if (has_change) {
+    SendCatalogChangedEvent();
+  }
+}
+
+void HttpServer::Watch() {
+  CatalogState last_state;
+  while (watcher_should_run) {
+    WatchForCatalogUpdate(last_state);
+    {
+      std::unique_lock<std::mutex> lock(watcher_mutex);
+      watcher_cv.wait_for(lock,
+                          std::chrono::milliseconds(2000)); // TODO - configure
+    }
   }
 }
 

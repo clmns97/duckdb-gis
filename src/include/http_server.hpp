@@ -18,6 +18,10 @@ class MemoryStream;
 
 namespace ui {
 
+struct CatalogState {
+  std::map<idx_t, optional_idx> db_to_catalog_version;
+};
+
 class EventDispatcher {
 public:
   bool WaitEvent(httplib::DataSink *sink);
@@ -51,6 +55,7 @@ public:
 private:
   void SendEvent(const std::string &message);
   void Run();
+  void Watch();
   void HandleGetLocalEvents(const httplib::Request &req,
                             httplib::Response &res);
   void HandleGetLocalToken(const httplib::Request &req, httplib::Response &res);
@@ -70,12 +75,20 @@ private:
   void SetResponseEmptyResult(httplib::Response &res);
   void SetResponseErrorResult(httplib::Response &res, const std::string &error);
 
+  // Watchers
+  void WatchForCatalogUpdate(CatalogState &last_state);
+
   uint16_t local_port;
   std::string remote_url;
   shared_ptr<DatabaseInstance> ddb_instance;
   std::string user_agent;
   httplib::Server server;
   unique_ptr<std::thread> main_thread;
+  unique_ptr<std::thread> watcher_thread;
+  std::mutex watcher_mutex;
+  std::condition_variable watcher_cv;
+  std::atomic<bool> watcher_should_run;
+
   std::mutex connections_mutex;
   std::unordered_map<std::string, shared_ptr<Connection>> connections;
   unique_ptr<EventDispatcher> event_dispatcher;
