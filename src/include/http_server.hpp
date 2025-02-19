@@ -25,13 +25,13 @@ public:
   void Close();
 
 private:
-  std::mutex mutex_;
-  std::condition_variable cv_;
-  std::atomic_int next_id_{0};
-  std::atomic_int current_id_{-1};
-  std::atomic_int wait_count_{0};
-  std::string message_;
-  std::atomic_bool closed_{false};
+  std::mutex mutex;
+  std::condition_variable cv;
+  std::atomic_int next_id{0};
+  std::atomic_int current_id{-1};
+  std::atomic_int wait_count{0};
+  std::string message;
+  std::atomic_bool closed{false};
 };
 
 class HttpServer {
@@ -70,17 +70,17 @@ private:
   void SetResponseEmptyResult(httplib::Response &res);
   void SetResponseErrorResult(httplib::Response &res, const std::string &error);
 
-  uint16_t local_port_;
-  std::string remote_url_;
-  shared_ptr<DatabaseInstance> ddb_instance_;
-  std::string user_agent_;
-  httplib::Server server_;
-  unique_ptr<std::thread> thread_;
-  std::mutex connections_mutex_;
-  std::unordered_map<std::string, shared_ptr<Connection>> connections_;
-  unique_ptr<EventDispatcher> event_dispatcher_;
+  uint16_t local_port;
+  std::string remote_url;
+  shared_ptr<DatabaseInstance> ddb_instance;
+  std::string user_agent;
+  httplib::Server server;
+  unique_ptr<std::thread> main_thread;
+  std::mutex connections_mutex;
+  std::unordered_map<std::string, shared_ptr<Connection>> connections;
+  unique_ptr<EventDispatcher> event_dispatcher;
 
-  static unique_ptr<HttpServer> instance_;
+  static unique_ptr<HttpServer> server_instance;
 };
 ;
 
