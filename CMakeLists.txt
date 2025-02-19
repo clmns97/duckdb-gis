@@ -3,39 +3,31 @@ cmake_minimum_required(VERSION 3.5...3.31.5)
 # Set extension name here
 set(TARGET_NAME ui)
 
-# DuckDB's extension distribution supports vcpkg. As such, dependencies can be added in ./vcpkg.json and then
-# used in cmake with find_package. Feel free to remove or replace with other dependencies.
-# Note that it should also be removed from vcpkg.json to prevent needlessly installing it..
+# DuckDB's extension distribution supports vcpkg. As such, dependencies can be
+# added in ./vcpkg.json and then used in cmake with find_package. Feel free to
+# remove or replace with other dependencies. Note that it should also be removed
+# from vcpkg.json to prevent needlessly installing it..
 find_package(OpenSSL REQUIRED)
 
 set(EXTENSION_NAME ${TARGET_NAME}_extension)
 
 project(${TARGET_NAME})
-include_directories(
-  src/include
-  ${DuckDB_SOURCE_DIR}/third_party/httplib
-)
+include_directories(src/include ${DuckDB_SOURCE_DIR}/third_party/httplib)
 
 set(EXTENSION_SOURCES
-  src/ui_extension.cpp
-  src/http_server.cpp
-  src/utils/encoding.cpp
-  src/utils/env.cpp
-  src/utils/helpers.cpp
-  src/utils/serialization.cpp
-)
+    src/ui_extension.cpp src/http_server.cpp src/utils/encoding.cpp
+    src/utils/env.cpp src/utils/helpers.cpp src/utils/serialization.cpp)
 
 find_package(Git)
-if (NOT Git_FOUND)
+if(NOT Git_FOUND)
   message(FATAL_ERROR "Git not found, unable to determine git sha")
 endif()
 
 execute_process(
-        COMMAND ${GIT_EXECUTABLE} rev-parse --short=10 HEAD
-        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-        OUTPUT_VARIABLE UI_EXTENSION_GIT_SHA
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-)
+  COMMAND ${GIT_EXECUTABLE} rev-parse --short=10 HEAD
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+  OUTPUT_VARIABLE UI_EXTENSION_GIT_SHA
+  OUTPUT_STRIP_TRAILING_WHITESPACE)
 
 message(STATUS "UI_EXTENSION_GIT_SHA=${UI_EXTENSION_GIT_SHA}")
 add_definitions(-DUI_EXTENSION_GIT_SHA="${UI_EXTENSION_GIT_SHA}")
