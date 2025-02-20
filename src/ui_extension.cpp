@@ -1,10 +1,10 @@
 #define DUCKDB_EXTENSION_MAIN
 
-#include "utils/env.hpp"
-#include "utils/helpers.hpp"
 #include "ui_extension.hpp"
 #include "http_server.hpp"
 #include "state.hpp"
+#include "utils/env.hpp"
+#include "utils/helpers.hpp"
 #include <duckdb.hpp>
 #include <duckdb/common/string_util.hpp>
 
@@ -53,14 +53,14 @@ std::string StartUIFunction(ClientContext &context) {
   return system(command.c_str())
              ? StringUtil::Format("Navigate browser to %s",
                                   local_url) // open command failed
-             : StringUtil::Format("MotherDuck UI started at %s", local_url);
+             : StringUtil::Format("UI started at %s", local_url);
 }
 
 std::string StartUIServerFunction(ClientContext &context) {
   bool was_started = false;
   const auto &server = internal::StartHttpServer(context, &was_started);
   const char *already = was_started ? "already " : "";
-  return StringUtil::Format("MotherDuck UI server %sstarted at %s", already,
+  return StringUtil::Format("UI server %sstarted at %s", already,
                             server.LocalUrl());
 }
 
