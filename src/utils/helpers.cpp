@@ -15,9 +15,10 @@ bool ShouldRun(TableFunctionInput &input) {
   return true;
 }
 
-unique_ptr<FunctionData> ResultBind(ClientContext &, TableFunctionBindInput &,
-                                    vector<LogicalType> &out_types,
-                                    vector<std::string> &out_names) {
+unique_ptr<FunctionData>
+SingleStringResultBind(ClientContext &, TableFunctionBindInput &,
+                       vector<LogicalType> &out_types,
+                       vector<std::string> &out_names) {
   out_names.emplace_back("result");
   out_types.emplace_back(LogicalType::VARCHAR);
   return nullptr;

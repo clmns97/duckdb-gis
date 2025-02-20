@@ -27,9 +27,10 @@ T GetSetting(const ClientContext &context, const char *setting_name,
 }
 
 namespace internal {
-unique_ptr<FunctionData> ResultBind(ClientContext &, TableFunctionBindInput &,
-                                    vector<LogicalType> &,
-                                    vector<std::string> &);
+unique_ptr<FunctionData> SingleStringResultBind(ClientContext &,
+                                                TableFunctionBindInput &,
+                                                vector<LogicalType> &,
+                                                vector<std::string> &);
 
 bool ShouldRun(TableFunctionInput &input);
 
@@ -68,7 +69,8 @@ void TableFunc(ClientContext &context, TableFunctionInput &input,
 template <typename Func, Func func>
 void RegisterTF(DatabaseInstance &instance, const char *name) {
   TableFunction tf(name, {}, internal::TableFunc<Func, func>,
-                   internal::ResultBind, RunOnceTableFunctionState::Init);
+                   internal::SingleStringResultBind,
+                   RunOnceTableFunctionState::Init);
   ExtensionUtil::RegisterFunction(instance, tf);
 }
 

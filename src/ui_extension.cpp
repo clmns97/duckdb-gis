@@ -96,11 +96,30 @@ std::string NotifyConnectedFunction(ClientContext &context,
   return "OK";
 }
 
-// - connected notification
-
 std::string NotifyCatalogChangedFunction(ClientContext &context) {
   ui::HttpServer::GetInstance(context)->SendCatalogChangedEvent();
   return "OK";
+}
+
+// - connected notification
+
+unique_ptr<FunctionData> SingleBoolResultBind(ClientContext &,
+                                              TableFunctionBindInput &,
+                                              vector<LogicalType> &out_types,
+                                              vector<std::string> &out_names) {
+  out_names.emplace_back("result");
+  out_types.emplace_back(LogicalType::BOOLEAN);
+  return nullptr;
+}
+
+void IsUIStartedTableFunc(ClientContext &context, TableFunctionInput &input,
+                          DataChunk &output) {
+  if (!internal::ShouldRun(input)) {
+    return;
+  }
+
+  output.SetCardinality(1);
+  output.SetValue(0, 0, ui::HttpServer::Started());
 }
 
 void InitStorageExtension(duckdb::DatabaseInstance &db) {
@@ -131,6 +150,11 @@ static void LoadInternal(DatabaseInstance &instance) {
   RESISTER_TF("notify_ui_catalog_changed", NotifyCatalogChangedFunction);
   RESISTER_TF_ARGS("notify_ui_connected", {LogicalType::VARCHAR},
                    NotifyConnectedFunction, NotifyConnectedBind);
+  {
+    TableFunction tf("ui_is_started", {}, IsUIStartedTableFunc,
+                     SingleBoolResultBind, RunOnceTableFunctionState::Init);
+    ExtensionUtil::RegisterFunction(instance, tf);
+  }
 
   // If the server is already running we need to update the database instance
   // since the previous one was invalidated (eg. in the shell when we '.open'
