@@ -1,13 +1,13 @@
 #include "http_server.hpp"
 
-#include <duckdb/common/serializer/memory_stream.hpp>
-#include <duckdb/common/serializer/binary_serializer.hpp>
-#include <duckdb/main/attached_database.hpp>
-#include <duckdb/parser/parser.hpp>
+#include "state.hpp"
+#include "utils/encoding.hpp"
 #include "utils/env.hpp"
 #include "utils/serialization.hpp"
-#include "utils/encoding.hpp"
-#include "state.hpp"
+#include <duckdb/common/serializer/binary_serializer.hpp>
+#include <duckdb/common/serializer/memory_stream.hpp>
+#include <duckdb/main/attached_database.hpp>
+#include <duckdb/parser/parser.hpp>
 
 // Chosen to be no more than half of the lesser of the two limits:
 //  - The default httplib thread pool size = 8
@@ -124,8 +124,9 @@ const HttpServer &HttpServer::Start(const uint16_t _local_port,
 #ifndef UI_EXTENSION_GIT_SHA
 #error "UI_EXTENSION_GIT_SHA must be defined"
 #endif
-  user_agent = StringUtil::Format("duckdb-ui/%s(%s)", UI_EXTENSION_GIT_SHA,
-                                  DuckDB::Platform());
+  user_agent =
+      StringUtil::Format("duckdb-ui/%s-%s(%s)", DuckDB::LibraryVersion(),
+                         UI_EXTENSION_GIT_SHA, DuckDB::Platform());
   event_dispatcher = make_uniq<EventDispatcher>();
   main_thread = make_uniq<std::thread>(&HttpServer::Run, this);
   StartWatcher();
