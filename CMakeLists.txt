@@ -15,8 +15,13 @@ project(${TARGET_NAME})
 include_directories(src/include ${DuckDB_SOURCE_DIR}/third_party/httplib)
 
 set(EXTENSION_SOURCES
-    src/ui_extension.cpp src/http_server.cpp src/utils/encoding.cpp
-    src/utils/env.cpp src/utils/helpers.cpp src/utils/serialization.cpp)
+    src/ui_extension.cpp
+    src/http_server.cpp
+    src/state.cpp
+    src/utils/encoding.cpp
+    src/utils/env.cpp
+    src/utils/helpers.cpp
+    src/utils/serialization.cpp)
 
 find_package(Git)
 if(NOT Git_FOUND)

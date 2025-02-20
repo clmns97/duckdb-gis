@@ -4,6 +4,7 @@
 #include "utils/helpers.hpp"
 #include "ui_extension.hpp"
 #include "http_server.hpp"
+#include "state.hpp"
 #include <duckdb.hpp>
 #include <duckdb/common/string_util.hpp>
 
@@ -29,27 +30,23 @@ namespace duckdb {
 
 namespace internal {
 
-bool StartHttpServer(const ClientContext &context) {
-  const auto url =
+const ui::HttpServer &StartHttpServer(ClientContext &context,
+                                      bool *was_started = nullptr) {
+  const auto remote_url =
       GetSetting<std::string>(context, UI_REMOTE_URL_SETTING_NAME,
                               GetEnvOrDefault(UI_REMOTE_URL_SETTING_NAME,
                                               UI_REMOTE_URL_SETTING_DEFAULT));
   const uint16_t port = GetSetting(context, UI_LOCAL_PORT_SETTING_NAME,
                                    UI_LOCAL_PORT_SETTING_DEFAULT);
-  ;
-  return ui::HttpServer::instance()->Start(port, url, context.db);
-}
-
-std::string GetHttpServerLocalURL() {
-  return StringUtil::Format("http://localhost:%d/",
-                            ui::HttpServer::instance()->LocalPort());
+  return ui::HttpServer::GetInstance(context)->Start(port, remote_url,
+                                                     was_started);
 }
 
 } // namespace internal
 
 std::string StartUIFunction(ClientContext &context) {
-  internal::StartHttpServer(context);
-  auto local_url = internal::GetHttpServerLocalURL();
+  const auto &server = internal::StartHttpServer(context);
+  const auto local_url = server.LocalUrl();
 
   const std::string command =
       StringUtil::Format("%s %s", OPEN_COMMAND, local_url);
@@ -60,14 +57,17 @@ std::string StartUIFunction(ClientContext &context) {
 }
 
 std::string StartUIServerFunction(ClientContext &context) {
-  const char *already = internal::StartHttpServer(context) ? "already " : "";
+  bool was_started = false;
+  const auto &server = internal::StartHttpServer(context, &was_started);
+  const char *already = was_started ? "already " : "";
   return StringUtil::Format("MotherDuck UI server %sstarted at %s", already,
-                            internal::GetHttpServerLocalURL());
+                            server.LocalUrl());
 }
 
-std::string StopUIServerFunction() {
-  return ui::HttpServer::instance()->Stop() ? "UI server stopped"
-                                            : "UI server already stopped";
+std::string StopUIServerFunction(ClientContext &context) {
+  return ui::HttpServer::GetInstance(context)->Stop()
+             ? "UI server stopped"
+             : "UI server already stopped";
 }
 
 // Connected notification
@@ -92,19 +92,28 @@ NotifyConnectedBind(ClientContext &, TableFunctionBindInput &input,
 std::string NotifyConnectedFunction(ClientContext &context,
                                     TableFunctionInput &input) {
   auto &inputs = input.bind_data->Cast<NotifyConnectedFunctionData>();
-  ui::HttpServer::instance()->SendConnectedEvent(inputs.token);
+  ui::HttpServer::GetInstance(context)->SendConnectedEvent(inputs.token);
   return "OK";
 }
 
 // - connected notification
 
-std::string NotifyCatalogChangedFunction() {
-  ui::HttpServer::instance()->SendCatalogChangedEvent();
+std::string NotifyCatalogChangedFunction(ClientContext &context) {
+  ui::HttpServer::GetInstance(context)->SendCatalogChangedEvent();
   return "OK";
+}
+
+void InitStorageExtension(duckdb::DatabaseInstance &db) {
+  auto &config = db.config;
+  auto ext = duckdb::make_uniq<duckdb::StorageExtension>();
+  ext->storage_info = duckdb::make_uniq<UIStorageExtensionInfo>();
+  config.storage_extensions[STORAGE_EXTENSION_KEY] = std::move(ext);
 }
 
 static void LoadInternal(DatabaseInstance &instance) {
   auto &config = DBConfig::GetConfig(instance);
+
+  InitStorageExtension(instance);
 
   config.AddExtensionOption(
       UI_LOCAL_PORT_SETTING_NAME, UI_LOCAL_PORT_SETTING_DESCRIPTION,
@@ -122,6 +131,11 @@ static void LoadInternal(DatabaseInstance &instance) {
   RESISTER_TF("notify_ui_catalog_changed", NotifyCatalogChangedFunction);
   RESISTER_TF_ARGS("notify_ui_connected", {LogicalType::VARCHAR},
                    NotifyConnectedFunction, NotifyConnectedBind);
+
+  // If the server is already running we need to update the database instance
+  // since the previous one was invalidated (eg. in the shell when we '.open'
+  // a new database)
+  ui::HttpServer::UpdateDatabaseInstanceIfRunning(instance.shared_from_this());
 }
 
 void UiExtension::Load(DuckDB &db) { LoadInternal(*db.instance); }

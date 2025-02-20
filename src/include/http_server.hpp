@@ -41,46 +41,51 @@ private:
 class HttpServer {
 
 public:
-  static HttpServer *instance();
+  HttpServer(shared_ptr<DatabaseInstance> _ddb_instance)
+      : ddb_instance(_ddb_instance) {}
+  static HttpServer *GetInstance(ClientContext &);
+  static void UpdateDatabaseInstanceIfRunning(shared_ptr<DatabaseInstance>);
   static bool Started();
   static void StopInstance();
 
-  bool Start(const uint16_t localPort, const std::string &remoteUrl,
-             const shared_ptr<DatabaseInstance> &ddbInstance);
+  const HttpServer &Start(const uint16_t local_port,
+                          const std::string &remote_url,
+                          bool *was_started = nullptr);
   bool Stop();
-  uint16_t LocalPort();
+  std::string LocalUrl() const;
   void SendConnectedEvent(const std::string &token);
   void SendCatalogChangedEvent();
 
 private:
+  void UpdateDatabaseInstance(shared_ptr<DatabaseInstance> context_db);
   void SendEvent(const std::string &message);
   void Run();
   void Watch();
+  void StartWatcher();
+  void StopWatcher();
   void HandleGetLocalEvents(const httplib::Request &req,
                             httplib::Response &res);
   void HandleGetLocalToken(const httplib::Request &req, httplib::Response &res);
   void HandleGet(const httplib::Request &req, httplib::Response &res);
   void HandleInterrupt(const httplib::Request &req, httplib::Response &res);
   void DoHandleRun(const httplib::Request &req, httplib::Response &res,
-                   const httplib::ContentReader &contentReader);
+                   const httplib::ContentReader &content_reader);
   void HandleRun(const httplib::Request &req, httplib::Response &res,
-                 const httplib::ContentReader &contentReader);
+                 const httplib::ContentReader &content_reader);
   void HandleTokenize(const httplib::Request &req, httplib::Response &res,
-                      const httplib::ContentReader &contentReader);
-  std::string ReadContent(const httplib::ContentReader &contentReader);
-  shared_ptr<Connection> FindConnection(const std::string &connectionName);
-  shared_ptr<Connection>
-  FindOrCreateConnection(const std::string &connectionName);
+                      const httplib::ContentReader &content_reader);
+  std::string ReadContent(const httplib::ContentReader &content_reader);
+
   void SetResponseContent(httplib::Response &res, const MemoryStream &content);
   void SetResponseEmptyResult(httplib::Response &res);
   void SetResponseErrorResult(httplib::Response &res, const std::string &error);
 
   // Watchers
-  void WatchForCatalogUpdate(CatalogState &last_state);
+  void WatchForCatalogUpdate(DatabaseInstance &, CatalogState &last_state);
 
   uint16_t local_port;
   std::string remote_url;
-  shared_ptr<DatabaseInstance> ddb_instance;
+  weak_ptr<DatabaseInstance> ddb_instance;
   std::string user_agent;
   httplib::Server server;
   unique_ptr<std::thread> main_thread;
@@ -89,8 +94,6 @@ private:
   std::condition_variable watcher_cv;
   std::atomic<bool> watcher_should_run;
 
-  std::mutex connections_mutex;
-  std::unordered_map<std::string, shared_ptr<Connection>> connections;
   unique_ptr<EventDispatcher> event_dispatcher;
 
   static unique_ptr<HttpServer> server_instance;
