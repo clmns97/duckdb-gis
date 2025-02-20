@@ -130,10 +130,14 @@ void InitStorageExtension(duckdb::DatabaseInstance &db) {
 }
 
 static void LoadInternal(DatabaseInstance &instance) {
-  auto &config = DBConfig::GetConfig(instance);
-
   InitStorageExtension(instance);
 
+  // If the server is already running we need to update the database instance
+  // since the previous one was invalidated (eg. in the shell when we '.open'
+  // a new database)
+  ui::HttpServer::UpdateDatabaseInstanceIfRunning(instance.shared_from_this());
+
+  auto &config = DBConfig::GetConfig(instance);
   config.AddExtensionOption(
       UI_LOCAL_PORT_SETTING_NAME, UI_LOCAL_PORT_SETTING_DESCRIPTION,
       LogicalType::USMALLINT, Value::USMALLINT(UI_LOCAL_PORT_SETTING_DEFAULT));
@@ -155,11 +159,6 @@ static void LoadInternal(DatabaseInstance &instance) {
                      SingleBoolResultBind, RunOnceTableFunctionState::Init);
     ExtensionUtil::RegisterFunction(instance, tf);
   }
-
-  // If the server is already running we need to update the database instance
-  // since the previous one was invalidated (eg. in the shell when we '.open'
-  // a new database)
-  ui::HttpServer::UpdateDatabaseInstanceIfRunning(instance.shared_from_this());
 }
 
 void UiExtension::Load(DuckDB &db) { LoadInternal(*db.instance); }
