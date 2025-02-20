@@ -35,7 +35,6 @@ bool ShouldRun(TableFunctionInput &input);
 
 template <typename Func> struct CallFunctionHelper;
 
-
 template <> struct CallFunctionHelper<std::string (*)(ClientContext &)> {
   static std::string call(ClientContext &context, TableFunctionInput &input,
                           std::string (*f)(ClientContext &)) {
