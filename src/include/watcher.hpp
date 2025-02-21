@@ -1,6 +1,9 @@
 #pragma once
 
+#include <atomic>
+#include <condition_variable>
 #include <duckdb.hpp>
+#include <mutex>
 #include <thread>
 
 namespace duckdb {

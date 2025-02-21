@@ -6,10 +6,8 @@
 #include "httplib.hpp"
 
 #include <memory>
-#include <mutex>
 #include <string>
 #include <thread>
-#include <unordered_map>
 
 #include "watcher.hpp"
 #include "event_dispatcher.hpp"
