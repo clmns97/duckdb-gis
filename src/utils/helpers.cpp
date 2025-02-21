@@ -24,5 +24,14 @@ SingleStringResultBind(ClientContext &, TableFunctionBindInput &,
   return nullptr;
 }
 
+unique_ptr<FunctionData> SingleBoolResultBind(ClientContext &,
+                                              TableFunctionBindInput &,
+                                              vector<LogicalType> &out_types,
+                                              vector<std::string> &out_names) {
+  out_names.emplace_back("result");
+  out_types.emplace_back(LogicalType::BOOLEAN);
+  return nullptr;
+}
+
 } // namespace internal
 } // namespace duckdb

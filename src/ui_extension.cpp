@@ -117,7 +117,8 @@ static void LoadInternal(DatabaseInstance &instance) {
   RESISTER_TF("stop_ui_server", StopUIServerFunction);
   {
     TableFunction tf("ui_is_started", {}, IsUIStartedTableFunc,
-                     SingleBoolResultBind, RunOnceTableFunctionState::Init);
+                     internal::SingleBoolResultBind,
+                     RunOnceTableFunctionState::Init);
     ExtensionUtil::RegisterFunction(instance, tf);
   }
 }

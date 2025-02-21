@@ -18,15 +18,13 @@ struct RunOnceTableFunctionState : GlobalTableFunctionState {
   }
 };
 
-template <typename T>
-T GetSetting(const ClientContext &context, const char *setting_name,
-             const T default_value) {
-  Value value;
-  return context.TryGetCurrentSetting(setting_name, value) ? value.GetValue<T>()
-                                                           : default_value;
-}
-
 namespace internal {
+
+unique_ptr<FunctionData> SingleBoolResultBind(ClientContext &,
+                                              TableFunctionBindInput &,
+                                              vector<LogicalType> &out_types,
+                                              vector<std::string> &out_names);
+
 unique_ptr<FunctionData> SingleStringResultBind(ClientContext &,
                                                 TableFunctionBindInput &,
                                                 vector<LogicalType> &,
