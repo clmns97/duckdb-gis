@@ -70,39 +70,6 @@ std::string StopUIServerFunction(ClientContext &context) {
              : "UI server already stopped";
 }
 
-// Connected notification
-struct NotifyConnectedFunctionData : public TableFunctionData {
-  NotifyConnectedFunctionData(std::string _token) : token(_token) {}
-
-  std::string token;
-};
-
-static unique_ptr<FunctionData>
-NotifyConnectedBind(ClientContext &, TableFunctionBindInput &input,
-                    vector<LogicalType> &out_types, vector<string> &out_names) {
-  if (input.inputs[0].IsNull()) {
-    throw BinderException("Must provide a token");
-  }
-
-  out_names.emplace_back("result");
-  out_types.emplace_back(LogicalType::VARCHAR);
-  return make_uniq<NotifyConnectedFunctionData>(input.inputs[0].ToString());
-}
-
-std::string NotifyConnectedFunction(ClientContext &context,
-                                    TableFunctionInput &input) {
-  auto &inputs = input.bind_data->Cast<NotifyConnectedFunctionData>();
-  ui::HttpServer::GetInstance(context)->SendConnectedEvent(inputs.token);
-  return "OK";
-}
-
-std::string NotifyCatalogChangedFunction(ClientContext &context) {
-  ui::HttpServer::GetInstance(context)->SendCatalogChangedEvent();
-  return "OK";
-}
-
-// - connected notification
-
 unique_ptr<FunctionData> SingleBoolResultBind(ClientContext &,
                                               TableFunctionBindInput &,
                                               vector<LogicalType> &out_types,
@@ -151,9 +118,6 @@ static void LoadInternal(DatabaseInstance &instance) {
   RESISTER_TF("start_ui", StartUIFunction);
   RESISTER_TF("start_ui_server", StartUIServerFunction);
   RESISTER_TF("stop_ui_server", StopUIServerFunction);
-  RESISTER_TF("notify_ui_catalog_changed", NotifyCatalogChangedFunction);
-  RESISTER_TF_ARGS("notify_ui_connected", {LogicalType::VARCHAR},
-                   NotifyConnectedFunction, NotifyConnectedBind);
   {
     TableFunction tf("ui_is_started", {}, IsUIStartedTableFunc,
                      SingleBoolResultBind, RunOnceTableFunctionState::Init);
