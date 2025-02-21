@@ -21,6 +21,14 @@ std::string GetEnvOrDefault(const char *name, const char *default_value) {
   return default_value;
 }
 
+uint32_t GetEnvOrDefaultInt(const char *name, uint32_t default_value) {
+  const char *res = TryGetEnv(name);
+  if (res) {
+    return std::atoi(res);
+  }
+  return default_value;
+}
+
 bool IsEnvEnabled(const char *name) {
   const char *res = TryGetEnv(name);
   if (!res) {
