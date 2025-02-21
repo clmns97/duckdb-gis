@@ -17,13 +17,9 @@
 #endif
 
 #define UI_LOCAL_PORT_SETTING_NAME "ui_local_port"
-#define UI_LOCAL_PORT_SETTING_DESCRIPTION                                      \
-  "Local port on which the UI server listens"
 #define UI_LOCAL_PORT_SETTING_DEFAULT 4213
 
 #define UI_REMOTE_URL_SETTING_NAME "ui_remote_url"
-#define UI_REMOTE_URL_SETTING_DESCRIPTION                                      \
-  "Remote URL to which the UI server forwards GET requests"
 #define UI_REMOTE_URL_SETTING_DEFAULT "https://app.motherduck.com"
 
 namespace duckdb {
@@ -106,11 +102,12 @@ static void LoadInternal(DatabaseInstance &instance) {
 
   auto &config = DBConfig::GetConfig(instance);
   config.AddExtensionOption(
-      UI_LOCAL_PORT_SETTING_NAME, UI_LOCAL_PORT_SETTING_DESCRIPTION,
+      UI_LOCAL_PORT_SETTING_NAME, "Local port on which the UI server listens",
       LogicalType::USMALLINT, Value::USMALLINT(UI_LOCAL_PORT_SETTING_DEFAULT));
 
   config.AddExtensionOption(
-      UI_REMOTE_URL_SETTING_NAME, UI_REMOTE_URL_SETTING_DESCRIPTION,
+      UI_REMOTE_URL_SETTING_NAME,
+      "Remote URL to which the UI server forwards GET requests",
       LogicalType::VARCHAR,
       Value(GetEnvOrDefault(UI_REMOTE_URL_SETTING_NAME,
                             UI_REMOTE_URL_SETTING_DEFAULT)));
