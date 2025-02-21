@@ -1,6 +1,6 @@
 #pragma once
 
-#include "duckdb.hpp"
+#include <duckdb.hpp>
 
 #define CPPHTTPLIB_OPENSSL_SUPPORT
 #include "httplib.hpp"
@@ -11,32 +11,15 @@
 #include <thread>
 #include <unordered_map>
 
+#include "watcher.hpp"
+#include "event_dispatcher.hpp"
+
 namespace httplib = duckdb_httplib_openssl;
 
 namespace duckdb {
 class MemoryStream;
 
 namespace ui {
-
-struct CatalogState {
-  std::map<idx_t, optional_idx> db_to_catalog_version;
-};
-
-class EventDispatcher {
-public:
-  bool WaitEvent(httplib::DataSink *sink);
-  void SendEvent(const std::string &message);
-  void Close();
-
-private:
-  std::mutex mutex;
-  std::condition_variable cv;
-  std::atomic_int next_id{0};
-  std::atomic_int current_id{-1};
-  std::atomic_int wait_count{0};
-  std::string message;
-  std::atomic_bool closed{false};
-};
 
 class HttpServer {
 
@@ -53,16 +36,13 @@ public:
   std::string LocalUrl() const;
 
 private:
+  friend class Watcher;
+
   // Lifecycle
   void DoStart(const uint16_t local_port, const std::string &remote_url);
   void DoStop();
   void Run();
   void UpdateDatabaseInstance(shared_ptr<DatabaseInstance> context_db);
-
-  // Watcher
-  void Watch();
-  void StartWatcher();
-  void StopWatcher();
 
   // Http handlers
   void HandleGetLocalEvents(const httplib::Request &req,
@@ -83,10 +63,8 @@ private:
   void SetResponseEmptyResult(httplib::Response &res);
   void SetResponseErrorResult(httplib::Response &res, const std::string &error);
 
-  // Events
-  void SendEvent(const std::string &message);
-  void SendConnectedEvent(const std::string &token);
-  void SendCatalogChangedEvent();
+  // Misc
+  shared_ptr<DatabaseInstance> LockDatabaseInstance();
 
   uint16_t local_port;
   std::string remote_url;
@@ -94,12 +72,8 @@ private:
   std::string user_agent;
   httplib::Server server;
   unique_ptr<std::thread> main_thread;
-  unique_ptr<std::thread> watcher_thread;
-  std::mutex watcher_mutex;
-  std::condition_variable watcher_cv;
-  std::atomic<bool> watcher_should_run;
-
   unique_ptr<EventDispatcher> event_dispatcher;
+  unique_ptr<Watcher> watcher;
 
   static unique_ptr<HttpServer> server_instance;
 };

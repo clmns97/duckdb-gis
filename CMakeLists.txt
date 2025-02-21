@@ -16,12 +16,15 @@ include_directories(src/include ${DuckDB_SOURCE_DIR}/third_party/httplib)
 
 set(EXTENSION_SOURCES
     src/ui_extension.cpp
+    src/event_dispatcher.cpp
     src/http_server.cpp
     src/settings.cpp
     src/state.cpp
+    src/watcher.cpp
     src/utils/encoding.cpp
     src/utils/env.cpp
     src/utils/helpers.cpp
+    src/utils/md_helpers.cpp
     src/utils/serialization.cpp)
 
 find_package(Git)
