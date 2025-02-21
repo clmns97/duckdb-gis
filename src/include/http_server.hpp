@@ -80,9 +80,6 @@ private:
   void SetResponseEmptyResult(httplib::Response &res);
   void SetResponseErrorResult(httplib::Response &res, const std::string &error);
 
-  // Watchers
-  void WatchForCatalogUpdate(DatabaseInstance &, CatalogState &last_state);
-
   uint16_t local_port;
   std::string remote_url;
   weak_ptr<DatabaseInstance> ddb_instance;
