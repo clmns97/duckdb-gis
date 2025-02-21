@@ -1,12 +1,14 @@
 #define DUCKDB_EXTENSION_MAIN
 
-#include "ui_extension.hpp"
-#include "http_server.hpp"
-#include "state.hpp"
-#include "utils/env.hpp"
-#include "utils/helpers.hpp"
 #include <duckdb.hpp>
 #include <duckdb/common/string_util.hpp>
+
+#include "http_server.hpp"
+#include "settings.hpp"
+#include "state.hpp"
+#include "ui_extension.hpp"
+#include "utils/env.hpp"
+#include "utils/helpers.hpp"
 
 #ifdef _WIN32
 #define OPEN_COMMAND "start"
@@ -16,36 +18,13 @@
 #define OPEN_COMMAND "open"
 #endif
 
-#define UI_LOCAL_PORT_SETTING_NAME "ui_local_port"
-#define UI_LOCAL_PORT_SETTING_DEFAULT 4213
-
-#define UI_REMOTE_URL_SETTING_NAME "ui_remote_url"
-#define UI_REMOTE_URL_SETTING_DEFAULT "https://app.motherduck.com"
-
 namespace duckdb {
 
-namespace internal {
-
-const ui::HttpServer &StartHttpServer(ClientContext &context,
-                                      bool *was_started = nullptr) {
-  const auto remote_url =
-      GetSetting<std::string>(context, UI_REMOTE_URL_SETTING_NAME,
-                              GetEnvOrDefault(UI_REMOTE_URL_SETTING_NAME,
-                                              UI_REMOTE_URL_SETTING_DEFAULT));
-  const uint16_t port = GetSetting(context, UI_LOCAL_PORT_SETTING_NAME,
-                                   UI_LOCAL_PORT_SETTING_DEFAULT);
-  return ui::HttpServer::GetInstance(context)->Start(port, remote_url,
-                                                     was_started);
-}
-
-} // namespace internal
-
 std::string StartUIFunction(ClientContext &context) {
-  const auto &server = internal::StartHttpServer(context);
+  const auto &server = ui::HttpServer::Start(context);
   const auto local_url = server.LocalUrl();
 
-  const std::string command =
-      StringUtil::Format("%s %s", OPEN_COMMAND, local_url);
+  const auto command = StringUtil::Format("%s %s", OPEN_COMMAND, local_url);
   return system(command.c_str())
              ? StringUtil::Format("Navigate browser to %s",
                                   local_url) // open command failed
@@ -54,25 +33,15 @@ std::string StartUIFunction(ClientContext &context) {
 
 std::string StartUIServerFunction(ClientContext &context) {
   bool was_started = false;
-  const auto &server = internal::StartHttpServer(context, &was_started);
+  const auto &server = ui::HttpServer::Start(context, &was_started);
   const char *already = was_started ? "already " : "";
   return StringUtil::Format("UI server %sstarted at %s", already,
                             server.LocalUrl());
 }
 
 std::string StopUIServerFunction(ClientContext &context) {
-  return ui::HttpServer::GetInstance(context)->Stop()
-             ? "UI server stopped"
-             : "UI server already stopped";
-}
-
-unique_ptr<FunctionData> SingleBoolResultBind(ClientContext &,
-                                              TableFunctionBindInput &,
-                                              vector<LogicalType> &out_types,
-                                              vector<std::string> &out_names) {
-  out_names.emplace_back("result");
-  out_types.emplace_back(LogicalType::BOOLEAN);
-  return nullptr;
+  return ui::HttpServer::Stop() ? "UI server stopped"
+                                : "UI server already stopped";
 }
 
 void IsUIStartedTableFunc(ClientContext &context, TableFunctionInput &input,
@@ -101,16 +70,21 @@ static void LoadInternal(DatabaseInstance &instance) {
   ui::HttpServer::UpdateDatabaseInstanceIfRunning(instance.shared_from_this());
 
   auto &config = DBConfig::GetConfig(instance);
-  config.AddExtensionOption(
-      UI_LOCAL_PORT_SETTING_NAME, "Local port on which the UI server listens",
-      LogicalType::USMALLINT, Value::USMALLINT(UI_LOCAL_PORT_SETTING_DEFAULT));
+  {
+    auto default_port = GetEnvOrDefaultInt(UI_LOCAL_PORT_SETTING_NAME, 4213);
+    config.AddExtensionOption(
+        UI_LOCAL_PORT_SETTING_NAME, "Local port on which the UI server listens",
+        LogicalType::USMALLINT, Value::USMALLINT(default_port));
+  }
 
-  config.AddExtensionOption(
-      UI_REMOTE_URL_SETTING_NAME,
-      "Remote URL to which the UI server forwards GET requests",
-      LogicalType::VARCHAR,
-      Value(GetEnvOrDefault(UI_REMOTE_URL_SETTING_NAME,
-                            UI_REMOTE_URL_SETTING_DEFAULT)));
+  {
+    auto def = GetEnvOrDefault(UI_REMOTE_URL_SETTING_NAME,
+                               "https://app.motherduck.com");
+    config.AddExtensionOption(
+        UI_REMOTE_URL_SETTING_NAME,
+        "Remote URL to which the UI server forwards GET requests",
+        LogicalType::VARCHAR, Value(def));
+  }
 
   RESISTER_TF("start_ui", StartUIFunction);
   RESISTER_TF("start_ui_server", StartUIServerFunction);

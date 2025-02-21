@@ -48,21 +48,23 @@ public:
   static bool Started();
   static void StopInstance();
 
-  const HttpServer &Start(const uint16_t local_port,
-                          const std::string &remote_url,
-                          bool *was_started = nullptr);
-  bool Stop();
+  static const HttpServer &Start(ClientContext &, bool *was_started = nullptr);
+  static bool Stop();
   std::string LocalUrl() const;
-  void SendConnectedEvent(const std::string &token);
-  void SendCatalogChangedEvent();
 
 private:
-  void UpdateDatabaseInstance(shared_ptr<DatabaseInstance> context_db);
-  void SendEvent(const std::string &message);
+  // Lifecycle
+  void DoStart(const uint16_t local_port, const std::string &remote_url);
+  void DoStop();
   void Run();
+  void UpdateDatabaseInstance(shared_ptr<DatabaseInstance> context_db);
+
+  // Watcher
   void Watch();
   void StartWatcher();
   void StopWatcher();
+
+  // Http handlers
   void HandleGetLocalEvents(const httplib::Request &req,
                             httplib::Response &res);
   void HandleGetLocalToken(const httplib::Request &req, httplib::Response &res);
@@ -76,9 +78,15 @@ private:
                       const httplib::ContentReader &content_reader);
   std::string ReadContent(const httplib::ContentReader &content_reader);
 
+  // Http responses
   void SetResponseContent(httplib::Response &res, const MemoryStream &content);
   void SetResponseEmptyResult(httplib::Response &res);
   void SetResponseErrorResult(httplib::Response &res, const std::string &error);
+
+  // Events
+  void SendEvent(const std::string &message);
+  void SendConnectedEvent(const std::string &token);
+  void SendCatalogChangedEvent();
 
   uint16_t local_port;
   std::string remote_url;

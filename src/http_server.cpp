@@ -1,5 +1,6 @@
 #include "http_server.hpp"
 
+#include "settings.hpp"
 #include "state.hpp"
 #include "utils/encoding.hpp"
 #include "utils/env.hpp"
@@ -105,18 +106,31 @@ bool HttpServer::Started() {
 
 void HttpServer::StopInstance() {
   if (server_instance) {
-    server_instance->Stop();
+    server_instance->DoStop();
   }
 }
 
-const HttpServer &HttpServer::Start(const uint16_t _local_port,
-                                    const std::string &_remote_url,
-                                    bool *was_started) {
-  if (main_thread) {
+const HttpServer &HttpServer::Start(ClientContext &context, bool *was_started) {
+  if (Started()) {
     if (was_started) {
       *was_started = true;
     }
-    return *this;
+    return *GetInstance(context);
+  }
+  if (was_started) {
+    *was_started = false;
+  }
+  const auto remote_url = GetRemoteUrl(context);
+  const auto port = GetLocalPort(context);
+  auto server = GetInstance(context);
+  server->DoStart(port, remote_url);
+  return *server;
+}
+
+void HttpServer::DoStart(const uint16_t _local_port,
+                         const std::string &_remote_url) {
+  if (Started()) {
+    throw std::runtime_error("HttpServer already started");
   }
 
   local_port = _local_port;
@@ -130,7 +144,6 @@ const HttpServer &HttpServer::Start(const uint16_t _local_port,
   event_dispatcher = make_uniq<EventDispatcher>();
   main_thread = make_uniq<std::thread>(&HttpServer::Run, this);
   StartWatcher();
-  return *this;
 }
 
 void HttpServer::StartWatcher() {
@@ -159,10 +172,14 @@ void HttpServer::StopWatcher() {
 }
 
 bool HttpServer::Stop() {
-  if (!main_thread) {
+  if (!Started()) {
     return false;
   }
+  server_instance->DoStop();
+  return true;
+}
 
+void HttpServer::DoStop() {
   event_dispatcher->Close();
   server.stop();
 
@@ -174,7 +191,6 @@ bool HttpServer::Stop() {
   ddb_instance.reset();
   remote_url = "";
   local_port = 0;
-  return true;
 }
 
 std::string HttpServer::LocalUrl() const {
