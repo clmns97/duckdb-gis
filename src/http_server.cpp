@@ -316,6 +316,14 @@ void HttpServer::HandleGetLocalToken(const httplib::Request &req,
   Connection connection(*db);
   auto query_res = connection.Query("CALL get_md_token()");
   if (query_res->HasError()) {
+    if (StringUtil::Contains(
+            query_res->GetError(),
+            "GET_MD_TOKEN will be available after you connect")) {
+      // UI expects an empty response if MD isn't connected
+      res.set_content("", "text/plain");
+      return;
+    }
+
     res.status = 500;
     res.set_content("Could not get token: " + query_res->GetError(),
                     "text/plain");
