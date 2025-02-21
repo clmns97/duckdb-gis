@@ -288,8 +288,13 @@ void HttpServer::Watch() {
       break; // DB went away, nothing to watch
     }
 
+    duckdb::Connection con{*db};
+    auto polling_interval = GetPollingInterval(*con.context);
+    if (polling_interval == 0) {
+      return; // Disable watcher
+    }
+
     try {
-      duckdb::Connection con{*db};
       if (WasCatalogUpdated(*db, con, last_state)) {
         SendCatalogChangedEvent();
       }
@@ -304,10 +309,10 @@ void HttpServer::Watch() {
       std::cerr << "Will now terminate." << std::endl;
       return;
     }
+
     {
       std::unique_lock<std::mutex> lock(watcher_mutex);
-      watcher_cv.wait_for(lock,
-                          std::chrono::milliseconds(2000)); // TODO - configure
+      watcher_cv.wait_for(lock, std::chrono::milliseconds(polling_interval));
     }
   }
 }

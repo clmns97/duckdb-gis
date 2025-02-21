@@ -86,6 +86,14 @@ static void LoadInternal(DatabaseInstance &instance) {
         LogicalType::VARCHAR, Value(def));
   }
 
+  {
+    auto def = GetEnvOrDefaultInt(UI_POLLING_INTERVAL_SETTING_NAME, 284);
+    config.AddExtensionOption(
+        UI_POLLING_INTERVAL_SETTING_NAME,
+        "Period of time between UI polling requests (in ms)",
+        LogicalType::UINTEGER, Value::UINTEGER(def));
+  }
+
   RESISTER_TF("start_ui", StartUIFunction);
   RESISTER_TF("start_ui_server", StartUIServerFunction);
   RESISTER_TF("stop_ui_server", StopUIServerFunction);
