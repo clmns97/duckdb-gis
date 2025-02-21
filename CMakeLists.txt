@@ -17,6 +17,7 @@ include_directories(src/include ${DuckDB_SOURCE_DIR}/third_party/httplib)
 set(EXTENSION_SOURCES
     src/ui_extension.cpp
     src/http_server.cpp
+    src/settings.cpp
     src/state.cpp
     src/utils/encoding.cpp
     src/utils/env.cpp
