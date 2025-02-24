@@ -235,12 +235,12 @@ void HttpServer::HandleGet(const httplib::Request &req,
   // Repond with result of forwarded GET
   res = result.value();
 
-  // If this is the config request, set the X-MD-DuckDB-Mode header to HTTP.
-  // The UI looks for this to select the appropriate DuckDB mode (HTTP or Wasm).
+  // If this is the config request, return additional information.
   if (req.path == "/config") {
-    res.set_header("X-MD-DuckDB-Mode", "HTTP");
     res.set_header("X-DuckDB-Version", DuckDB::LibraryVersion());
     res.set_header("X-DuckDB-Platform", DuckDB::Platform());
+    // The UI looks for this to select the appropriate DuckDB mode (HTTP or
+    // Wasm).
     res.set_header("X-DuckDB-UI-Extension-Version", UI_EXTENSION_VERSION);
   }
 }
@@ -248,14 +248,8 @@ void HttpServer::HandleGet(const httplib::Request &req,
 void HttpServer::HandleInterrupt(const httplib::Request &req,
                                  httplib::Response &res) {
   auto description = req.get_header_value("X-DuckDB-UI-Request-Description");
-  if (description.empty()) {
-    description = req.get_header_value("X-MD-Description");
-  }
 
   auto connection_name = req.get_header_value("X-DuckDB-UI-Connection-Name");
-  if (connection_name.empty()) {
-    connection_name = req.get_header_value("X-MD-Connection-Name");
-  }
 
   auto db = ddb_instance.lock();
   if (!db) {
@@ -288,37 +282,20 @@ void HttpServer::DoHandleRun(const httplib::Request &req,
                              httplib::Response &res,
                              const httplib::ContentReader &content_reader) {
   auto description = req.get_header_value("X-DuckDB-UI-Request-Description");
-  if (description.empty()) {
-    description = req.get_header_value("X-MD-Description");
-  }
 
   auto connection_name = req.get_header_value("X-DuckDB-UI-Connection-Name");
-  if (connection_name.empty()) {
-    connection_name = req.get_header_value("X-MD-Connection-Name");
-  }
 
   auto database_name =
       DecodeBase64(req.get_header_value("X-DuckDB-UI-Database-Name"));
-  if (database_name.empty()) {
-    database_name = req.get_header_value("X-MD-Database-Name");
-  }
 
   std::vector<std::string> parameter_values;
   auto parameter_count_string =
       req.get_header_value("X-DuckDB-UI-Parameter-Count");
   if (!parameter_count_string.empty()) {
     auto parameter_count = std::stoi(parameter_count_string);
-    std::cout << "parameter_count " << parameter_count << std::endl;
     for (idx_t i = 0; i < parameter_count; ++i) {
       auto parameter_value = DecodeBase64(req.get_header_value(
           StringUtil::Format("X-DuckDB-UI-Parameter-Value-%d", i)));
-      parameter_values.push_back(parameter_value);
-    }
-  } else {
-    auto parameter_count = req.get_header_value_count("X-MD-Parameter");
-    for (idx_t i = 0; i < parameter_count; ++i) {
-      auto parameter_value =
-          DecodeBase64(req.get_header_value("X-MD-Parameter", i));
       parameter_values.push_back(parameter_value);
     }
   }
@@ -421,9 +398,6 @@ void HttpServer::HandleTokenize(const httplib::Request &req,
                                 httplib::Response &res,
                                 const httplib::ContentReader &content_reader) {
   auto description = req.get_header_value("X-DuckDB-UI-Request-Description");
-  if (description.empty()) {
-    description = req.get_header_value("X-MD-Description");
-  }
 
   std::string content = ReadContent(content_reader);
 
