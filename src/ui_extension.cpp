@@ -9,6 +9,7 @@
 #include "ui_extension.hpp"
 #include "utils/env.hpp"
 #include "utils/helpers.hpp"
+#include "version.hpp"
 
 #ifdef _WIN32
 #define OPEN_COMMAND "start"
@@ -108,13 +109,7 @@ static void LoadInternal(DatabaseInstance &instance) {
 void UiExtension::Load(DuckDB &db) { LoadInternal(*db.instance); }
 std::string UiExtension::Name() { return "ui"; }
 
-std::string UiExtension::Version() const {
-#ifdef UI_EXTENSION_GIT_SHA
-  return UI_EXTENSION_GIT_SHA;
-#else
-  return "";
-#endif
-}
+std::string UiExtension::Version() const { return UI_EXTENSION_VERSION; }
 
 } // namespace duckdb
 
