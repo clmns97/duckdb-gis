@@ -15,22 +15,31 @@ project(${TARGET_NAME})
 include_directories(src/include ${DuckDB_SOURCE_DIR}/third_party/httplib)
 
 set(EXTENSION_SOURCES
-    src/ui_extension.cpp
     src/event_dispatcher.cpp
     src/http_server.cpp
     src/settings.cpp
     src/state.cpp
-    src/watcher.cpp
+    src/ui_extension.cpp
     src/utils/encoding.cpp
     src/utils/env.cpp
     src/utils/helpers.cpp
     src/utils/md_helpers.cpp
-    src/utils/serialization.cpp)
+    src/utils/serialization.cpp
+    src/watcher.cpp)
 
 find_package(Git)
 if(NOT Git_FOUND)
   message(FATAL_ERROR "Git not found, unable to determine git sha")
 endif()
+
+execute_process(
+  COMMAND ${GIT_EXECUTABLE} rev-list --count HEAD
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+  OUTPUT_VARIABLE UI_EXTENSION_SEQ_NUM
+  OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+message(STATUS "UI_EXTENSION_SEQ_NUM=${UI_EXTENSION_SEQ_NUM}")
+add_definitions(-DUI_EXTENSION_SEQ_NUM="${UI_EXTENSION_SEQ_NUM}")
 
 execute_process(
   COMMAND ${GIT_EXECUTABLE} rev-parse --short=10 HEAD

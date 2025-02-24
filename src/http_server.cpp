@@ -1,12 +1,13 @@
 #include "http_server.hpp"
 
+#include "event_dispatcher.hpp"
 #include "settings.hpp"
 #include "state.hpp"
 #include "utils/encoding.hpp"
 #include "utils/env.hpp"
-#include "event_dispatcher.hpp"
 #include "utils/md_helpers.hpp"
 #include "utils/serialization.hpp"
+#include "version.hpp"
 #include "watcher.hpp"
 #include <duckdb/common/serializer/binary_serializer.hpp>
 #include <duckdb/common/serializer/memory_stream.hpp>
@@ -83,12 +84,9 @@ void HttpServer::DoStart(const uint16_t _local_port,
 
   local_port = _local_port;
   remote_url = _remote_url;
-#ifndef UI_EXTENSION_GIT_SHA
-#error "UI_EXTENSION_GIT_SHA must be defined"
-#endif
   user_agent =
       StringUtil::Format("duckdb-ui/%s-%s(%s)", DuckDB::LibraryVersion(),
-                         UI_EXTENSION_GIT_SHA, DuckDB::Platform());
+                         UI_EXTENSION_VERSION, DuckDB::Platform());
   event_dispatcher = make_uniq<EventDispatcher>();
   main_thread = make_uniq<std::thread>(&HttpServer::Run, this);
   watcher = make_uniq<Watcher>(*this);
@@ -241,13 +239,23 @@ void HttpServer::HandleGet(const httplib::Request &req,
   // The UI looks for this to select the appropriate DuckDB mode (HTTP or Wasm).
   if (req.path == "/config") {
     res.set_header("X-MD-DuckDB-Mode", "HTTP");
+    res.set_header("X-DuckDB-Version", DuckDB::LibraryVersion());
+    res.set_header("X-DuckDB-Platform", DuckDB::Platform());
+    res.set_header("X-DuckDB-UI-Extension-Version", UI_EXTENSION_VERSION);
   }
 }
 
 void HttpServer::HandleInterrupt(const httplib::Request &req,
                                  httplib::Response &res) {
-  auto description = req.get_header_value("X-MD-Description");
-  auto connection_name = req.get_header_value("X-MD-Connection-Name");
+  auto description = req.get_header_value("X-DuckDB-UI-Request-Description");
+  if (description.empty()) {
+    description = req.get_header_value("X-MD-Description");
+  }
+
+  auto connection_name = req.get_header_value("X-DuckDB-UI-Connection-Name");
+  if (connection_name.empty()) {
+    connection_name = req.get_header_value("X-MD-Connection-Name");
+  }
 
   auto db = ddb_instance.lock();
   if (!db) {
@@ -279,11 +287,41 @@ void HttpServer::HandleRun(const httplib::Request &req, httplib::Response &res,
 void HttpServer::DoHandleRun(const httplib::Request &req,
                              httplib::Response &res,
                              const httplib::ContentReader &content_reader) {
-  auto description = req.get_header_value("X-MD-Description");
-  auto connection_name = req.get_header_value("X-MD-Connection-Name");
+  auto description = req.get_header_value("X-DuckDB-UI-Request-Description");
+  if (description.empty()) {
+    description = req.get_header_value("X-MD-Description");
+  }
 
-  auto database_name = DecodeBase64(req.get_header_value("X-MD-Database-Name"));
-  auto parameter_count = req.get_header_value_count("X-MD-Parameter");
+  auto connection_name = req.get_header_value("X-DuckDB-UI-Connection-Name");
+  if (connection_name.empty()) {
+    connection_name = req.get_header_value("X-MD-Connection-Name");
+  }
+
+  auto database_name =
+      DecodeBase64(req.get_header_value("X-DuckDB-UI-Database-Name"));
+  if (database_name.empty()) {
+    database_name = req.get_header_value("X-MD-Database-Name");
+  }
+
+  std::vector<std::string> parameter_values;
+  auto parameter_count_string =
+      req.get_header_value("X-DuckDB-UI-Parameter-Count");
+  if (!parameter_count_string.empty()) {
+    auto parameter_count = std::stoi(parameter_count_string);
+    std::cout << "parameter_count " << parameter_count << std::endl;
+    for (idx_t i = 0; i < parameter_count; ++i) {
+      auto parameter_value = DecodeBase64(req.get_header_value(
+          StringUtil::Format("X-DuckDB-UI-Parameter-Value-%d", i)));
+      parameter_values.push_back(parameter_value);
+    }
+  } else {
+    auto parameter_count = req.get_header_value_count("X-MD-Parameter");
+    for (idx_t i = 0; i < parameter_count; ++i) {
+      auto parameter_value =
+          DecodeBase64(req.get_header_value("X-MD-Parameter", i));
+      parameter_values.push_back(parameter_value);
+    }
+  }
 
   std::string content = ReadContent(content_reader);
 
@@ -312,7 +350,7 @@ void HttpServer::DoHandleRun(const httplib::Request &req,
   unique_ptr<PendingQueryResult> pending;
 
   // Create pending query, with request content as SQL.
-  if (parameter_count > 0) {
+  if (parameter_values.size() > 0) {
     auto prepared = connection->Prepare(content);
     if (prepared->HasError()) {
       SetResponseErrorResult(res, prepared->GetError());
@@ -320,10 +358,9 @@ void HttpServer::DoHandleRun(const httplib::Request &req,
     }
 
     vector<Value> values;
-    for (idx_t i = 0; i < parameter_count; ++i) {
-      auto parameter = DecodeBase64(req.get_header_value("X-MD-Parameter", i));
-      values.push_back(
-          Value(parameter)); // TODO: support non-string parameters? (SURF-1546)
+    for (auto &parameter_value : parameter_values) {
+      // TODO: support non-string parameters?
+      values.push_back(Value(parameter_value));
     }
     pending = prepared->PendingQuery(values, true);
   } else {
@@ -361,7 +398,7 @@ void HttpServer::DoHandleRun(const httplib::Request &req,
     success_result.column_names_and_types = {std::move(result->names),
                                              std::move(result->types)};
 
-    // TODO: support limiting the number of chunks fetched (SURF-1540)
+    // TODO: support limiting the number of chunks fetched
     auto chunk = result->Fetch();
     while (chunk) {
       success_result.chunks.push_back(
@@ -383,7 +420,10 @@ void HttpServer::DoHandleRun(const httplib::Request &req,
 void HttpServer::HandleTokenize(const httplib::Request &req,
                                 httplib::Response &res,
                                 const httplib::ContentReader &content_reader) {
-  auto description = req.get_header_value("X-MD-Description");
+  auto description = req.get_header_value("X-DuckDB-UI-Request-Description");
+  if (description.empty()) {
+    description = req.get_header_value("X-MD-Description");
+  }
 
   std::string content = ReadContent(content_reader);
 
