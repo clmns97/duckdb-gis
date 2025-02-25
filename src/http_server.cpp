@@ -133,6 +133,9 @@ shared_ptr<DatabaseInstance> HttpServer::LockDatabaseInstance() {
 }
 
 void HttpServer::Run() {
+  server.Get("/info", [&](const httplib::Request &req, httplib::Response &res) {
+    HandleGetInfo(req, res);
+  });
   server.Get("/localEvents",
              [&](const httplib::Request &req, httplib::Response &res) {
                HandleGetLocalEvents(req, res);
@@ -159,6 +162,15 @@ void HttpServer::Run() {
                 HandleTokenize(req, res, content_reader);
               });
   server.listen("localhost", local_port);
+}
+
+void HttpServer::HandleGetInfo(const httplib::Request &req,
+                               httplib::Response &res) {
+  res.set_header("Access-Control-Allow-Origin", "*");
+  res.set_header("X-DuckDB-Version", DuckDB::LibraryVersion());
+  res.set_header("X-DuckDB-Platform", DuckDB::Platform());
+  res.set_header("X-DuckDB-UI-Extension-Version", UI_EXTENSION_VERSION);
+  res.set_content("", "text/plain");
 }
 
 void HttpServer::HandleGetLocalEvents(const httplib::Request &req,

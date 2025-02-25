@@ -9,8 +9,8 @@
 #include <string>
 #include <thread>
 
-#include "watcher.hpp"
 #include "event_dispatcher.hpp"
+#include "watcher.hpp"
 
 namespace httplib = duckdb_httplib_openssl;
 
@@ -43,6 +43,7 @@ private:
   void UpdateDatabaseInstance(shared_ptr<DatabaseInstance> context_db);
 
   // Http handlers
+  void HandleGetInfo(const httplib::Request &req, httplib::Response &res);
   void HandleGetLocalEvents(const httplib::Request &req,
                             httplib::Response &res);
   void HandleGetLocalToken(const httplib::Request &req, httplib::Response &res);
