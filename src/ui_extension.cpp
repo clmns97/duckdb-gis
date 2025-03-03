@@ -79,8 +79,8 @@ static void LoadInternal(DatabaseInstance &instance) {
   }
 
   {
-    auto def = GetEnvOrDefault(UI_REMOTE_URL_SETTING_NAME,
-                               "https://app.motherduck.com");
+    auto def =
+        GetEnvOrDefault(UI_REMOTE_URL_SETTING_NAME, "https://ui.duckdb.org");
     config.AddExtensionOption(
         UI_REMOTE_URL_SETTING_NAME,
         "Remote URL to which the UI server forwards GET requests",
