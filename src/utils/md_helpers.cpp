@@ -5,6 +5,10 @@
 
 namespace duckdb {
 std::string GetMDToken(Connection &connection) {
+  if (!IsMDConnected(connection)) {
+    return ""; // UI expects an empty response if MD isn't connected
+  }
+
   auto query_res = connection.Query("CALL GET_MD_TOKEN()");
   if (query_res->HasError()) {
     query_res->ThrowError();

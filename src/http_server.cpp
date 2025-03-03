@@ -195,28 +195,15 @@ void HttpServer::HandleGetLocalToken(const httplib::Request &req,
     return;
   }
 
-  if (!db->ExtensionIsLoaded("motherduck")) {
-    res.set_content("", "text/plain"); // UI expects an empty response if the
-                                       // extension is not loaded
-    return;
-  }
-
   Connection connection{*db};
   try {
     auto token = GetMDToken(connection);
     res.status = 200;
     res.set_content(token, "text/plain");
   } catch (std::exception &ex) {
-    if (StringUtil::Contains(
-            ex.what(), "GET_MD_TOKEN will be available after you connect")) {
-      // UI expects an empty response if MD isn't connected
-      res.status = 200;
-      res.set_content("", "text/plain");
-    } else {
-      res.status = 500;
-      res.set_content("Could not get token: " + std::string(ex.what()),
-                      "text/plain");
-    }
+    res.status = 500;
+    res.set_content("Could not get token: " + std::string(ex.what()),
+                    "text/plain");
   }
 }
 
