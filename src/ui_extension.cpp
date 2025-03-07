@@ -70,6 +70,10 @@ static void LoadInternal(DatabaseInstance &instance) {
   // a new database)
   ui::HttpServer::UpdateDatabaseInstanceIfRunning(instance.shared_from_this());
 
+  auto &fs = FileSystem::GetFileSystem(instance);
+  fs.CreateDirectory(fs.ExpandPath("~/.duckdb/extension_data"));
+  fs.CreateDirectory(fs.ExpandPath("~/.duckdb/extension_data/ui"));
+
   auto &config = DBConfig::GetConfig(instance);
   {
     auto default_port = GetEnvOrDefaultInt(UI_LOCAL_PORT_SETTING_NAME, 4213);
