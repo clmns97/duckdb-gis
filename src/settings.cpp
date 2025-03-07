@@ -1,8 +1,13 @@
 #include "settings.hpp"
 
+#include <duckdb.hpp>
+
 namespace duckdb {
 
 std::string GetRemoteUrl(const ClientContext &context) {
+  if (!context.db->config.options.allow_unsigned_extensions) {
+    return UI_REMOTE_URL_SETTING_DEFAULT;
+  }
   return internal::GetSetting<std::string>(context, UI_REMOTE_URL_SETTING_NAME);
 }
 

@@ -72,15 +72,16 @@ static void LoadInternal(DatabaseInstance &instance) {
 
   auto &config = DBConfig::GetConfig(instance);
   {
-    auto default_port = GetEnvOrDefaultInt(UI_LOCAL_PORT_SETTING_NAME, 4213);
+    auto default_port = GetEnvOrDefaultInt(UI_LOCAL_PORT_SETTING_NAME,
+                                           UI_LOCAL_PORT_SETTING_DEFAULT);
     config.AddExtensionOption(
         UI_LOCAL_PORT_SETTING_NAME, "Local port on which the UI server listens",
         LogicalType::USMALLINT, Value::USMALLINT(default_port));
   }
 
   {
-    auto def =
-        GetEnvOrDefault(UI_REMOTE_URL_SETTING_NAME, "https://ui.duckdb.org");
+    auto def = GetEnvOrDefault(UI_REMOTE_URL_SETTING_NAME,
+                               UI_REMOTE_URL_SETTING_DEFAULT);
     config.AddExtensionOption(
         UI_REMOTE_URL_SETTING_NAME,
         "Remote URL to which the UI server forwards GET requests",
@@ -88,7 +89,8 @@ static void LoadInternal(DatabaseInstance &instance) {
   }
 
   {
-    auto def = GetEnvOrDefaultInt(UI_POLLING_INTERVAL_SETTING_NAME, 284);
+    auto def = GetEnvOrDefaultInt(UI_POLLING_INTERVAL_SETTING_NAME,
+                                  UI_POLLING_INTERVAL_SETTING_DEFAULT);
     config.AddExtensionOption(
         UI_POLLING_INTERVAL_SETTING_NAME,
         "Period of time between UI polling requests (in ms)",
