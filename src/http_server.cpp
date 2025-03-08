@@ -41,9 +41,17 @@ void HttpServer::UpdateDatabaseInstance(
     shared_ptr<DatabaseInstance> context_db) {
   const auto current_db = server_instance->LockDatabaseInstance();
   if (current_db != context_db) {
-    server_instance->watcher->Stop();
+    auto watcher_stopped = false;
+    if (server_instance->watcher) {
+      server_instance->watcher->Stop();
+      server_instance->watcher = nullptr;
+      watcher_stopped = true;
+    }
     server_instance->ddb_instance = context_db;
-    server_instance->watcher->Start();
+    if (watcher_stopped) {
+      server_instance->watcher = make_uniq<Watcher>(*this);
+      server_instance->watcher->Start();
+    }
   }
 }
 
