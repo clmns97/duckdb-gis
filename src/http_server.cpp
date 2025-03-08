@@ -195,6 +195,12 @@ void HttpServer::HandleGetLocalEvents(const httplib::Request &req,
 
 void HttpServer::HandleGetLocalToken(const httplib::Request &req,
                                      httplib::Response &res) {
+  auto sec_fetch_site = req.get_header_value("Sec-Fetch-Site");
+  if (sec_fetch_site == "cross-site") {
+    res.status = 401;
+    return;
+  }
+
   auto db = ddb_instance.lock();
   if (!db) {
     res.status = 500;
@@ -254,6 +260,12 @@ void HttpServer::HandleGet(const httplib::Request &req,
 
 void HttpServer::HandleInterrupt(const httplib::Request &req,
                                  httplib::Response &res) {
+  auto sec_fetch_site = req.get_header_value("Sec-Fetch-Site");
+  if (sec_fetch_site == "cross-site") {
+    res.status = 401;
+    return;
+  }
+
   auto description = req.get_header_value("X-DuckDB-UI-Request-Description");
 
   auto connection_name = req.get_header_value("X-DuckDB-UI-Connection-Name");
@@ -288,6 +300,12 @@ void HttpServer::HandleRun(const httplib::Request &req, httplib::Response &res,
 void HttpServer::DoHandleRun(const httplib::Request &req,
                              httplib::Response &res,
                              const httplib::ContentReader &content_reader) {
+  auto sec_fetch_site = req.get_header_value("Sec-Fetch-Site");
+  if (sec_fetch_site == "cross-site") {
+    res.status = 401;
+    return;
+  }
+
   auto description = req.get_header_value("X-DuckDB-UI-Request-Description");
 
   auto connection_name = req.get_header_value("X-DuckDB-UI-Connection-Name");
@@ -404,6 +422,12 @@ void HttpServer::DoHandleRun(const httplib::Request &req,
 void HttpServer::HandleTokenize(const httplib::Request &req,
                                 httplib::Response &res,
                                 const httplib::ContentReader &content_reader) {
+  auto sec_fetch_site = req.get_header_value("Sec-Fetch-Site");
+  if (sec_fetch_site == "cross-site") {
+    res.status = 401;
+    return;
+  }
+
   auto description = req.get_header_value("X-DuckDB-UI-Request-Description");
 
   std::string content = ReadContent(content_reader);
