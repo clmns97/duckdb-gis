@@ -24,13 +24,16 @@ class HttpServer {
 public:
   HttpServer(shared_ptr<DatabaseInstance> _ddb_instance)
       : ddb_instance(_ddb_instance) {}
+
   static HttpServer *GetInstance(ClientContext &);
   static void UpdateDatabaseInstanceIfRunning(shared_ptr<DatabaseInstance>);
+  static bool IsRunningOnMachine(ClientContext &);
   static bool Started();
   static void StopInstance();
 
   static const HttpServer &Start(ClientContext &, bool *was_started = nullptr);
   static bool Stop();
+
   std::string LocalUrl() const;
 
 private:
