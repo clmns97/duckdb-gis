@@ -22,6 +22,11 @@
 namespace duckdb {
 
 std::string StartUIFunction(ClientContext &context) {
+  if (!ui::HttpServer::Started() &&
+      ui::HttpServer::IsRunningOnMachine(context)) {
+    return "UI already running in a different DuckDB instance";
+  }
+
   const auto &server = ui::HttpServer::Start(context);
   const auto local_url = server.LocalUrl();
 
@@ -33,6 +38,11 @@ std::string StartUIFunction(ClientContext &context) {
 }
 
 std::string StartUIServerFunction(ClientContext &context) {
+  if (!ui::HttpServer::Started() &&
+      ui::HttpServer::IsRunningOnMachine(context)) {
+    return "UI already running in a different DuckDB instance";
+  }
+
   bool was_started = false;
   const auto &server = ui::HttpServer::Start(context, &was_started);
   const char *already = was_started ? "already " : "";

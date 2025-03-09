@@ -55,6 +55,22 @@ void HttpServer::UpdateDatabaseInstance(
   }
 }
 
+bool HttpServer::IsRunningOnMachine(ClientContext &context) {
+  if (Started()) {
+    return true;
+  }
+
+  const auto local_port = GetLocalPort(context);
+  auto local_url = StringUtil::Format("http://localhost:%d", local_port);
+
+  httplib::Client client(local_url);
+  auto result = client.Get("/info");
+  if (result) {
+    return true;
+  }
+  return false;
+}
+
 bool HttpServer::Started() {
   return server_instance && server_instance->main_thread;
 }
