@@ -12,7 +12,7 @@ find_package(OpenSSL REQUIRED)
 set(EXTENSION_NAME ${TARGET_NAME}_extension)
 
 project(${TARGET_NAME})
-include_directories(src/include ${DuckDB_SOURCE_DIR}/third_party/httplib)
+include_directories(src/include ${PROJECT_SOURCE_DIR}/third_party/httplib)
 
 set(EXTENSION_SOURCES
     src/event_dispatcher.cpp
