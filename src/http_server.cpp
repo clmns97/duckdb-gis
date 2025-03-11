@@ -106,6 +106,7 @@ void HttpServer::DoStart(const uint16_t _local_port,
   }
 
   local_port = _local_port;
+  local_url = StringUtil::Format("http://localhost:%d", local_port);
   remote_url = _remote_url;
   user_agent =
       StringUtil::Format("duckdb-ui/%s-%s(%s)", DuckDB::LibraryVersion(),
@@ -211,8 +212,10 @@ void HttpServer::HandleGetLocalEvents(const httplib::Request &req,
 
 void HttpServer::HandleGetLocalToken(const httplib::Request &req,
                                      httplib::Response &res) {
-  auto sec_fetch_site = req.get_header_value("Sec-Fetch-Site");
-  if (sec_fetch_site == "cross-site") {
+  // GET requests don't include Origin, so use Referer instead.
+  // Referer includes the path, so only compare the start.
+  auto referer = req.get_header_value("Referer");
+  if (referer.compare(0, local_url.size(), local_url) != 0) {
     res.status = 401;
     return;
   }
@@ -276,8 +279,8 @@ void HttpServer::HandleGet(const httplib::Request &req,
 
 void HttpServer::HandleInterrupt(const httplib::Request &req,
                                  httplib::Response &res) {
-  auto sec_fetch_site = req.get_header_value("Sec-Fetch-Site");
-  if (sec_fetch_site == "cross-site") {
+  auto origin = req.get_header_value("Origin");
+  if (origin != local_url) {
     res.status = 401;
     return;
   }
@@ -316,8 +319,8 @@ void HttpServer::HandleRun(const httplib::Request &req, httplib::Response &res,
 void HttpServer::DoHandleRun(const httplib::Request &req,
                              httplib::Response &res,
                              const httplib::ContentReader &content_reader) {
-  auto sec_fetch_site = req.get_header_value("Sec-Fetch-Site");
-  if (sec_fetch_site == "cross-site") {
+  auto origin = req.get_header_value("Origin");
+  if (origin != local_url) {
     res.status = 401;
     return;
   }
@@ -438,8 +441,8 @@ void HttpServer::DoHandleRun(const httplib::Request &req,
 void HttpServer::HandleTokenize(const httplib::Request &req,
                                 httplib::Response &res,
                                 const httplib::ContentReader &content_reader) {
-  auto sec_fetch_site = req.get_header_value("Sec-Fetch-Site");
-  if (sec_fetch_site == "cross-site") {
+  auto origin = req.get_header_value("Origin");
+  if (origin != local_url) {
     res.status = 401;
     return;
   }
