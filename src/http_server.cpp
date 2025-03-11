@@ -40,18 +40,21 @@ void HttpServer::UpdateDatabaseInstanceIfRunning(
 void HttpServer::UpdateDatabaseInstance(
     shared_ptr<DatabaseInstance> context_db) {
   const auto current_db = server_instance->LockDatabaseInstance();
-  if (current_db != context_db) {
-    auto watcher_stopped = false;
-    if (server_instance->watcher) {
-      server_instance->watcher->Stop();
-      server_instance->watcher = nullptr;
-      watcher_stopped = true;
-    }
-    server_instance->ddb_instance = context_db;
-    if (watcher_stopped) {
-      server_instance->watcher = make_uniq<Watcher>(*this);
-      server_instance->watcher->Start();
-    }
+  if (current_db == context_db) {
+    return;
+  }
+
+  bool has_watcher = !!server_instance->watcher;
+  if (has_watcher) {
+    server_instance->watcher->Stop();
+    server_instance->watcher = nullptr;
+  }
+
+  server_instance->ddb_instance = context_db;
+
+  if (has_watcher) {
+    server_instance->watcher = make_uniq<Watcher>(*this);
+    server_instance->watcher->Start();
   }
 }
 
@@ -200,6 +203,7 @@ void HttpServer::HandleGetLocalEvents(const httplib::Request &req,
         if (event_dispatcher->WaitEvent(&sink)) {
           return true;
         }
+
         sink.done();
         return false;
       });
