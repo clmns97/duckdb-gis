@@ -247,13 +247,7 @@ void HttpServer::HandleGet(const httplib::Request &req,
   httplib::Client client(remote_url);
   client.set_keep_alive(true);
 
-  // Provide a way to turn on or off server certificate verification, at least
-  // for now, because it requires httplib to correctly get the root certficates
-  // on each platform, which doesn't appear to always work. Currently, default
-  // to no verification, until we understand when it breaks things.
-  if (IsEnvEnabled("ui_enable_server_certificate_verification")) {
-    client.enable_server_certificate_verification(true);
-  } else {
+  if (IsEnvEnabled("ui_disable_server_certificate_verification")) {
     client.enable_server_certificate_verification(false);
   }
 
