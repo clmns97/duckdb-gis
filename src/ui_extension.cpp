@@ -55,6 +55,15 @@ std::string StopUIServerFunction(ClientContext &context) {
                                 : "UI server already stopped";
 }
 
+std::string GetUIURLFunction(ClientContext &context) {
+  if (!ui::HttpServer::Started()) {
+    throw ExecutorException("UI server not started");
+  }
+
+  auto server = ui::HttpServer::GetInstance(context);
+  return server->LocalUrl();
+}
+
 void IsUIStartedTableFunc(ClientContext &context, TableFunctionInput &input,
                           DataChunk &output) {
   if (!internal::ShouldRun(input)) {
@@ -114,6 +123,7 @@ static void LoadInternal(DatabaseInstance &instance) {
   REGISTER_TF("start_ui", StartUIFunction);
   REGISTER_TF("start_ui_server", StartUIServerFunction);
   REGISTER_TF("stop_ui_server", StopUIServerFunction);
+  REGISTER_TF("get_ui_url", GetUIURLFunction);
   {
     TableFunction tf("ui_is_started", {}, IsUIStartedTableFunc,
                      internal::SingleBoolResultBind,
