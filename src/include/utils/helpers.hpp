@@ -74,7 +74,7 @@ void RegisterTF(DatabaseInstance &instance, const char *name) {
 
 } // namespace internal
 
-#define RESISTER_TF(name, func)                                                \
+#define REGISTER_TF(name, func)                                                \
   internal::RegisterTF<decltype(&func), &func>(instance, name)
 
 } // namespace duckdb

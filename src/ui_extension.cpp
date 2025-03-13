@@ -111,9 +111,9 @@ static void LoadInternal(DatabaseInstance &instance) {
         LogicalType::UINTEGER, Value::UINTEGER(def));
   }
 
-  RESISTER_TF("start_ui", StartUIFunction);
-  RESISTER_TF("start_ui_server", StartUIServerFunction);
-  RESISTER_TF("stop_ui_server", StopUIServerFunction);
+  REGISTER_TF("start_ui", StartUIFunction);
+  REGISTER_TF("start_ui_server", StartUIServerFunction);
+  REGISTER_TF("stop_ui_server", StopUIServerFunction);
   {
     TableFunction tf("ui_is_started", {}, IsUIStartedTableFunc,
                      internal::SingleBoolResultBind,
