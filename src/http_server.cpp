@@ -269,6 +269,9 @@ void HttpServer::HandleGet(const httplib::Request &req,
     // Wasm).
     res.set_header("X-DuckDB-UI-Extension-Version", UI_EXTENSION_VERSION);
   }
+
+  // httplib will set Content-Length, remove it so it is not duplicated.
+  res.headers.erase("Content-Length");
 }
 
 void HttpServer::HandleInterrupt(const httplib::Request &req,
