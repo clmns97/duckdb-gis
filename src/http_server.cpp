@@ -255,6 +255,9 @@ void HttpServer::HandleGet(const httplib::Request &req,
   auto result = client.Get(req.path, req.params, {{"User-Agent", user_agent}});
   if (!result) {
     res.status = 500;
+    res.set_content("Could not fetch: '" + req.path + "' from '" + remote_url +
+                        "': " + to_string(result.error()),
+                    "text/plain");
     return;
   }
 
