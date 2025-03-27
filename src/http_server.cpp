@@ -251,8 +251,14 @@ void HttpServer::HandleGet(const httplib::Request &req,
     client.enable_server_certificate_verification(false);
   }
 
+  httplib::Headers headers = {{"User-Agent", user_agent}};
+  auto cookie = req.get_header_value("Cookie");
+  if (!cookie.empty()) {
+    headers.emplace("Cookie", cookie);
+  }
+
   // forward GET to remote URL
-  auto result = client.Get(req.path, req.params, {{"User-Agent", user_agent}});
+  auto result = client.Get(req.path, req.params, headers);
   if (!result) {
     res.status = 500;
     res.set_content("Could not fetch: '" + req.path + "' from '" + remote_url +
