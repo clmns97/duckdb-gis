@@ -1,6 +1,7 @@
 #pragma once
 
 #include <duckdb.hpp>
+#include <duckdb/common/http_util.hpp>
 
 #define CPPHTTPLIB_OPENSSL_SUPPORT
 #include "httplib.hpp"
@@ -15,6 +16,7 @@
 namespace httplib = duckdb_httplib_openssl;
 
 namespace duckdb {
+class HTTPParams;
 class MemoryStream;
 
 namespace ui {
@@ -40,7 +42,8 @@ private:
   friend class Watcher;
 
   // Lifecycle
-  void DoStart(const uint16_t local_port, const std::string &remote_url);
+  void DoStart(const uint16_t local_port, const std::string &remote_url,
+               unique_ptr<HTTPParams>);
   void DoStop();
   void Run();
   void UpdateDatabaseInstance(shared_ptr<DatabaseInstance> context_db);
@@ -67,6 +70,7 @@ private:
 
   // Misc
   shared_ptr<DatabaseInstance> LockDatabaseInstance();
+  void InitClientFromParams(httplib::Client &);
 
   uint16_t local_port;
   std::string local_url;
@@ -77,6 +81,7 @@ private:
   unique_ptr<std::thread> main_thread;
   unique_ptr<EventDispatcher> event_dispatcher;
   unique_ptr<Watcher> watcher;
+  unique_ptr<HTTPParams> http_params;
 
   static unique_ptr<HttpServer> server_instance;
 };

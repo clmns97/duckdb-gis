@@ -9,6 +9,7 @@
 #include "utils/serialization.hpp"
 #include "version.hpp"
 #include "watcher.hpp"
+#include <duckdb/common/http_util.hpp>
 #include <duckdb/common/serializer/binary_serializer.hpp>
 #include <duckdb/common/serializer/memory_stream.hpp>
 #include <duckdb/main/attached_database.hpp>
@@ -94,13 +95,17 @@ const HttpServer &HttpServer::Start(ClientContext &context, bool *was_started) {
 
   const auto remote_url = GetRemoteUrl(context);
   const auto port = GetLocalPort(context);
+  auto &http_util = HTTPUtil::Get(*context.db);
+  // FIXME - https://github.com/duckdb/duckdb/pull/17655 will remove `unused`
+  auto http_params = http_util.InitializeParameters(context, "unused");
   auto server = GetInstance(context);
-  server->DoStart(port, remote_url);
+  server->DoStart(port, remote_url, std::move(http_params));
   return *server;
 }
 
 void HttpServer::DoStart(const uint16_t _local_port,
-                         const std::string &_remote_url) {
+                         const std::string &_remote_url,
+                         unique_ptr<HTTPParams> _http_params) {
   if (Started()) {
     throw std::runtime_error("HttpServer already started");
   }
@@ -108,6 +113,7 @@ void HttpServer::DoStart(const uint16_t _local_port,
   local_port = _local_port;
   local_url = StringUtil::Format("http://localhost:%d", local_port);
   remote_url = _remote_url;
+  http_params = std::move(_http_params);
   user_agent =
       StringUtil::Format("duckdb-ui/%s-%s(%s)", DuckDB::LibraryVersion(),
                          UI_EXTENSION_VERSION, DuckDB::Platform());
@@ -144,6 +150,7 @@ void HttpServer::DoStop() {
   }
 
   ddb_instance.reset();
+  http_params = nullptr;
   remote_url = "";
   local_port = 0;
 }
@@ -240,12 +247,34 @@ void HttpServer::HandleGetLocalToken(const httplib::Request &req,
   }
 }
 
+// Adapted from
+// https://github.com/duckdb/duckdb/blob/1f8b6839ea7864c3e3fb020574f67384cb58124c/src/main/http/http_util.cpp#L129-L147
+// Which is not currently exposed.
+void HttpServer::InitClientFromParams(httplib::Client &client) {
+  auto sec = static_cast<time_t>(http_params->timeout);
+  auto usec = static_cast<time_t>(http_params->timeout_usec);
+  client.set_keep_alive(true);
+  client.set_write_timeout(sec, usec);
+  client.set_read_timeout(sec, usec);
+  client.set_connection_timeout(sec, usec);
+
+  if (!http_params->http_proxy.empty()) {
+    client.set_proxy(http_params->http_proxy,
+                     static_cast<int>(http_params->http_proxy_port));
+
+    if (!http_params->http_proxy_username.empty()) {
+      client.set_proxy_basic_auth(http_params->http_proxy_username,
+                                  http_params->http_proxy_password);
+    }
+  }
+}
+
 void HttpServer::HandleGet(const httplib::Request &req,
                            httplib::Response &res) {
   // Create HTTP client to remote URL
   // TODO: Can this be created once and shared?
   httplib::Client client(remote_url);
-  client.set_keep_alive(true);
+  InitClientFromParams(client);
 
   if (IsEnvEnabled("ui_disable_server_certificate_verification")) {
     client.enable_server_certificate_verification(false);
