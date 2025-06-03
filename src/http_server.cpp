@@ -412,7 +412,7 @@ void HttpServer::DoHandleRun(const httplib::Request &req,
         break;
       default:
         SetResponseErrorResult(
-            res, StringUtil::Format("Unexpected PendingExecutionResult: %d",
+            res, StringUtil::Format("Unexpected PendingExecutionResult: %s",
                                     exec_result));
         return;
       }
@@ -490,7 +490,7 @@ void HttpServer::DoHandleRun(const httplib::Request &req,
   }
   default:
     SetResponseErrorResult(
-        res, StringUtil::Format("Unexpected PendingExecutionResult: %d",
+        res, StringUtil::Format("Unexpected PendingExecutionResult: %s",
                                 exec_result));
     break;
   }
