@@ -372,13 +372,62 @@ void HttpServer::DoHandleRun(const httplib::Request &req,
     });
   }
 
+  unique_ptr<SQLStatement> last_statement;
+
+  auto statements = connection->ExtractStatements(content);
+  auto statement_count = statements.size();
+
+  if (statement_count == 0) {
+    SetResponseErrorResult(res, "No statements");
+    return;
+  }
+
+  // If there's more than one statement, run all but the last.
+  if (statement_count > 1) {
+    for (auto i = 0; i < statement_count - 1; ++i) {
+      auto &statement = statements[i];
+      auto pending = connection->PendingQuery(std::move(statement));
+      // Return any error found before execution.
+      if (pending->HasError()) {
+        SetResponseErrorResult(res, pending->GetError());
+        return;
+      }
+      // Execute tasks until result is ready (or there's an error).
+      auto exec_result = PendingExecutionResult::RESULT_NOT_READY;
+      while (!PendingQueryResult::IsResultReady(exec_result)) {
+        exec_result = pending->ExecuteTask();
+        if (exec_result == PendingExecutionResult::BLOCKED ||
+            exec_result == PendingExecutionResult::NO_TASKS_AVAILABLE) {
+          std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+      }
+      // Return any error found during execution.
+      switch (exec_result) {
+      case PendingExecutionResult::EXECUTION_ERROR:
+        SetResponseErrorResult(res, pending->GetError());
+        return;
+      case PendingExecutionResult::EXECUTION_FINISHED:
+      case PendingExecutionResult::RESULT_READY:
+        // ignore the result
+        pending->Execute();
+        break;
+      default:
+        SetResponseErrorResult(res, "Unexpected PendingExecutionResult");
+        return;
+      }
+    }
+  }
+
+  // Get the last statement.
+  auto &statement_to_run = statements[statement_count - 1];
+
   // We use a pending query so we can execute tasks and fetch chunks
   // incrementally. This enables cancellation.
   unique_ptr<PendingQueryResult> pending;
 
   // Create pending query, with request content as SQL.
   if (parameter_values.size() > 0) {
-    auto prepared = connection->Prepare(content);
+    auto prepared = connection->Prepare(std::move(statement_to_run));
     if (prepared->HasError()) {
       SetResponseErrorResult(res, prepared->GetError());
       return;
@@ -391,7 +440,7 @@ void HttpServer::DoHandleRun(const httplib::Request &req,
     }
     pending = prepared->PendingQuery(values, true);
   } else {
-    pending = connection->PendingQuery(content, true);
+    pending = connection->PendingQuery(std::move(statement_to_run), true);
   }
 
   if (pending->HasError()) {
