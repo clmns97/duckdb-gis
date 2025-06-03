@@ -385,8 +385,7 @@ void HttpServer::DoHandleRun(const httplib::Request &req,
   // If there's more than one statement, run all but the last.
   if (statement_count > 1) {
     for (auto i = 0; i < statement_count - 1; ++i) {
-      auto &statement = statements[i];
-      auto pending = connection->PendingQuery(std::move(statement));
+      auto pending = connection->PendingQuery(std::move(statements[i]));
       // Return any error found before execution.
       if (pending->HasError()) {
         SetResponseErrorResult(res, pending->GetError());
@@ -412,7 +411,9 @@ void HttpServer::DoHandleRun(const httplib::Request &req,
         pending->Execute();
         break;
       default:
-        SetResponseErrorResult(res, "Unexpected PendingExecutionResult");
+        SetResponseErrorResult(
+            res, StringUtil::Format("Unexpected PendingExecutionResult: %d",
+                                    exec_result));
         return;
       }
     }
@@ -488,7 +489,9 @@ void HttpServer::DoHandleRun(const httplib::Request &req,
     break;
   }
   default:
-    SetResponseErrorResult(res, "Unexpected PendingExecutionResult");
+    SetResponseErrorResult(
+        res, StringUtil::Format("Unexpected PendingExecutionResult: %d",
+                                exec_result));
     break;
   }
 }
