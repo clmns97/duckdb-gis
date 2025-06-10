@@ -3,10 +3,14 @@
 #
 name: Main Extension Distribution Pipeline
 on:
+  pull_request:
+    paths-ignore:
+      - "ts/**"
   push:
     branches:
       - "main"
-  pull_request:
+    paths-ignore:
+      - "ts/**"
   workflow_dispatch:
 
 concurrency:
