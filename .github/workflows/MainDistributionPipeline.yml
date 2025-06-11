@@ -6,11 +6,13 @@ on:
   pull_request:
     paths-ignore:
       - "ts/**"
+      - ".github/workflows/TypeScriptWorkspace.yml"
   push:
     branches:
       - "main"
     paths-ignore:
       - "ts/**"
+      - ".github/workflows/TypeScriptWorkspace.yml"
   workflow_dispatch:
 
 concurrency:
@@ -19,12 +21,13 @@ concurrency:
 
 jobs:
   duckdb-main-build:
+    if: false # Disable until issue with breaking change to C++ extension interface is resolved. See https://github.com/duckdb/duckdb/pull/17772.
     name: Build main extension binaries
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@main
     with:
       ci_tools_version: main
       duckdb_version: main
-      exclude_archs: 'wasm_mvp;wasm_eh;wasm_threads'
+      exclude_archs: ${{ github.repository == 'duckdb/duckdb-ui' && 'wasm_mvp;wasm_eh;wasm_threads' || 'linux_arm64;linux_amd64_musl;osx_amd64;windows_amd64_mingw;wasm_mvp;wasm_eh;wasm_threads' }}
       extension_name: ui
 
   duckdb-next-patch-build:
@@ -33,7 +36,7 @@ jobs:
     with:
       ci_tools_version: v1.3.0
       duckdb_version: v1.3-ossivalis
-      exclude_archs: 'wasm_mvp;wasm_eh;wasm_threads'
+      exclude_archs: ${{ github.repository == 'duckdb/duckdb-ui' && 'wasm_mvp;wasm_eh;wasm_threads' || 'linux_arm64;linux_amd64_musl;osx_amd64;windows_amd64_mingw;wasm_mvp;wasm_eh;wasm_threads' }}
       extension_name: ui
 
   duckdb-stable-build:
@@ -42,7 +45,7 @@ jobs:
     with:
       ci_tools_version: v1.3.0
       duckdb_version: v1.3.0
-      exclude_archs: 'wasm_mvp;wasm_eh;wasm_threads'
+      exclude_archs: ${{ github.repository == 'duckdb/duckdb-ui' && 'wasm_mvp;wasm_eh;wasm_threads' || 'linux_arm64;linux_amd64_musl;osx_amd64;windows_amd64_mingw;wasm_mvp;wasm_eh;wasm_threads' }}
       extension_name: ui
 
   duckdb-stable-deploy:
