@@ -1,7 +1,9 @@
 #pragma once
 
 #include <duckdb.hpp>
+#ifndef DUCKDB_CPP_EXTENSION_ENTRY
 #include <duckdb/main/extension_util.hpp>
+#endif
 #include <type_traits>
 
 namespace duckdb {
@@ -64,6 +66,15 @@ void TableFunc(ClientContext &context, TableFunctionInput &input,
   output.SetValue(0, 0, result);
 }
 
+#ifdef DUCKDB_CPP_EXTENSION_ENTRY
+template <typename Func, Func func>
+void RegisterTF(ExtensionLoader &loader, const char *name) {
+  TableFunction tf(name, {}, internal::TableFunc<Func, func>,
+                   internal::SingleStringResultBind,
+                   RunOnceTableFunctionState::Init);
+  loader.RegisterFunction(tf);
+}
+#else
 template <typename Func, Func func>
 void RegisterTF(DatabaseInstance &instance, const char *name) {
   TableFunction tf(name, {}, internal::TableFunc<Func, func>,
@@ -71,10 +82,16 @@ void RegisterTF(DatabaseInstance &instance, const char *name) {
                    RunOnceTableFunctionState::Init);
   ExtensionUtil::RegisterFunction(instance, tf);
 }
+#endif
 
 } // namespace internal
 
+#ifdef DUCKDB_CPP_EXTENSION_ENTRY
+#define REGISTER_TF(name, func)                                                \
+  internal::RegisterTF<decltype(&func), &func>(loader, name)
+#else
 #define REGISTER_TF(name, func)                                                \
   internal::RegisterTF<decltype(&func), &func>(instance, name)
+#endif
 
 } // namespace duckdb
