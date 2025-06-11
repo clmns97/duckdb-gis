@@ -81,7 +81,12 @@ void InitStorageExtension(duckdb::DatabaseInstance &db) {
   config.storage_extensions[STORAGE_EXTENSION_KEY] = std::move(ext);
 }
 
+#ifdef DUCKDB_CPP_EXTENSION_ENTRY
+static void LoadInternal(ExtensionLoader &loader) {
+  auto &instance = loader.GetDatabaseInstance();
+#else
 static void LoadInternal(DatabaseInstance &instance) {
+#endif
   InitStorageExtension(instance);
 
   // If the server is already running we need to update the database instance
@@ -128,11 +133,20 @@ static void LoadInternal(DatabaseInstance &instance) {
     TableFunction tf("ui_is_started", {}, IsUIStartedTableFunc,
                      internal::SingleBoolResultBind,
                      RunOnceTableFunctionState::Init);
+#ifdef DUCKDB_CPP_EXTENSION_ENTRY
+    loader.RegisterFunction(tf);
+#else
     ExtensionUtil::RegisterFunction(instance, tf);
+#endif
   }
 }
 
+#ifdef DUCKDB_CPP_EXTENSION_ENTRY
+void UiExtension::Load(ExtensionLoader &loader) { LoadInternal(loader); }
+#else
 void UiExtension::Load(DuckDB &db) { LoadInternal(*db.instance); }
+#endif
+
 std::string UiExtension::Name() { return "ui"; }
 
 std::string UiExtension::Version() const { return UI_EXTENSION_VERSION; }
@@ -141,10 +155,14 @@ std::string UiExtension::Version() const { return UI_EXTENSION_VERSION; }
 
 extern "C" {
 
+#ifdef DUCKDB_CPP_EXTENSION_ENTRY
+DUCKDB_CPP_EXTENSION_ENTRY(ui, loader) { duckdb::LoadInternal(loader); }
+#else
 DUCKDB_EXTENSION_API void ui_init(duckdb::DatabaseInstance &db) {
   duckdb::DuckDB db_wrapper(db);
   db_wrapper.LoadExtension<duckdb::UiExtension>();
 }
+#endif
 
 DUCKDB_EXTENSION_API const char *ui_version() {
   return duckdb::DuckDB::LibraryVersion();
