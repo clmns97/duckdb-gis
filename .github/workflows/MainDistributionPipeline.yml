@@ -21,7 +21,6 @@ concurrency:
 
 jobs:
   duckdb-main-build:
-    if: false # Disable until issue with breaking change to C++ extension interface is resolved. See https://github.com/duckdb/duckdb/pull/17772.
     name: Build main extension binaries
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@main
     with:
