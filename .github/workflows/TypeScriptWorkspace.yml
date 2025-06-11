@@ -1,0 +1,21 @@
+name: TypeScript Workspace
+on:
+  pull_request:
+    paths:
+      - "ts/**"
+      - ".github/workflows/TypeScriptWorkspace.yml"
+  push:
+    branches:
+      - "main"
+    paths:
+      - "ts/**"
+      - ".github/workflows/TypeScriptWorkspace.yml"
+  workflow_dispatch:
+
+jobs:
+  hello:
+    name: "Hello"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Say Hello
+        run: echo Hello from TypeScript Workspace job!
