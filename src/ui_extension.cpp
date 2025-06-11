@@ -13,6 +13,7 @@
 
 #ifdef _WIN32
 #define OPEN_COMMAND "start"
+#undef CreateDirectory // avoid being transformed to `CreateDirectoryA`
 #elif __linux__
 #define OPEN_COMMAND "xdg-open"
 #else
