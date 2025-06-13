@@ -1,0 +1,42 @@
+/**
+ * Copy of DuckDB's LogicalTypeId.
+ *
+ * See LogicalTypeId in https://github.com/duckdb/duckdb/blob/main/src/include/duckdb/common/types.hpp
+ */
+export const LogicalTypeId = {
+  BOOLEAN: 10,
+  TINYINT: 11,
+  SMALLINT: 12,
+  INTEGER: 13,
+  BIGINT: 14,
+  DATE: 15,
+  TIME: 16,
+  TIMESTAMP_SEC: 17,
+  TIMESTAMP_MS: 18,
+  TIMESTAMP: 19,
+  TIMESTAMP_NS: 20,
+  DECIMAL: 21,
+  FLOAT: 22,
+  DOUBLE: 23,
+  CHAR: 24,
+  VARCHAR: 25,
+  BLOB: 26,
+  INTERVAL: 27,
+  UTINYINT: 28,
+  USMALLINT: 29,
+  UINTEGER: 30,
+  UBIGINT: 31,
+  TIMESTAMP_TZ: 32,
+  TIME_TZ: 34,
+  BIT: 36,
+  VARINT: 39,
+  UHUGEINT: 49,
+  HUGEINT: 50,
+  UUID: 54,
+  STRUCT: 100,
+  LIST: 101,
+  MAP: 102,
+  ENUM: 104,
+  UNION: 107,
+  ARRAY: 108,
+};

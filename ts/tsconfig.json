@@ -1,0 +1,13 @@
+{
+  "files": [],
+  "references": [
+    { "path": "pkgs/duckdb-data-reader/src" },
+    { "path": "pkgs/duckdb-data-reader/test" },
+    { "path": "pkgs/duckdb-data-types/src" },
+    { "path": "pkgs/duckdb-data-types/test" },
+    { "path": "pkgs/duckdb-data-values/src" },
+    { "path": "pkgs/duckdb-data-values/test" },
+    { "path": "pkgs/duckdb-ui-client/src" },
+    { "path": "pkgs/duckdb-ui-client/test" },
+  ]
+}

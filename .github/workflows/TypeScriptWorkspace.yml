@@ -13,9 +13,38 @@ on:
   workflow_dispatch:
 
 jobs:
-  hello:
-    name: "Hello"
+  build_and_test:
+    name: Build & Test
     runs-on: ubuntu-latest
     steps:
-      - name: Say Hello
-        run: echo Hello from TypeScript Workspace job!
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: ts/package.json
+      
+      - name: Setup Node with pnpm cache
+        uses: actions/setup-node@v4
+        with:
+          cache: 'pnpm'
+          cache-dependency-path: ts/pnpm-lock.yaml
+      
+      # Src files are built using preinstall
+      - name: Install dependencies & build src
+        working-directory: ts
+        run: pnpm install
+      
+      # This step is needed to type-check test files. (Src files are built during install.)
+      - name: Build src & test (to type-check test)
+        working-directory: ts
+        run: pnpm build
+      
+      - name: Check formatting & linting rules
+        working-directory: ts
+        run: pnpm check
+      
+      - name: Test
+        working-directory: ts
+        run: pnpm test
