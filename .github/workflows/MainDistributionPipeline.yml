@@ -5,14 +5,18 @@ name: Main Extension Distribution Pipeline
 on:
   pull_request:
     paths-ignore:
-      - "ts/**"
       - ".github/workflows/TypeScriptWorkspace.yml"
+      - "docs/**"
+      - "ts/**"
+      - "README.md"
   push:
     branches:
       - "main"
     paths-ignore:
-      - "ts/**"
       - ".github/workflows/TypeScriptWorkspace.yml"
+      - "docs/**"
+      - "ts/**"
+      - "README.md"
   workflow_dispatch:
 
 concurrency:
