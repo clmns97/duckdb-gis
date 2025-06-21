@@ -39,6 +39,8 @@ export class DuckDBUIClientConnection {
     errorMessage?: string,
     failure?: (reason: unknown) => void,
   ) {
+    // Handle the rejected promise (with a no-op) in case nothing else is, to avoid a console error.
+    this.requestQueue.enqueuedResult(id).catch(() => {});
     this.requestQueue.cancel(id, errorMessage);
     // If currently running, then interrupt it.
     if (this.requestQueue.isCurrent(id)) {
