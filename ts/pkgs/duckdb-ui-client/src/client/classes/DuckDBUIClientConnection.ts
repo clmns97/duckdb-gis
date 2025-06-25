@@ -1,11 +1,9 @@
 import { DuckDBUIHttpRequestQueue } from '../../http/classes/DuckDBUIHttpRequestQueue.js';
-import {
-  DuckDBUIHttpRequestHeaderOptions,
-  makeDuckDBUIHttpRequestHeaders,
-} from '../../http/functions/makeDuckDBUIHttpRequestHeaders.js';
+import { makeDuckDBUIHttpRequestHeaders } from '../../http/functions/makeDuckDBUIHttpRequestHeaders.js';
 import { sendDuckDBUIHttpRequest } from '../../http/functions/sendDuckDBUIHttpRequest.js';
 import { randomString } from '../../util/functions/randomString.js';
 import { materializedRunResultFromQueueResult } from '../functions/materializedRunResultFromQueueResult.js';
+import { DuckDBUIRunOptions } from '../types/DuckDBUIRunOptions.js';
 import { MaterializedRunResult } from '../types/MaterializedRunResult.js';
 
 export class DuckDBUIClientConnection {
@@ -16,21 +14,21 @@ export class DuckDBUIClientConnection {
 
   public async run(
     sql: string,
-    args?: unknown[],
+    options?: DuckDBUIRunOptions,
   ): Promise<MaterializedRunResult> {
     const queueResult = await this.requestQueue.enqueueAndWait(
       '/ddb/run',
       sql,
-      this.makeHeaders({ parameters: args }),
+      this.makeHeaders(options),
     );
     return materializedRunResultFromQueueResult(queueResult);
   }
 
-  public enqueue(sql: string, args?: unknown[]): string {
+  public enqueue(sql: string, options?: DuckDBUIRunOptions): string {
     return this.requestQueue.enqueue(
       '/ddb/run',
       sql,
-      this.makeHeaders({ parameters: args }),
+      this.makeHeaders(options),
     );
   }
 
@@ -52,18 +50,16 @@ export class DuckDBUIClientConnection {
     return true;
   }
 
-  public async runQueued(id: string): Promise<MaterializedRunResult> {
+  public async enqueuedResult(id: string): Promise<MaterializedRunResult> {
     const queueResult = await this.requestQueue.enqueuedResult(id);
     return materializedRunResultFromQueueResult(queueResult);
   }
 
-  public get queuedCount(): number {
+  public get enqueuedCount(): number {
     return this.requestQueue.length;
   }
 
-  private makeHeaders(
-    options: Omit<DuckDBUIHttpRequestHeaderOptions, 'connectionName'> = {},
-  ): Headers {
+  private makeHeaders(options: DuckDBUIRunOptions = {}): Headers {
     return makeDuckDBUIHttpRequestHeaders({
       ...options,
       connectionName: this.connectionName,
