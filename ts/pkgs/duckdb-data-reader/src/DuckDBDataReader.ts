@@ -102,6 +102,11 @@ export class DuckDBDataReader extends DuckDBData {
         // The row we're looking for is in this run.
         // Calculate the batch index and the row index in that batch.
         batchIndex += Math.floor(currentRowIndex / run.batchSize);
+        if (batchIndex < 0 || batchIndex >= this.batches.length) {
+          throw new Error(
+            `DuckDBDataReader with ${this.batches.length} batches calculated out-of-range batch index: ${batchIndex} (columnIndex=${columnIndex}, rowIndex=${rowIndex})`,
+          );
+        }
         const rowIndexInBatch = currentRowIndex % run.batchSize;
         const batch = this.batches[batchIndex];
         return batch.value(columnIndex, rowIndexInBatch);
