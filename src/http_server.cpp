@@ -410,7 +410,6 @@ void HttpServer::DoHandleRun(const httplib::Request &req,
 
   auto errors_as_json_string =
       req.get_header_value("X-DuckDB-UI-Errors-As-JSON");
-  auto errors_as_json = errors_as_json_string == "true";
 
   std::string content = ReadContent(content_reader);
 
@@ -428,7 +427,9 @@ void HttpServer::DoHandleRun(const httplib::Request &req,
   auto &config = ClientConfig::GetConfig(context);
 
   // Set errors_as_json
-  config.errors_as_json = errors_as_json;
+  if (!errors_as_json_string.empty()) {
+    config.errors_as_json = errors_as_json_string == "true";
+  }
 
   // Set current database & schema
   if (!database_name_option.empty() || !schema_name_option.empty()) {
