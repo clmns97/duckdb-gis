@@ -9,7 +9,8 @@
 namespace duckdb {
 namespace ui {
 
-Watcher::Watcher(HttpServer &_server) : should_run(false), server(_server) {}
+Watcher::Watcher(HttpServer &_server)
+    : should_run(false), server(_server), watched_database(nullptr) {}
 
 bool WasCatalogUpdated(DatabaseInstance &db, Connection &connection,
                        CatalogState &last_state) {
@@ -60,6 +61,12 @@ void Watcher::Watch() {
     auto db = server.LockDatabaseInstance();
     if (!db) {
       break; // DB went away, nothing to watch
+    }
+
+    if (watched_database == nullptr) {
+      watched_database = db.get();
+    } else if (watched_database != db.get()) {
+      break; // DB changed, stop watching, will be restarted
     }
 
     duckdb::Connection con{*db};
