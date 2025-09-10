@@ -2,6 +2,7 @@
 
 #include <duckdb/main/attached_database.hpp>
 
+#include "utils/helpers.hpp"
 #include "utils/md_helpers.hpp"
 #include "http_server.hpp"
 #include "settings.hpp"
@@ -23,19 +24,23 @@ bool WasCatalogUpdated(DatabaseInstance &db, Connection &connection,
 
   // Check currently attached databases
   for (const auto &db_ref : databases) {
-    auto &db = db_ref.get();
-    if (db.IsTemporary()) {
+#if DUCKDB_VERSION_AT_MOST(1, 3, 2)
+	auto &db_instance = db_ref.get();
+#else
+	auto &db_instance = *db_ref;
+#endif
+    if (db_instance.IsTemporary()) {
       continue; // ignore temp databases
     }
 
-    db_oids.insert(db.oid);
-    auto &catalog = db.GetCatalog();
+    db_oids.insert(db_instance.oid);
+    auto &catalog = db_instance.GetCatalog();
     auto current_version = catalog.GetCatalogVersion(context);
-    auto last_version_it = last_state.db_to_catalog_version.find(db.oid);
+    auto last_version_it = last_state.db_to_catalog_version.find(db_instance.oid);
     if (last_version_it == last_state.db_to_catalog_version.end() // first time
         || !(last_version_it->second == current_version)) {       // updated
       has_change = true;
-      last_state.db_to_catalog_version[db.oid] = current_version;
+      last_state.db_to_catalog_version[db_instance.oid] = current_version;
     }
   }
 

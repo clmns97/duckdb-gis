@@ -27,6 +27,10 @@ set(EXTENSION_SOURCES
     src/utils/serialization.cpp
     src/watcher.cpp)
 
+add_definitions(-DDUCKDB_MAJOR_VERSION=${DUCKDB_MAJOR_VERSION})
+add_definitions(-DDUCKDB_MINOR_VERSION=${DUCKDB_MINOR_VERSION})
+add_definitions(-DDUCKDB_PATCH_VERSION=${DUCKDB_PATCH_VERSION})
+
 find_package(Git)
 if(NOT Git_FOUND)
   message(FATAL_ERROR "Git not found, unable to determine git sha")
