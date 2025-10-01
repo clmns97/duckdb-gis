@@ -443,9 +443,15 @@ void HttpServer::DoHandleRun(const httplib::Request &req,
     });
   }
 
-  unique_ptr<SQLStatement> last_statement;
+  vector<unique_ptr<SQLStatement>> statements;
+  try {
+    statements = connection->ExtractStatements(content);
+  } catch (std::exception &ex) {
+    ErrorData error(ex);
+    SetResponseErrorResult(res, error.RawMessage());
+    return;
+  }
 
-  auto statements = connection->ExtractStatements(content);
   auto statement_count = statements.size();
 
   if (statement_count == 0) {
