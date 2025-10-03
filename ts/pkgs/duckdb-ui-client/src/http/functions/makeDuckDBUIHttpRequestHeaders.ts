@@ -12,11 +12,11 @@ export function makeDuckDBUIHttpRequestHeaders({
   schemaName,
   errorsAsJson,
   parameters,
-  resultChunkLimit,
+  resultRowLimit,
   resultDatabaseName,
   resultSchemaName,
   resultTableName,
-  resultTableChunkLimit,
+  resultTableRowLimit,
 }: DuckDBUIHttpRequestHeaderOptions): Headers {
   const headers = new Headers();
   // We base64 encode some values because they can contain characters invalid in an HTTP header.
@@ -42,8 +42,8 @@ export function makeDuckDBUIHttpRequestHeaders({
       );
     }
   }
-  if (resultChunkLimit !== undefined) {
-    headers.append('X-DuckDB-UI-Result-Chunk-Limit', String(resultChunkLimit));
+  if (resultRowLimit !== undefined) {
+    headers.append('X-DuckDB-UI-Result-Row-Limit', String(resultRowLimit));
   }
   if (resultDatabaseName) {
     headers.append(
@@ -60,10 +60,10 @@ export function makeDuckDBUIHttpRequestHeaders({
   if (resultTableName) {
     headers.append('X-DuckDB-UI-Result-Table-Name', toBase64(resultTableName));
   }
-  if (resultTableChunkLimit !== undefined) {
+  if (resultTableRowLimit !== undefined) {
     headers.append(
-      'X-DuckDB-UI-Result-Table-Chunk-Limit',
-      String(resultTableChunkLimit),
+      'X-DuckDB-UI-Result-Table-Row-Limit',
+      String(resultTableRowLimit),
     );
   }
   if (errorsAsJson) {

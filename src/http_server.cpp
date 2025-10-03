@@ -384,11 +384,11 @@ void HttpServer::DoHandleRun(const httplib::Request &req,
   }
 
   // default to effectively no limit
-  auto result_chunk_limit = INT_MAX;
-  auto result_chunk_limit_string =
-      req.get_header_value("X-DuckDB-UI-Result-Chunk-Limit");
-  if (!result_chunk_limit_string.empty()) {
-    result_chunk_limit = std::stoi(result_chunk_limit_string);
+  auto result_row_limit = INT_MAX;
+  auto result_row_limit_string =
+      req.get_header_value("X-DuckDB-UI-Result-Row-Limit");
+  if (!result_row_limit_string.empty()) {
+    result_row_limit = std::stoi(result_row_limit_string);
   }
 
   auto result_database_name_option =
@@ -398,14 +398,14 @@ void HttpServer::DoHandleRun(const httplib::Request &req,
   auto result_table_name =
       DecodeBase64(req.get_header_value("X-DuckDB-UI-Result-Table-Name"));
 
-  // If no result table is specified, then the result table chunk limit is zero.
+  // If no result table is specified, then the result table row limit is zero.
   // Otherwise, default to effectively no limit.
-  auto result_table_chunk_limit = result_table_name.empty() ? 0 : INT_MAX;
-  auto result_table_chunk_limit_string =
-      req.get_header_value("X-DuckDB-UI-Result-Table-Chunk-Limit");
-  // Only set the result table chunk limit if a result table name is specified.
-  if (!result_table_name.empty() && !result_table_chunk_limit_string.empty()) {
-    result_table_chunk_limit = std::stoi(result_table_chunk_limit_string);
+  auto result_table_row_limit = result_table_name.empty() ? 0 : INT_MAX;
+  auto result_table_row_limit_string =
+      req.get_header_value("X-DuckDB-UI-Result-Table-Row-Limit");
+  // Only set the result table row limit if a result table name is specified.
+  if (!result_table_name.empty() && !result_table_row_limit_string.empty()) {
+    result_table_row_limit = std::stoi(result_table_row_limit_string);
   }
 
   auto errors_as_json_string =
@@ -588,21 +588,39 @@ void HttpServer::DoHandleRun(const httplib::Request &req,
     success_result.column_names_and_types = {std::move(result->names),
                                              std::move(result->types)};
 
-    auto chunk_limit = std::max(result_chunk_limit, result_table_chunk_limit);
-    auto chunks_fetched = 0;
+    auto row_limit = std::max(result_row_limit, result_table_row_limit);
+    auto rows_fetched = 0;
+    auto rows_appended = 0;
+    auto rows_in_result = 0;
     unique_ptr<duckdb::DataChunk> chunk;
-    while (chunks_fetched < chunk_limit) {
+    while (rows_fetched < row_limit) {
       chunk = result->Fetch();
       if (!chunk) {
         break;
       }
-      ++chunks_fetched;
-      if (appender && chunks_fetched <= result_table_chunk_limit) {
-        appender->AppendDataChunk(*chunk);
+      rows_fetched += chunk->size();
+      if (appender && rows_appended < result_table_row_limit) {
+        duckdb::DataChunk *chunk_to_append = chunk.get();
+        duckdb::DataChunk chunk_prefix;
+        auto rows_left = result_table_row_limit - rows_appended;
+        if (chunk->size() > rows_left) {
+          HttpServer::CopyAndSlice(*chunk, chunk_prefix, rows_left);
+          chunk_to_append = &chunk_prefix;
+        }
+        appender->AppendDataChunk(*chunk_to_append);
+        rows_appended += chunk_to_append->size();
       }
-      if (chunks_fetched <= result_chunk_limit) {
+      if (rows_in_result < result_row_limit) {
+        duckdb::DataChunk *chunk_to_add = chunk.get();
+        duckdb::DataChunk chunk_prefix;
+        auto rows_left = result_row_limit - rows_in_result;
+        if (chunk->size() > rows_left) {
+          HttpServer::CopyAndSlice(*chunk, chunk_prefix, rows_left);
+          chunk_to_add = &chunk_prefix;
+        }
         success_result.chunks.push_back(
-            {static_cast<uint16_t>(chunk->size()), std::move(chunk->data)});
+            {static_cast<uint16_t>(chunk_to_add->size()), std::move(chunk_to_add->data)});
+        rows_in_result += chunk_to_add->size();
       }
     }
 
@@ -685,6 +703,12 @@ void HttpServer::SetResponseErrorResult(httplib::Response &res,
   MemoryStream response_content;
   BinarySerializer::Serialize(error_result, response_content);
   SetResponseContent(res, response_content);
+}
+
+void HttpServer::CopyAndSlice(duckdb::DataChunk &source, duckdb::DataChunk &target, idx_t row_count) {
+  target.InitializeEmpty(source.GetTypes());
+  target.Reference(source);
+  target.Slice(0, row_count);
 }
 
 } // namespace ui

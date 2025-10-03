@@ -72,6 +72,8 @@ private:
   shared_ptr<DatabaseInstance> LockDatabaseInstance();
   void InitClientFromParams(httplib::Client &);
 
+  static void CopyAndSlice(duckdb::DataChunk &source, duckdb::DataChunk &target, idx_t row_count);
+
   uint16_t local_port;
   std::string local_url;
   std::string remote_url;

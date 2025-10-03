@@ -4,9 +4,9 @@ export interface DuckDBUIRunOptions {
   schemaName?: string;
   errorsAsJson?: boolean;
   parameters?: unknown[];
-  resultChunkLimit?: number;
+  resultRowLimit?: number;
   resultDatabaseName?: string;
   resultSchemaName?: string;
   resultTableName?: string;
-  resultTableChunkLimit?: number;
+  resultTableRowLimit?: number;
 }
