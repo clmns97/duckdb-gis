@@ -46,4 +46,20 @@ suite('DuckDBUUIDValue', () => {
       ).toString(),
     ).toStrictEqual('f0e1d2c3-b4a5-9687-fedc-ba9876543210');
   });
+
+  suite('toSql', () => {
+    test('should render UUID to SQL', () => {
+      const uuid =
+        DuckDBUUIDValue.fromUint128(0x123e4567e89b12d3a456426614174000n);
+      expect(uuid.toSql()).toMatch(/^'.{36}'::UUID$/);
+    });
+
+    test('should render UUID with proper format to SQL', () => {
+      const uuid =
+        DuckDBUUIDValue.fromUint128(0x550e8400e29b41d4a716446655440000n);
+      expect(uuid.toSql()).toStrictEqual(
+        "'550e8400-e29b-41d4-a716-446655440000'::UUID",
+      );
+    });
+  });
 });

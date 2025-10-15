@@ -20,6 +20,10 @@ export class DuckDBIntervalValue extends SpecialDuckDBValue {
     return getDuckDBIntervalString(this.months, this.days, this.microseconds);
   }
 
+  public toSql(): string {
+    return `INTERVAL '${this.toDuckDBString()}'`;
+  }
+
   public toJson(): Json {
     return this.toDuckDBString();
   }

@@ -30,4 +30,30 @@ suite('DuckDBBitValue', () => {
       DuckDBBitValue.fromString('100011110001011010011').toJson(),
     ).toStrictEqual('100011110001011010011');
   });
+
+  suite('toSql', () => {
+    test('should render bit string to SQL', () => {
+      const bitValue = DuckDBBitValue.fromString('10101');
+      expect(bitValue.toSql()).toStrictEqual("'10101'::BITSTRING");
+    });
+
+    test('should render empty bit string to SQL', () => {
+      const bitValue = DuckDBBitValue.fromString('');
+      expect(bitValue.toSql()).toStrictEqual("''::BITSTRING");
+    });
+
+    test('should render bit string with no padding to SQL', () => {
+      const bitValue = DuckDBBitValue.fromString('111100011110001011010011');
+      expect(bitValue.toSql()).toStrictEqual(
+        "'111100011110001011010011'::BITSTRING",
+      );
+    });
+
+    test('should render bit string with padding to SQL', () => {
+      const bitValue = DuckDBBitValue.fromString('100011110001011010011');
+      expect(bitValue.toSql()).toStrictEqual(
+        "'100011110001011010011'::BITSTRING",
+      );
+    });
+  });
 });

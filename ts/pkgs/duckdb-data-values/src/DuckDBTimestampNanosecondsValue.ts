@@ -14,6 +14,10 @@ export class DuckDBTimestampNanosecondsValue extends SpecialDuckDBValue {
     return getDuckDBTimestampStringFromNanoseconds(this.nanoseconds);
   }
 
+  public toSql(): string {
+    return `TIMESTAMP_NS '${this.toDuckDBString()}'`;
+  }
+
   public toJson(): Json {
     return this.toDuckDBString();
   }

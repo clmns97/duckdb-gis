@@ -55,6 +55,10 @@ export class DuckDBBitValue extends SpecialDuckDBValue {
     return chars.join('');
   }
 
+  public toSql(): string {
+    return `'${this.toDuckDBString()}'::BITSTRING`;
+  }
+
   public toJson(): Json {
     return this.toDuckDBString();
   }

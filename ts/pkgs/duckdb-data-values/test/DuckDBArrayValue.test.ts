@@ -46,4 +46,37 @@ suite('DuckDBArrayValue', () => {
       null,
     ]);
   });
+
+  suite('toSql', () => {
+    test('should render empty array', () => {
+      expect(new DuckDBArrayValue([]).toSql()).toStrictEqual('[]');
+    });
+
+    test('should render array with numbers', () => {
+      expect(new DuckDBArrayValue([1, 2, 3]).toSql()).toStrictEqual(
+        '[1, 2, 3]',
+      );
+    });
+
+    test('should render array with strings', () => {
+      expect(new DuckDBArrayValue(['a', 'b', 'c']).toSql()).toStrictEqual(
+        "['a', 'b', 'c']",
+      );
+    });
+
+    test('should render array with null', () => {
+      expect(new DuckDBArrayValue([1, null, 3]).toSql()).toStrictEqual(
+        '[1, NULL, 3]',
+      );
+    });
+
+    test('should render nested arrays', () => {
+      expect(
+        new DuckDBArrayValue([
+          new DuckDBArrayValue([1, 2]),
+          new DuckDBArrayValue([3, 4]),
+        ]).toSql(),
+      ).toStrictEqual('[[1, 2], [3, 4]]');
+    });
+  });
 });

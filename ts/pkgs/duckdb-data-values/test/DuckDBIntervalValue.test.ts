@@ -216,4 +216,23 @@ suite('DuckDBIntervalValue', () => {
       ).toString(),
     ).toStrictEqual('-2 years -3 months -5 days -07:11:13.000017');
   });
+
+  suite('toSql', () => {
+    test('should render interval value to SQL', () => {
+      const interval = new DuckDBIntervalValue(12, 5, 123456n);
+      expect(interval.toSql()).toStrictEqual(
+        "INTERVAL '1 year 5 days 00:00:00.123456'",
+      );
+    });
+
+    test('should render interval with months only to SQL', () => {
+      const interval = new DuckDBIntervalValue(24, 0, 0n);
+      expect(interval.toSql()).toStrictEqual("INTERVAL '2 years'");
+    });
+
+    test('should render interval with days only to SQL', () => {
+      const interval = new DuckDBIntervalValue(0, 7, 0n);
+      expect(interval.toSql()).toStrictEqual("INTERVAL '7 days'");
+    });
+  });
 });

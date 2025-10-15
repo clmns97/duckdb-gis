@@ -7,6 +7,9 @@ export abstract class SpecialDuckDBValue {
     toStringOptions?: DuckDBToStringOptions,
   ): string;
 
+  // Convert this value to a SQL-compatible representation.
+  public abstract toSql(): string;
+
   public toString(): string {
     return this.toDuckDBString();
   }

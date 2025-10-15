@@ -1,3 +1,4 @@
+export { duckDBValueToSql } from './conversion/duckDBValueToSql.js';
 export { getVarIntFromBytes } from './conversion/getVarIntFromBytes.js';
 export { jsonFromDuckDBValue } from './conversion/jsonFromDuckDBValue.js';
 export { DuckDBArrayValue } from './DuckDBArrayValue.js';

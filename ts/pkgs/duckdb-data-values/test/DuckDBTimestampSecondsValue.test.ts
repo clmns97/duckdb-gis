@@ -42,4 +42,17 @@ suite('DuckDBTimestampSecondsValue', () => {
       new DuckDBTimestampSecondsValue(-9223372022400n).toString(),
     ).toStrictEqual('290309-12-22 (BC) 00:00:00');
   });
+
+  suite('toSql', () => {
+    test('should render timestamp to SQL', () => {
+      const timestamp = new DuckDBTimestampSecondsValue(BigInt(1697212800));
+      expect(timestamp.toSql()).toMatch(/^TIMESTAMP_S '.+'$/);
+    });
+
+    test('should render epoch to SQL', () => {
+      expect(new DuckDBTimestampSecondsValue(0n).toSql()).toStrictEqual(
+        "TIMESTAMP_S '1970-01-01 00:00:00'",
+      );
+    });
+  });
 });

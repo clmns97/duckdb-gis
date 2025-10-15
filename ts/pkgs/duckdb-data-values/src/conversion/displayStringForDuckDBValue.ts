@@ -5,7 +5,7 @@ export function displayStringForDuckDBValue(value: DuckDBValue): string {
     return 'NULL';
   }
   if (typeof value === 'string') {
-    return `'${value.replace(`'`, `''`)}'`;
+    return `'${value.replace(/'/g, "''")}'`;
   }
   return String(value);
 }

@@ -20,6 +20,15 @@ export class DuckDBDecimalValue extends SpecialDuckDBValue {
     return stringFromDecimal(this.scaledValue, this.scale);
   }
 
+  public toSql(): string {
+    const str = this.toDuckDBString();
+    // Calculate width (precision) - total number of digits
+    const width = (
+      this.scaledValue < 0 ? -this.scaledValue : this.scaledValue
+    ).toString().length;
+    return `${str}::DECIMAL(${width}, ${this.scale})`;
+  }
+
   /** Returns a string representation appropriate to the host environment's current locale. */
 
   public toLocaleString(

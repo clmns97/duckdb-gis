@@ -14,6 +14,10 @@ export class DuckDBDateValue extends SpecialDuckDBValue {
     return getDuckDBDateStringFromDays(this.days);
   }
 
+  public toSql(): string {
+    return `DATE '${this.toDuckDBString()}'`;
+  }
+
   public toJson(): Json {
     return this.toDuckDBString();
   }

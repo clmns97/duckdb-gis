@@ -147,4 +147,66 @@ suite('DuckDBDecimalValue', () => {
       ),
     ).toStrictEqual('9.876.543.210,98765');
   });
+
+  suite('toSql', () => {
+    test('should render decimal value to SQL with type cast', () => {
+      expect(new DuckDBDecimalValue(12345n, 2).toSql()).toStrictEqual(
+        '123.45::DECIMAL(5, 2)',
+      );
+    });
+
+    test('should render negative decimal to SQL with type cast', () => {
+      expect(new DuckDBDecimalValue(-12345n, 2).toSql()).toStrictEqual(
+        '-123.45::DECIMAL(5, 2)',
+      );
+    });
+
+    test('should render zero decimal to SQL with type cast', () => {
+      expect(new DuckDBDecimalValue(0n, 2).toSql()).toStrictEqual(
+        '0.00::DECIMAL(1, 2)',
+      );
+    });
+
+    test('should render large decimal to SQL with type cast', () => {
+      expect(new DuckDBDecimalValue(987654321098765n, 5).toSql()).toStrictEqual(
+        '9876543210.98765::DECIMAL(15, 5)',
+      );
+    });
+
+    test('should render decimal with different scale to SQL', () => {
+      expect(new DuckDBDecimalValue(123n, 5).toSql()).toStrictEqual(
+        '0.00123::DECIMAL(3, 5)',
+      );
+    });
+
+    test('should render decimal with zero scale to SQL', () => {
+      expect(new DuckDBDecimalValue(12345n, 0).toSql()).toStrictEqual(
+        '12345::DECIMAL(5, 0)',
+      );
+    });
+
+    test('should render decimal with high precision fractional part', () => {
+      expect(new DuckDBDecimalValue(12345678n, 5).toSql()).toStrictEqual(
+        '123.45678::DECIMAL(8, 5)',
+      );
+    });
+
+    test('should render decimal with more fractional digits', () => {
+      expect(new DuckDBDecimalValue(999999999n, 6).toSql()).toStrictEqual(
+        '999.999999::DECIMAL(9, 6)',
+      );
+    });
+
+    test('should render small decimal with large scale', () => {
+      expect(new DuckDBDecimalValue(1n, 10).toSql()).toStrictEqual(
+        '0.0000000001::DECIMAL(1, 10)',
+      );
+    });
+
+    test('should render negative decimal with fractional part', () => {
+      expect(new DuckDBDecimalValue(-98765n, 3).toSql()).toStrictEqual(
+        '-98.765::DECIMAL(5, 3)',
+      );
+    });
+  });
 });

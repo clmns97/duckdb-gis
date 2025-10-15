@@ -21,6 +21,10 @@ export class DuckDBTimeTZValue extends SpecialDuckDBValue {
     )}${getOffsetStringFromSeconds(this.offset)}`;
   }
 
+  public toSql(): string {
+    return `TIMETZ '${this.toDuckDBString()}'`;
+  }
+
   public toJson(): Json {
     return this.toDuckDBString();
   }

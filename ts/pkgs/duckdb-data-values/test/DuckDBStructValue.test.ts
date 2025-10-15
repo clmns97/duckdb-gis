@@ -107,4 +107,115 @@ suite('DuckDBStructValue', () => {
       "'struct'": { "'key1'": { "'foo'": null, "'bar'": 'xyz' } },
     });
   });
+
+  suite('toSql', () => {
+    test('should throw error for empty struct', () => {
+      expect(() => new DuckDBStructValue([]).toSql()).toThrow(
+        'Empty structs cannot be represented as SQL literals',
+      );
+    });
+
+    test('should render single-entry struct to SQL', () => {
+      expect(
+        new DuckDBStructValue([{ key: 'x', value: 1 }]).toSql(),
+      ).toStrictEqual("{'x': 1}");
+    });
+
+    test('should render multi-entry struct to SQL', () => {
+      expect(
+        new DuckDBStructValue([
+          { key: 'x', value: 1 },
+          { key: 'y', value: 2 },
+          { key: 'z', value: 3 },
+        ]).toSql(),
+      ).toStrictEqual("{'x': 1, 'y': 2, 'z': 3}");
+    });
+
+    test('should render struct with different value types to SQL', () => {
+      expect(
+        new DuckDBStructValue([
+          { key: 'str', value: 'hello' },
+          { key: 'num', value: 42 },
+          { key: 'bool', value: true },
+          { key: 'null', value: null },
+        ]).toSql(),
+      ).toStrictEqual(
+        "{'str': 'hello', 'num': 42, 'bool': TRUE, 'null': NULL}",
+      );
+    });
+
+    test('should escape single quotes in struct keys and values', () => {
+      expect(
+        new DuckDBStructValue([
+          { key: "it's", value: "can't" },
+          { key: 'say', value: "don't" },
+        ]).toSql(),
+      ).toStrictEqual("{'it''s': 'can''t', 'say': 'don''t'}");
+    });
+
+    test('should render struct with empty string keys to SQL', () => {
+      expect(
+        new DuckDBStructValue([
+          { key: '', value: 1 },
+          { key: '', value: 2 },
+        ]).toSql(),
+      ).toStrictEqual("{'': 1, '': 2}");
+    });
+
+    test('should render nested structs to SQL', () => {
+      expect(
+        new DuckDBStructValue([
+          {
+            key: 'outer',
+            value: new DuckDBStructValue([{ key: 'inner', value: 42 }]),
+          },
+        ]).toSql(),
+      ).toStrictEqual("{'outer': {'inner': 42}}");
+    });
+
+    test('should render struct with complex nested values to SQL', () => {
+      expect(
+        new DuckDBStructValue([
+          {
+            key: 'person',
+            value: new DuckDBStructValue([
+              { key: 'name', value: 'Alice' },
+              { key: 'age', value: 30 },
+              {
+                key: 'address',
+                value: new DuckDBStructValue([
+                  { key: 'city', value: 'NYC' },
+                  { key: 'zip', value: 10001 },
+                ]),
+              },
+            ]),
+          },
+        ]).toSql(),
+      ).toStrictEqual(
+        "{'person': {'name': 'Alice', 'age': 30, 'address': {'city': 'NYC', 'zip': 10001}}}",
+      );
+    });
+
+    test('should throw error when struct contains empty nested struct', () => {
+      expect(() =>
+        new DuckDBStructValue([
+          { key: 'empty', value: new DuckDBStructValue([]) },
+        ]).toSql(),
+      ).toThrow('Empty structs cannot be represented as SQL literals');
+    });
+
+    test('should render struct with map values to SQL', () => {
+      expect(
+        new DuckDBStructValue([
+          {
+            key: 'data',
+            value: new DuckDBMapValue([
+              { key: 'a', value: 1 },
+              { key: 'b', value: 2 },
+            ]),
+          },
+        ]).toSql(),
+      ).toStrictEqual("{'data': MAP {'a': 1, 'b': 2}}");
+    });
+  });
 });

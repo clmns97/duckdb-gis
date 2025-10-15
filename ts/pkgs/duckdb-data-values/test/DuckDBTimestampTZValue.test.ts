@@ -35,4 +35,19 @@ suite('DuckDBTimestampTZValue', () => {
       }),
     ).toStrictEqual('2021-02-03 09:35:06.0078+05:30');
   });
+
+  suite('toSql', () => {
+    test('should render timestamptz to SQL', () => {
+      const timestamp = new DuckDBTimestampTZValue(
+        BigInt(1697212800) * 1000000n,
+      );
+      expect(timestamp.toSql()).toMatch(/^TIMESTAMPTZ '.+'$/);
+    });
+
+    test('should render epoch to SQL', () => {
+      expect(new DuckDBTimestampTZValue(0n).toSql()).toStrictEqual(
+        "TIMESTAMPTZ '1970-01-01 00:00:00+00'",
+      );
+    });
+  });
 });

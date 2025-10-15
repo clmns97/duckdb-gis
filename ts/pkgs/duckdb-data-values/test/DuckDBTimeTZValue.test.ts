@@ -57,4 +57,20 @@ suite('DuckDBTimeTZValue', () => {
       ).toString(),
     ).toStrictEqual('24:00:00-15:59:59');
   });
+
+  suite('toSql', () => {
+    test('should render time with timezone to SQL', () => {
+      const micros = BigInt(12 * 3600 + 30 * 60 + 45) * 1000000n;
+      const offset = 3600;
+      expect(new DuckDBTimeTZValue(micros, offset).toSql()).toStrictEqual(
+        "TIMETZ '12:30:45+01'",
+      );
+    });
+
+    test('should render midnight UTC to SQL', () => {
+      expect(new DuckDBTimeTZValue(0n, 0).toSql()).toStrictEqual(
+        "TIMETZ '00:00:00+00'",
+      );
+    });
+  });
 });

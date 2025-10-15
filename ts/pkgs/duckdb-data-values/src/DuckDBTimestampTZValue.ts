@@ -18,6 +18,13 @@ export class DuckDBTimestampTZValue extends SpecialDuckDBValue {
     );
   }
 
+  public toSql(): string {
+    return `TIMESTAMPTZ '${getDuckDBTimestampStringFromMicroseconds(
+      this.microseconds,
+      0,
+    )}'`;
+  }
+
   public toJson(): Json {
     return this.toDuckDBString();
   }

@@ -19,6 +19,10 @@ export class DuckDBUUIDValue extends SpecialDuckDBValue {
     return `${hexFromBlob(this.bytes, 0, 4)}-${hexFromBlob(this.bytes, 4, 6)}-${hexFromBlob(this.bytes, 6, 8)}-${hexFromBlob(this.bytes, 8, 10)}-${hexFromBlob(this.bytes, 10, 16)}`;
   }
 
+  public toSql(): string {
+    return `'${this.toDuckDBString()}'::UUID`;
+  }
+
   public toJson(): Json {
     return this.toDuckDBString();
   }

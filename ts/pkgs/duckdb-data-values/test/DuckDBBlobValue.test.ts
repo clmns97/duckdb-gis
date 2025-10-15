@@ -89,4 +89,31 @@ suite('DuckDBBlobValue', () => {
       ).toJson(),
     ).toStrictEqual('ABC123');
   });
+
+  suite('toSql', () => {
+    test('should render empty blob to SQL', () => {
+      expect(new DuckDBBlobValue(new Uint8Array([])).toSql()).toStrictEqual(
+        "''::BLOB",
+      );
+    });
+
+    test('should render blob value to SQL', () => {
+      const bytes = new Uint8Array([0x48, 0x65, 0x6c, 0x6c, 0x6f]); // "Hello"
+      expect(new DuckDBBlobValue(bytes).toSql()).toStrictEqual("'Hello'::BLOB");
+    });
+
+    test('should render blob with printable ASCII to SQL', () => {
+      const bytes = new Uint8Array([0x41, 0x42, 0x43, 0x31, 0x32, 0x33]); // "ABC123"
+      expect(new DuckDBBlobValue(bytes).toSql()).toStrictEqual(
+        "'ABC123'::BLOB",
+      );
+    });
+
+    test('should render blob with non-printable bytes to SQL', () => {
+      const bytes = new Uint8Array([0x00, 0x01, 0x02, 0xff]);
+      expect(new DuckDBBlobValue(bytes).toSql()).toStrictEqual(
+        "'\\x00\\x01\\x02\\xFF'::BLOB",
+      );
+    });
+  });
 });

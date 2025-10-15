@@ -14,6 +14,10 @@ export class DuckDBBlobValue extends SpecialDuckDBValue {
     return stringFromBlob(this.bytes);
   }
 
+  public toSql(): string {
+    return `'${this.toDuckDBString()}'::BLOB`;
+  }
+
   public toJson(): Json {
     return this.toDuckDBString();
   }

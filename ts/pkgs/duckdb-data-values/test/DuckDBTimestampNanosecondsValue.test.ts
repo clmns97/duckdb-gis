@@ -37,4 +37,19 @@ suite('DuckDBTimestampNanosecondsValue', () => {
       new DuckDBTimestampNanosecondsValue(-9223372036854775806n).toString(),
     ).toStrictEqual('1677-09-21 00:12:43.145225');
   });
+
+  suite('toSql', () => {
+    test('should render timestamp to SQL', () => {
+      const timestamp = new DuckDBTimestampNanosecondsValue(
+        BigInt(1697212800) * 1000000000n,
+      );
+      expect(timestamp.toSql()).toMatch(/^TIMESTAMP_NS '.+'$/);
+    });
+
+    test('should render epoch to SQL', () => {
+      expect(new DuckDBTimestampNanosecondsValue(0n).toSql()).toStrictEqual(
+        "TIMESTAMP_NS '1970-01-01 00:00:00'",
+      );
+    });
+  });
 });

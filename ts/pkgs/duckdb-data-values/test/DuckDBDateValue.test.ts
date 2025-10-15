@@ -15,4 +15,22 @@ suite('DuckDBDateValue', () => {
       '5877642-06-25 (BC)',
     );
   });
+
+  suite('toSql', () => {
+    test('should render a normal date value to SQL format', () => {
+      expect(new DuckDBDateValue(19643).toSql()).toStrictEqual(
+        "DATE '2023-10-13'",
+      );
+    });
+    test('should render the max date value to SQL format', () => {
+      expect(new DuckDBDateValue(2 ** 31 - 2).toSql()).toStrictEqual(
+        "DATE '5881580-07-10'",
+      );
+    });
+    test('should render the min date value to SQL format', () => {
+      expect(new DuckDBDateValue(-(2 ** 31) + 2).toSql()).toStrictEqual(
+        "DATE '5877642-06-25 (BC)'",
+      );
+    });
+  });
 });
