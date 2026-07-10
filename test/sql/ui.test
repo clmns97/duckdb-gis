@@ -1,4 +1,83 @@
 # name: test/sql/ui.test
-# description: test ui extension
+# description: smoke-test the duckdb-gis (ui) extension launch verbs
 # group: [sql]
 
+require ui
+
+# Keep the test hermetic: bind to a non-default port and never open a browser.
+# Use the *_server verbs (not start_gis / start_ui, which try to launch a
+# browser via the system() "open" command).
+statement ok
+SET ui_local_port = 42131;
+
+# Nothing running yet.
+query I
+FROM gis_is_started();
+----
+false
+
+# Start the server. The status string embeds the local URL on our chosen port.
+query I
+SELECT result LIKE 'duckdb-gis server %started at http://localhost:42131/' FROM start_gis_server();
+----
+true
+
+# It now reports started, via both the gis verb and the ui alias (same state).
+query I
+FROM gis_is_started();
+----
+true
+
+query I
+FROM ui_is_started();
+----
+true
+
+# get_gis_url returns the plain local URL.
+query I
+FROM get_gis_url();
+----
+http://localhost:42131/
+
+# Starting again is idempotent: reports "already started", still one server.
+query I
+SELECT result LIKE 'duckdb-gis server already started at %' FROM start_gis_server();
+----
+true
+
+# Stop cleanly.
+query I
+FROM stop_gis_server();
+----
+duckdb-gis server stopped
+
+query I
+FROM gis_is_started();
+----
+false
+
+# Stopping again is idempotent.
+query I
+FROM stop_gis_server();
+----
+duckdb-gis server already stopped
+
+# The start_ui alias family is what the DuckDB shell's `-ui` flag invokes; guard
+# that it still resolves and drives the same server (regression test for T-014).
+query I
+SELECT result LIKE 'duckdb-gis server %started at http://localhost:42131/' FROM start_ui_server();
+----
+true
+
+query I
+FROM gis_is_started();
+----
+true
+
+statement ok
+FROM stop_ui_server();
+
+query I
+FROM ui_is_started();
+----
+false
