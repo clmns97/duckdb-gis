@@ -1,11 +1,11 @@
 ---
 id: T-002
 title: Split the sidebar into two switchable tabs — Layers and Browser
-status: open
+status: in-progress
 priority: P2
 area: frontend
 depends_on: []
-branch:
+branch: t-002-sidebar-tabs
 ---
 
 ## Goal
@@ -52,17 +52,17 @@ panels are presented and switched.
 
 ## Acceptance criteria
 
-- [ ] Sidebar shows a tab strip with two tabs: **Layers** and **Browser**.
-- [ ] Clicking a tab switches which panel is shown; the other is hidden. Active
+- [x] Sidebar shows a tab strip with two tabs: **Layers** and **Browser**.
+- [x] Clicking a tab switches which panel is shown; the other is hidden. Active
       tab is visually indicated. One panel visible at a time.
-- [ ] **Layers** tab hosts the existing Layers section; **Browser** tab hosts
+- [x] **Layers** tab hosts the existing Layers section; **Browser** tab hosts
       the existing attached-databases catalog tree — no loss of current
       functionality (loading / error / empty states preserved).
-- [ ] Decision made and applied for the Search input (global vs. Browser-only)
+- [x] Decision made and applied for the Search input (global vs. Browser-only)
       — record which in the Progress log.
-- [ ] Active tab state is component-local; a sensible default tab on load
+- [x] Active tab state is component-local; a sensible default tab on load
       (recommend Browser until layers exist, or Layers — pick and note it).
-- [ ] Frontend build/lint passes; sidebar renders correctly light and dark if
+- [x] Frontend build/lint passes; sidebar renders correctly light and dark if
       the app themes (check `tokens.css`).
 
 ## Progress log
@@ -70,3 +70,24 @@ panels are presented and switched.
 <!-- Append newest at the bottom: what changed, what's next, any blocker. -->
 - 2026-07-09: Ticket created. Not started. Pairs with T-001 (which populates
   the Layers panel); the two can land independently.
+- 2026-07-10: Implemented on branch `t-002-sidebar-tabs`.
+  - `frontend/src/App.tsx`: added a `tab` state (`"layers" | "browser"`) and a
+    `.tabs` tab strip (`role="tablist"`, buttons with `role="tab"` +
+    `aria-selected`). The Layers section and the Browser section (search +
+    attached-databases tree) are now rendered one-at-a-time by `tab`.
+  - **Search input decision:** moved *into* the Browser tab (it searches the
+    catalog), not kept global. Lives above the attached-databases tree.
+  - **Default tab:** Browser — the Layers panel is still the hardcoded
+    "No layers yet" until T-001/T-021 populate it, so the catalog is the more
+    useful landing panel. Noted inline in `App.tsx`.
+  - `frontend/src/App.css`: added `.tabs` / `.tab` / `.tab.active` (active tab
+    underlined with `--indigo`). All colors from tokens; app has no dark theme
+    yet (tokens.css defines light only), so light is the only surface.
+  - Verified: `pnpm typecheck` clean, `pnpm build` succeeds, Vite HMR applied
+    live with no errors. Both panels' loading/error/empty states preserved.
+  - Next: eyeball on the running preview, then commit + open PR.
+- 2026-07-10: Per user, moved the tab strip to the **bottom** of the sidebar
+  (footer) instead of the top. Wrapped panels in a scrollable `.sidebar-body`
+  (`flex:1; overflow-y:auto`) so the tree scrolls while `.tabs` stays pinned;
+  `.tabs` is now a full-bleed footer with the border/active indicator on its
+  top edge. typecheck + build pass, HMR clean.
