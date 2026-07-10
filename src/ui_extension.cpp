@@ -25,7 +25,7 @@ namespace duckdb {
 std::string StartUIFunction(ClientContext &context) {
   if (!ui::HttpServer::Started() &&
       ui::HttpServer::IsRunningOnMachine(context)) {
-    return "UI already running in a different DuckDB instance";
+    return "duckdb-gis already running in a different DuckDB instance";
   }
 
   const auto &server = ui::HttpServer::Start(context);
@@ -35,30 +35,30 @@ std::string StartUIFunction(ClientContext &context) {
   return system(command.c_str())
              ? StringUtil::Format("Navigate browser to %s",
                                   local_url) // open command failed
-             : StringUtil::Format("UI started at %s", local_url);
+             : StringUtil::Format("duckdb-gis started at %s", local_url);
 }
 
 std::string StartUIServerFunction(ClientContext &context) {
   if (!ui::HttpServer::Started() &&
       ui::HttpServer::IsRunningOnMachine(context)) {
-    return "UI already running in a different DuckDB instance";
+    return "duckdb-gis already running in a different DuckDB instance";
   }
 
   bool was_started = false;
   const auto &server = ui::HttpServer::Start(context, &was_started);
   const char *already = was_started ? "already " : "";
-  return StringUtil::Format("UI server %sstarted at %s", already,
+  return StringUtil::Format("duckdb-gis server %sstarted at %s", already,
                             server.LocalUrl());
 }
 
 std::string StopUIServerFunction(ClientContext &context) {
-  return ui::HttpServer::Stop() ? "UI server stopped"
-                                : "UI server already stopped";
+  return ui::HttpServer::Stop() ? "duckdb-gis server stopped"
+                                : "duckdb-gis server already stopped";
 }
 
 std::string GetUIURLFunction(ClientContext &context) {
   if (!ui::HttpServer::Started()) {
-    throw ExecutorException("UI server not started");
+    throw ExecutorException("duckdb-gis server not started");
   }
 
   auto server = ui::HttpServer::GetInstance(context);
@@ -133,18 +133,34 @@ static void LoadInternal(DatabaseInstance &instance) {
         LogicalType::UINTEGER, Value::UINTEGER(def));
   }
 
+  // duckdb-gis launch verbs (renamed from the DuckDB UI's start_ui family).
+  REGISTER_TF("start_gis", StartUIFunction);
+  REGISTER_TF("start_gis_server", StartUIServerFunction);
+  REGISTER_TF("stop_gis_server", StopUIServerFunction);
+  REGISTER_TF("get_gis_url", GetUIURLFunction);
+
+  // Keep the original start_ui family registered as aliases. The DuckDB core
+  // shell hardcodes `CALL start_ui()` for the `-ui` launch flag
+  // (duckdb/tools/shell/include/shell_state.hpp), so dropping these names would
+  // break `duckdb -ui`. Register both so the flag keeps working while our own
+  // verbs read as `gis`.
   REGISTER_TF("start_ui", StartUIFunction);
   REGISTER_TF("start_ui_server", StartUIServerFunction);
   REGISTER_TF("stop_ui_server", StopUIServerFunction);
   REGISTER_TF("get_ui_url", GetUIURLFunction);
   {
-    TableFunction tf("ui_is_started", {}, IsUIStartedTableFunc,
-                     internal::SingleBoolResultBind,
-                     RunOnceTableFunctionState::Init);
+    TableFunction gis_tf("gis_is_started", {}, IsUIStartedTableFunc,
+                         internal::SingleBoolResultBind,
+                         RunOnceTableFunctionState::Init);
+    TableFunction ui_tf("ui_is_started", {}, IsUIStartedTableFunc,
+                        internal::SingleBoolResultBind,
+                        RunOnceTableFunctionState::Init);
 #ifdef DUCKDB_CPP_EXTENSION_ENTRY
-    loader.RegisterFunction(tf);
+    loader.RegisterFunction(gis_tf);
+    loader.RegisterFunction(ui_tf);
 #else
-    ExtensionUtil::RegisterFunction(instance, tf);
+    ExtensionUtil::RegisterFunction(instance, gis_tf);
+    ExtensionUtil::RegisterFunction(instance, ui_tf);
 #endif
   }
 }
