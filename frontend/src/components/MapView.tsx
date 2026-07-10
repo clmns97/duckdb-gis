@@ -17,6 +17,10 @@ export function MapView() {
       zoom: 4,
       attributionControl: { compact: true },
     });
+    // Shift-click is our additive-selection gesture (see deckRender picking).
+    // MapLibre's shift+drag box-zoom otherwise swallows the shift+mousedown, so
+    // deck.gl never computes a pick — disable it so selection wins the modifier.
+    map.boxZoom.disable();
     map.addControl(new maplibregl.NavigationControl(), "top-right");
     map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
     // MapLibre swallows tile/source failures (custom-protocol errors included)

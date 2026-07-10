@@ -9,6 +9,8 @@ import {
 import { tableFromIPC, type RecordBatch, type Table } from "apache-arrow";
 import { query, str } from "./duckdb";
 import { getMap } from "./mapBus";
+import { selection, FID, fidTaggedRelation } from "./selection";
+import type { PickingInfo } from "@deck.gl/core";
 
 // ---------------------------------------------------------------------------
 // Unified GeoArrow render path. Geometry is encoded server-side by the
@@ -26,13 +28,103 @@ const clean = (sql: string) => sql.trim().replace(/;\s*$/, "");
 let overlay: MapboxOverlay | null = null;
 let overlayMap: maplibregl.Map | null = null;
 
+// The last rendered result, kept so selection changes can rebuild the deck.gl
+// layers (with updated highlight colors) without re-querying DuckDB.
+let rendered: { table: Table; spec: GeomSpec } | null = null;
+
 function ensureOverlay(map: maplibregl.Map): MapboxOverlay {
   if (overlay && overlayMap === map) return overlay;
-  overlay = new MapboxOverlay({ interleaved: false, layers: [] });
+  overlay = new MapboxOverlay({
+    interleaved: false,
+    layers: [],
+    // Click a feature to select it; shift-click adds/removes; clicking empty
+    // map clears. Picking info comes from the GeoArrow layers (pickable below).
+    onClick: handleClick,
+  });
   map.addControl(overlay);
   overlayMap = map;
   return overlay;
 }
+
+// ---------------------------------------------------------------------------
+// Selection picking + highlight.
+// GeoArrow function accessors are invoked as `fn({ index, data, target })`
+// where `data.data` is the RecordBatch and `index` is the (multi-geometry
+// inverted) feature index — so we can read the feature's `__fid` and colour it
+// as selected or not. `updateTriggers` keyed on `selection.version` forces
+// deck.gl to re-evaluate the accessors when the selection changes.
+// ---------------------------------------------------------------------------
+interface FidInfo {
+  index: number;
+  data: { data: RecordBatch };
+}
+const fidAt = (info: FidInfo): number =>
+  Number(info.data.data.getChild(FID)?.get(info.index));
+
+type Color = [number, number, number] | [number, number, number, number];
+const colorAcc = (base: Color, sel: Color) =>
+  ((info: FidInfo) => (selection.has(fidAt(info)) ? sel : base)) as never;
+const numAcc = (base: number, sel: number) =>
+  ((info: FidInfo) => (selection.has(fidAt(info)) ? sel : base)) as never;
+
+// `updateTriggers` value shared by every highlight accessor.
+const hiTriggers = () => {
+  const v = selection.version;
+  return {
+    getFillColor: v,
+    getLineColor: v,
+    getLineWidth: v,
+    getRadius: v,
+    getColor: v,
+    getWidth: v,
+  };
+};
+
+// Resolve a picked feature to its `__fid`. `getPickingInfo` sets `info.object`
+// to the Arrow struct row; fall back to the cached table by layer/batch index.
+function pickFid(info: PickingInfo): number | null {
+  const obj = info.object as Record<string, unknown> | null;
+  const fromObj = obj?.[FID];
+  if (fromObj != null) return Number(fromObj);
+  const m = /geoarrow-(\d+)/.exec(info.layer?.id ?? "");
+  if (m && rendered && info.index >= 0) {
+    const batch = rendered.table.batches[Number(m[1])];
+    const v = batch?.getChild(FID)?.get(info.index);
+    if (v != null) return Number(v);
+  }
+  return null;
+}
+
+// deck.gl's mjolnir `click` event does not reliably carry the Shift modifier
+// (`srcEvent.shiftKey` comes through undefined), so track it at the document
+// level instead. Shift-click is our additive-selection gesture.
+let shiftHeld = false;
+if (typeof window !== "undefined") {
+  const sync = (e: KeyboardEvent) => {
+    if (e.key === "Shift") shiftHeld = e.type === "keydown";
+  };
+  window.addEventListener("keydown", sync);
+  window.addEventListener("keyup", sync);
+  window.addEventListener("blur", () => {
+    shiftHeld = false;
+  });
+}
+
+function handleClick(info: PickingInfo, event: { srcEvent?: { shiftKey?: boolean } }): void {
+  const additive = Boolean(event?.srcEvent?.shiftKey) || shiftHeld;
+  const fid = info?.picked ? pickFid(info) : null;
+  if (fid == null) {
+    if (!additive) selection.clear();
+    return;
+  }
+  if (additive) selection.toggle(fid);
+  else selection.set([fid]);
+}
+
+// Rebuild layers in place when the selection changes (no DuckDB round-trip).
+selection.subscribe(() => {
+  if (overlay && rendered) overlay.setProps({ layers: buildLayers(rendered) });
+});
 
 export interface DeckTimings {
   queryMs: number; // DuckDB round-trips (probe + st_asgeoarrow encode)
@@ -60,18 +152,24 @@ interface GeomSpec {
   layer: (batch: RecordBatch, geom: unknown, id: string) => Layer;
 }
 
+// Amber highlight for selected features, over the indigo base palette.
+const SEL_FILL: Color = [255, 159, 28, 230];
+const SEL_LINE: Color = [217, 119, 6, 255];
+
 const POINT = (batch: RecordBatch, geom: unknown, id: string): Layer =>
   new GeoArrowScatterplotLayer({
     id,
     data: batch,
     getPosition: geom as never,
-    getRadius: 4,
+    pickable: true,
+    getRadius: numAcc(4, 6),
     radiusUnits: "pixels",
-    getFillColor: [99, 102, 241, 200],
+    getFillColor: colorAcc([99, 102, 241, 200], SEL_FILL),
     stroked: true,
-    getLineColor: [255, 255, 255],
+    getLineColor: colorAcc([255, 255, 255, 255], SEL_LINE),
     lineWidthUnits: "pixels",
-    getLineWidth: 1,
+    getLineWidth: numAcc(1, 2),
+    updateTriggers: hiTriggers(),
   });
 
 const PATH = (batch: RecordBatch, geom: unknown, id: string): Layer =>
@@ -79,11 +177,13 @@ const PATH = (batch: RecordBatch, geom: unknown, id: string): Layer =>
     id,
     data: batch,
     getPath: geom as never,
-    getColor: [73, 74, 185],
+    pickable: true,
+    getColor: colorAcc([73, 74, 185, 255], SEL_LINE),
     widthUnits: "pixels",
-    getWidth: 2,
+    getWidth: numAcc(2, 4),
     capRounded: true,
     jointRounded: true,
+    updateTriggers: hiTriggers(),
   });
 
 const POLYGON = (batch: RecordBatch, geom: unknown, id: string): Layer =>
@@ -91,16 +191,18 @@ const POLYGON = (batch: RecordBatch, geom: unknown, id: string): Layer =>
     id,
     data: batch,
     getPolygon: geom as never,
+    pickable: true,
     filled: true,
-    getFillColor: [99, 102, 241, 90],
+    getFillColor: colorAcc([99, 102, 241, 90], [255, 159, 28, 120]),
     stroked: true,
-    getLineColor: [73, 74, 185],
-    getLineWidth: 1,
+    getLineColor: colorAcc([73, 74, 185, 255], SEL_LINE),
+    getLineWidth: numAcc(1, 2),
     lineWidthUnits: "pixels",
     // Triangulate on the main thread instead of fetching the earcut worker from
     // a CDN — deterministic and offline-safe. (Revisit with a self-hosted worker
     // if main-thread earcut becomes a bottleneck on very large polygon sets.)
     earcutWorkerUrl: null,
+    updateTriggers: hiTriggers(),
   });
 
 const SPECS: Record<string, GeomSpec> = {
@@ -126,23 +228,25 @@ export async function renderGeoArrow(userSql: string): Promise<DeckOutcome> {
   if (!spec) {
     throw new Error(`unsupported geometry type for rendering: ${probe.type}`);
   }
+  // New render → new feature-id space; drop any stale selection and record the
+  // source query so a downstream tool can rebuild these exact features.
+  selection.setSource(inner);
+
   if (probe.count === 0) {
     clearDeck();
     return { featureCount: 0, timings: { queryMs: performance.now() - t0, parseMs: 0, bytes: 0 } };
   }
 
+  // Carry a deterministic `__fid` alongside the encoded geometry so picked
+  // features resolve back to source rows (see selection.ts). `fidTaggedRelation`
+  // is the single source of truth for how fids are assigned.
   const encoded =
-    `SELECT ${spec.fn}(geom) AS geom FROM (${inner}) _q WHERE geom IS NOT NULL`;
+    `SELECT ${FID}, ${spec.fn}(geom) AS geom FROM (${fidTaggedRelation(inner)}) _t`;
   const { table, bytes } = await fetchArrow(encoded);
   const t1 = performance.now();
 
-  const layers: Layer[] = [];
-  table.batches.forEach((batch, i) => {
-    if (batch.numRows === 0) return;
-    const geom = batch.getChild("geom")?.data[0];
-    if (!geom) return;
-    layers.push(spec.layer(batch, geom, `geoarrow-${i}`));
-  });
+  rendered = { table, spec };
+  const layers = buildLayers(rendered);
 
   const map = getMap();
   if (map) {
@@ -191,8 +295,21 @@ async function fetchArrow(innerSql: string): Promise<{ table: Table; bytes: numb
   return { table: tableFromIPC(merged), bytes };
 }
 
+// Build one deck.gl layer per non-empty Arrow batch from a rendered result.
+function buildLayers({ table, spec }: { table: Table; spec: GeomSpec }): Layer[] {
+  const layers: Layer[] = [];
+  table.batches.forEach((batch, i) => {
+    if (batch.numRows === 0) return;
+    const geom = batch.getChild("geom")?.data[0];
+    if (!geom) return;
+    layers.push(spec.layer(batch, geom, `geoarrow-${i}`));
+  });
+  return layers;
+}
+
 /** Remove the deck overlay's layers (used when switching render paths). */
 export function clearDeck(): void {
+  rendered = null;
   overlay?.setProps({ layers: [] });
 }
 
