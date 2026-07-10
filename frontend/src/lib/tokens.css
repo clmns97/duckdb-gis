@@ -1,0 +1,74 @@
+/*
+ * duckdb-gis — design tokens (curated Phase-1 reference)
+ * ------------------------------------------------------
+ * Derived by INSPECTION from the real DuckDB UI (v1.5.4 `ui` extension,
+ * frontend proxied from ui.duckdb.org) so duckdb-gis reads as an ecosystem
+ * sibling. Aesthetic matching only — no proprietary assets/logos/source reused.
+ *
+ * Most values are verified via getComputedStyle (see artifacts/design-tokens*.json).
+ * Values marked (approx) are read from screenshots (logo/brand accents) and should
+ * be eyeballed against artifacts/ before shipping. The DuckDB UI is light-theme
+ * only today; dark-mode values below are our own proposal, not observed.
+ */
+
+:root {
+  /* ---- Type ---------------------------------------------------------- */
+  --font-sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Source Code Pro", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-editor: 13px; /* SQL editor / dense tables */
+  --text-base: 14px;   /* app default */
+  --text-lg: 16px;
+
+  --weight-regular: 400;
+  --weight-medium: 500; /* labels, section headers, buttons */
+  --weight-bold: 700;   /* rare */
+
+  --leading-base: 1.29; /* ~18px on 14px */
+  --leading-editor: 19px;
+
+  /* ---- Neutrals (Tailwind gray family, as used by DuckDB UI) --------- */
+  --gray-900: #111827; /* primary text */
+  --gray-600: #4b5563; /* secondary text */
+  --gray-500: #6b7280; /* muted / placeholder / icons */
+  --gray-200: #e5e7eb; /* borders, dividers, hover fills */
+  --white: #ffffff;
+
+  --color-text: var(--gray-900);
+  --color-text-muted: var(--gray-500);
+  --color-bg: var(--white);
+  --color-bg-subtle: #f0f4fd;   /* active notebook cell tint (indigo-50-ish) */
+  --color-border: var(--gray-200);
+
+  /* ---- Accent (indigo) ---------------------------------------------- */
+  --indigo: #494ab9;            /* verified: links, SQL keywords, accents */
+  --indigo-primary: #6366f1;    /* (approx) primary CTA / run button */
+  --indigo-border-active: #afc0f2; /* focused cell border */
+  --selection: rgba(194, 217, 240, 0.83); /* editor text selection */
+
+  /* ---- Brand accents (observed in logo / top bar) ------------------- */
+  --duck-yellow: #fbe200; /* (approx) DuckDB duck mark */
+  --brand-orange: #fb7115; /* (approx) MotherDuck "Sign in" accent */
+
+  /* ---- SQL syntax highlighting (CodeMirror) ------------------------- */
+  --syntax-keyword: var(--indigo);  /* SELECT, CREATE, FROM ... */
+  --syntax-string: #05635a;         /* verified teal for strings/literals */
+  --syntax-comment: var(--gray-500); /* italic */
+
+  /* ---- Radii --------------------------------------------------------- */
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px; /* cards, buttons, cells */
+
+  /* ---- Elevation (Tailwind shadow-sm / shadow-md) ------------------- */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+
+  /* ---- Layout -------------------------------------------------------- */
+  --topbar-height: 56px;   /* verified */
+  --sidebar-width: 300px;  /* approx from screenshots */
+  --editor-gutter-pad: 18px; /* from DuckDB UI --editor-gutter-pad */
+}

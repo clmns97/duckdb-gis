@@ -1,0 +1,6 @@
+# The fixture is generated, not tracked — rebuild it with build.sh.
+demo.duckdb
+# ...and never its transient WAL / temp copies.
+*.duckdb.wal
+*.wal
+demo.duckdb.tmp
