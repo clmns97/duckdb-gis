@@ -1,0 +1,249 @@
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Top bar */
+.topbar {
+  height: var(--topbar-height);
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg);
+}
+.mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #000;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+.mark::after {
+  content: "";
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--duck-yellow);
+}
+.wordmark {
+  font-weight: var(--weight-medium);
+  font-size: var(--text-lg);
+}
+.spacer {
+  flex: 1 1 auto;
+}
+.ghost {
+  font: inherit;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 0;
+  padding: 6px 10px;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+}
+.ghost:hover {
+  background: var(--color-border);
+  color: var(--color-text);
+}
+
+/* Body split */
+.body {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+}
+
+/* Sidebar */
+.sidebar {
+  width: var(--sidebar-width);
+  flex: 0 0 auto;
+  border-right: 1px solid var(--color-border);
+  padding: 12px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-muted);
+}
+.search .icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+.search input {
+  font: inherit;
+  border: 0;
+  outline: none;
+  width: 100%;
+  color: var(--color-text);
+  background: transparent;
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  margin-bottom: 6px;
+}
+.mini {
+  font: inherit;
+  line-height: 1;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: var(--radius-md);
+}
+.mini:hover {
+  background: var(--color-border);
+  color: var(--color-text);
+}
+.empty {
+  margin: 2px 0 0;
+  font-size: var(--text-editor);
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.tree,
+.tree ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.node {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px;
+  border-radius: var(--radius-md);
+  cursor: default;
+  font-size: var(--text-editor);
+}
+.node:hover {
+  background: var(--color-border);
+}
+.node.indent {
+  padding-left: 22px;
+}
+.node.indent-2 {
+  padding-left: 40px;
+}
+.twisty {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  width: 10px;
+}
+.db-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1.5px solid var(--color-text-muted);
+}
+.sch-icon,
+.tbl-icon {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+.empty.err {
+  color: #b91c1c;
+  font-style: normal;
+}
+
+/* Map canvas: map on top, SQL editor docked at the bottom */
+.canvas {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.map-wrap {
+  flex: 1 1 auto;
+  position: relative;
+  min-height: 0;
+}
+/* Descendant selector (specificity 0,2,0) so this beats maplibre-gl.css's
+   `.maplibregl-map { position: relative }`, which is added to this same div. */
+.map-wrap .map {
+  position: absolute;
+  inset: 0;
+}
+
+/* SQL editor panel */
+.editor-panel {
+  flex: 0 0 auto;
+  height: 220px;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-bg);
+}
+.editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--color-border);
+}
+.run-btn {
+  font: inherit;
+  font-weight: var(--weight-medium);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #fff;
+  background: var(--indigo-primary);
+  border: 0;
+  border-radius: var(--radius-md);
+  padding: 5px 12px;
+  cursor: pointer;
+}
+.run-btn:hover {
+  background: var(--indigo);
+}
+.run-btn .kbd {
+  font-size: var(--text-xs);
+  opacity: 0.85;
+}
+.run-status {
+  font-size: var(--text-editor);
+  color: var(--color-text-muted);
+}
+.run-status.ok {
+  color: var(--syntax-string);
+}
+.run-status.err {
+  color: #b91c1c;
+}
+.editor-host {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+.editor-host .cm-editor {
+  height: 100%;
+}
+.editor-host .cm-scroller {
+  font-family: var(--font-mono);
+  font-size: var(--text-editor);
+}
+/* Keep MapLibre controls in the duckdb-gis visual family */
+.maplibregl-ctrl-group {
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}

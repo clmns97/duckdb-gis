@@ -8,3 +8,9 @@ test/python/__pycache__/
 .Rhistory
 .vscode/
 .cache
+
+# Prototypes / design reference kept locally only (see ticket T-015).
+# spike/ is experimental (not production); design-reference/ carries large
+# design captures and its own node_modules. Ignored to keep the repo lean.
+design-reference/
+spike/
