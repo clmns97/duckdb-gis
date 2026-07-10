@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import "./App.css";
 import { MapView } from "./components/MapView";
+import { SelectionChip } from "./components/SelectionChip";
 import { EditorPanel } from "./components/EditorPanel";
 import { loadCatalog, type CatalogDatabase } from "./lib/catalog";
 import { query } from "./lib/duckdb";
 import { getMap } from "./lib/mapBus";
 import { addTileLayer, removeTileLayer, prepareTileLayer } from "./lib/tiles";
 import { renderGeoArrow, clearDeck } from "./lib/deckRender";
+import { selection } from "./lib/selection";
 
 export function App() {
   const [databases, setDatabases] = useState<CatalogDatabase[] | null>(null);
@@ -44,6 +46,7 @@ export function App() {
       renderGeoArrow,
       clearDeck,
     };
+    (window as unknown as { gisSelection: unknown }).gisSelection = selection;
   }, []);
 
   return (
@@ -128,6 +131,7 @@ export function App() {
         <main className="canvas">
           <div className="map-wrap">
             <MapView />
+            <SelectionChip />
           </div>
           <EditorPanel />
         </main>
