@@ -1,65 +1,103 @@
-# DuckDB UI Extension
+# duckdb-gis
 
-A [DuckDB extension](https://duckdb.org/docs/stable/core_extensions/ui.html) providing a browser-based user interface.
+A browser-based GIS built on DuckDB. `duckdb-gis` is a DuckDB **extension**
+(C++) that starts a local HTTP server and serves a [MapLibre](https://maplibre.org/)
++ [deck.gl](https://deck.gl/) frontend, letting you explore and run spatial SQL
+against your data on a map — QGIS-style, but with DuckDB as the engine.
 
-This repository contains both the extension, implemented in C++, and some packages used by the user interface, implemented in TypeScript.
+The north star is to replicate QGIS's core workflows (Layers panel, Browser
+panel, geoprocessing tools, feature selection) while keeping all compute
+**native and local**: the extension runs the SQL and spatial work in-process,
+in the same DuckDB instance — there is no remote backend.
 
-While most of the user interface code is not yet publicly available, more of it will added here over time.
+This repository is a fork of [`duckdb/duckdb-ui`](https://github.com/duckdb/duckdb-ui).
+It reuses that project's SQL-over-HTTP transport and TypeScript client, but
+replaces the hosted UI with our own MapLibre frontend under `frontend/`.
 
-## Extension
+## Repository layout
 
-The primary structure of this repository is based on the [DuckDB extension template](https://github.com/duckdb/extension-template).
+- `src/` — the C++ extension (HTTP server, event dispatcher, settings, state).
+  See `src/http_server.cpp` (`HttpServer::Run`) for the endpoints.
+- `frontend/` — the MapLibre/deck.gl GIS frontend (React + Vite). This is the
+  point of the fork.
+- `ts/` — TypeScript packages shared with the frontend, notably
+  `duckdb-ui-client` (the SQL-over-HTTP client). See `ts/README.md`.
+- `test/sql/` — SQL-level extension tests.
+- `tickets/` — the work board (see `tickets/README.md`).
 
-To build the extension:
+## Build
+
+The build is based on the [DuckDB extension template](https://github.com/duckdb/extension-template):
 
 ```sh
 make
 ```
 
-This will create the following binaries:
+This produces:
 
 ```sh
-./build/release/duckdb                              # DuckDB shell with UI extension
-./build/release/test/unittest                       # Test runner
-./build/release/extension/ui/ui.duckdb_extension    # Loadable extension binary
+./build/release/duckdb                              # DuckDB shell with the extension loaded
+./build/release/test/unittest                       # test runner
+./build/release/extension/ui/ui.duckdb_extension    # loadable extension binary
 ```
 
-- `duckdb` is the binary for the duckdb shell with the extension code automatically loaded.
-- `unittest` is the test runner of duckdb. Again, the extension is already linked into the binary.
-- `ui.duckdb_extension` is the loadable binary as it would be distributed.
+The extension is auto-loaded into the bundled `duckdb`/`unittest` binaries. The
+extension name is still `ui` (see `extension_config.cmake`).
 
-To run the extension code, simply start the shell with `./build/release/duckdb`.
+## Run
 
-To start the UI from the command line:
+Start the server and open the GIS UI:
 
-```
+```sh
 ./build/release/duckdb -ui
 ```
 
-To start the UI from SQL:
+Or from SQL:
+
+```sql
+CALL start_gis();          -- start the server and open a browser
+CALL start_gis_server();   -- start the server without opening a browser
+FROM gis_is_started();     -- is the server running?
+SELECT get_gis_url();      -- the local URL
+CALL stop_gis_server();    -- stop the server
 ```
-call start_ui();
+
+The `-ui` command-line flag is hardcoded by the DuckDB shell to call
+`start_ui()`, so the original `start_ui` / `start_ui_server` / `stop_ui_server` /
+`get_ui_url` / `ui_is_started` names remain registered as **aliases** of the
+`gis` verbs — either family works, and the `-ui` flag keeps launching the GIS UI.
+
+## Frontend development
+
+The production build is served by the extension server; during development the
+frontend runs under Vite with hot-module reload and proxies the SQL-over-HTTP
+API to the running extension. From `frontend/`:
+
+```sh
+pnpm install
+pnpm dev        # Vite dev server on http://127.0.0.1:5173
 ```
 
-For more usage details, see the [documentation](https://duckdb.org/docs/stable/core_extensions/ui.html).
+Start the extension server in parallel (`./build/release/duckdb -ui`, which
+binds `localhost:4213`); Vite proxies `/ddb`, `/info`, `/localEvents`, and
+`/localToken` to it, rewriting `Origin`/`Referer` so the extension's
+same-origin gate is satisfied (see `frontend/vite.config.ts` and
+`src/http_server.cpp`). Other scripts: `pnpm build`, `pnpm typecheck`.
 
-## User Interface Packages
+## Architecture
 
-Some packages used by the browser-based user interface can be found in the `ts` directory.
+The extension starts an HTTP server that both serves the frontend and handles
+DuckDB operations. Requests to run SQL, interrupt runs, tokenize SQL, and
+receive events (e.g. catalog updates) are exposed as HTTP endpoints — see
+`HttpServer::Run` in [http_server.cpp](src/http_server.cpp).
 
-See the [README](ts/README.md) in that directory for details.
+Which assets the server serves is controlled by the `ui_remote_url` setting
+(the DuckDB-UI mechanism we inherited). Rather than proxying the hosted
+`ui.duckdb.org` interface, we point it at our own MapLibre frontend — in
+development that is the Vite dev server above.
 
-## Architectural Overview
-
-The extension starts an HTTP server that both serves the UI assets (HTML, JavaScript, etc.)
-and handles requests to run SQL and perform other DuckDB operations.
-
-The server proxies requests for UI assets and fetches them from a remote server.
-By default, this is `https://ui.duckdb.org`, but it can be [overridden](https://duckdb.org/docs/stable/core_extensions/ui.html#remote-url).
-
-The server also exposes a number of HTTP endpoints for performing DuckDB operations.
-These include running SQL, interrupting runs, tokenizing SQL text, and receiving events (such as catalog updates).
-For details, see the `HttpServer::Run` method in [http_server.cpp](src/http_server.cpp).
-
-The UI uses the TypeScript package [duckdb-ui-client](ts/pkgs/duckdb-ui-client/package.json) for communicating with the server.
-See the [DuckDBUIClient](ts/pkgs/duckdb-ui-client/src/client/classes/DuckDBUIClient.ts) and [DuckDBUIClientConnection](ts/pkgs/duckdb-ui-client/src/client/classes/DuckDBUIClientConnection.ts) classes exposed by this package for details.
+The frontend talks to the server through the TypeScript
+[duckdb-ui-client](ts/pkgs/duckdb-ui-client/package.json) package, which decodes
+the binary result format. Spatial work is done with DuckDB's `spatial` extension
+and rendered via GeoArrow deck.gl layers (`frontend/src/lib/deckRender.ts`);
+tiled rendering uses `ST_AsMVT` (`frontend/src/lib/tiles.ts`).
