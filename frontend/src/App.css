@@ -203,6 +203,111 @@
   color: #b91c1c;
   font-style: normal;
 }
+/* Geometry-bearing tables read as addable map layers. */
+.node.geo {
+  cursor: context-menu;
+}
+.node.geo .tbl-icon {
+  color: var(--indigo);
+}
+
+/* Layers panel — one row per active layer (T-021). */
+.layer-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.layer-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-editor);
+}
+.layer-row:hover {
+  background: var(--color-border);
+}
+.layer-swatch {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  border-radius: 3px;
+  background: var(--indigo-primary);
+  border: 1px solid var(--indigo);
+}
+.layer-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.layer-row.status-loading {
+  color: var(--color-text-muted);
+}
+.layer-note {
+  flex: 0 0 auto;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+.layer-note.err {
+  color: #b91c1c;
+}
+.layer-remove {
+  flex: 0 0 auto;
+  font: inherit;
+  line-height: 1;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  padding: 0 4px;
+  border-radius: var(--radius-md);
+}
+.layer-remove:hover {
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+/* Reusable right-click menu (catalog tree today; Layers panel next). */
+.context-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+}
+.context-menu {
+  position: fixed;
+  min-width: 160px;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+.context-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  font-size: var(--text-editor);
+  color: var(--color-text);
+  background: transparent;
+  border: 0;
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.context-menu-item:hover:not(:disabled) {
+  background: var(--color-bg-subtle);
+  color: var(--indigo);
+}
+.context-menu-item:disabled {
+  color: var(--color-text-muted);
+  cursor: default;
+}
 
 /* Map canvas: map on top, SQL editor docked at the bottom */
 .canvas {
@@ -325,4 +430,279 @@
 .maplibregl-ctrl-group {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
+}
+
+/* Overture quick-load: a persistent data-source node atop the Browser tree,
+   and the modal form it opens (T-012). */
+.overture-node {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: var(--text-editor);
+  color: var(--color-text);
+  text-align: left;
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.overture-node:hover {
+  border-color: var(--indigo-border-active);
+  color: var(--indigo);
+}
+.overture-node .tbl-icon {
+  color: var(--indigo);
+}
+.node-hint {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(17, 24, 39, 0.35);
+}
+.modal {
+  width: 420px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 64px);
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+.modal-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+.modal-head h2 {
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+}
+.modal-close {
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: var(--text-lg);
+  line-height: 1;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 0;
+  padding: 0 4px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.modal-close:hover {
+  color: var(--color-text);
+}
+.modal-body {
+  padding: 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.modal-body .field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.modal-body legend,
+.field-label {
+  padding: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-muted);
+}
+.theme-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 12px;
+}
+.check,
+.radio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-editor);
+  cursor: pointer;
+}
+.check input,
+.radio input {
+  accent-color: var(--indigo-primary);
+}
+.radio.disabled {
+  color: var(--color-text-muted);
+  cursor: default;
+}
+.modal-body select {
+  font: inherit;
+  font-size: var(--text-editor);
+  color: var(--color-text);
+  padding: 6px 8px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.modal-note {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+.modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 16px;
+  border-top: 1px solid var(--color-border);
+}
+.primary {
+  font: inherit;
+  font-size: var(--text-editor);
+  font-weight: var(--weight-medium);
+  color: var(--white);
+  background: var(--indigo-primary);
+  border: 1px solid var(--indigo);
+  border-radius: var(--radius-md);
+  padding: 6px 14px;
+  cursor: pointer;
+}
+.primary:hover:not(:disabled) {
+  background: var(--indigo);
+}
+.primary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Layer Properties dialog (T-010 / T-011): Information + Symbology tabs. */
+.lp-modal {
+  width: 460px;
+}
+.lp-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+.lp-tab {
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 8px 4px;
+  margin-bottom: -1px;
+  cursor: pointer;
+}
+.lp-tab:hover {
+  color: var(--color-text);
+}
+.lp-tab.active {
+  color: var(--color-text);
+  border-bottom-color: var(--indigo);
+}
+
+/* Information tab: label / value definition list. */
+.lp-info {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 16px;
+  margin: 0;
+  font-size: var(--text-editor);
+}
+.lp-info dt {
+  color: var(--color-text-muted);
+}
+.lp-info dd {
+  margin: 0;
+  word-break: break-word;
+}
+.lp-info-head {
+  grid-column: 1 / -1;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-muted);
+}
+.lp-info-attrs {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+.lp-attr-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+.lp-attr-table td {
+  padding: 3px 8px 3px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.lp-attr-type {
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* Symbology tab: one control per row. */
+.lp-sym {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.lp-sym-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: var(--text-editor);
+}
+.lp-sym-row > span:first-child {
+  color: var(--color-text-muted);
+}
+.lp-sym-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.lp-sym-control output {
+  min-width: 42px;
+  text-align: right;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.lp-sym-row input[type="range"] {
+  accent-color: var(--indigo-primary);
+  width: 160px;
+}
+.lp-sym-row input[type="color"] {
+  width: 40px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  cursor: pointer;
 }
