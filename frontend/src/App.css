@@ -207,6 +207,10 @@
 .node.geo {
   cursor: context-menu;
 }
+/* Session-attached databases (T-007): right-click to detach. */
+.node.attached {
+  cursor: context-menu;
+}
 .node.geo .tbl-icon {
   color: var(--indigo);
 }
@@ -563,10 +567,30 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
 }
+.modal-body .text-input {
+  font: inherit;
+  font-size: var(--text-editor);
+  color: var(--color-text);
+  padding: 6px 8px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.modal-body .text-input:focus {
+  outline: none;
+  border-color: var(--indigo-primary);
+}
 .modal-note {
   margin: 0;
   font-size: var(--text-xs);
   color: var(--color-text-muted);
+}
+.modal-note.err {
+  color: #b91c1c;
+}
+.modal-note code {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.95em;
 }
 .modal-foot {
   display: flex;

@@ -5,6 +5,7 @@ import { SelectionChip } from "./components/SelectionChip";
 import { EditorPanel } from "./components/EditorPanel";
 import { LayersPanel } from "./components/LayersPanel";
 import { OvertureModal } from "./components/OvertureModal";
+import { AttachModal } from "./components/AttachModal";
 import { ContextMenu, type MenuItem } from "./components/ContextMenu";
 import { loadCatalog, type CatalogDatabase, type CatalogTable } from "./lib/catalog";
 import { query } from "./lib/duckdb";
@@ -13,6 +14,7 @@ import { addTileLayer, removeTileLayer, prepareTileLayer } from "./lib/tiles";
 import { renderGeoArrow, clearDeck } from "./lib/deckRender";
 import { selection } from "./lib/selection";
 import { layers } from "./lib/layers";
+import { attach } from "./lib/attach";
 import {
   OVERTURE_THEMES,
   buildOvertureQuery,
@@ -37,6 +39,42 @@ export function App() {
   const [tab, setTab] = useState<"layers" | "browser">("browser");
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [overtureOpen, setOvertureOpen] = useState(false);
+  const [attachOpen, setAttachOpen] = useState(false);
+
+  // Re-read the live catalog into the Browser tree. Called after an attach /
+  // detach so a newly `ATTACH`ed database (and its schemas/tables) shows up, or
+  // a detached one drops off, without a page reload.
+  const refreshCatalog = () => {
+    loadCatalog()
+      .then((dbs) => {
+        setDatabases(dbs);
+        setError(null);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+  };
+
+  // Right-click an attached database node → "Detach". Offered only for
+  // databases we attached this session (`attach.has`) — never the default /
+  // in-memory database. Detaching refreshes the catalog so the node drops off.
+  const openDatabaseMenu = (e: React.MouseEvent, db: string) => {
+    if (!attach.has(db)) return; // default db: let the native menu through
+    e.preventDefault();
+    setMenu({
+      x: e.clientX,
+      y: e.clientY,
+      items: [
+        {
+          label: "Detach",
+          onSelect: () => {
+            attach
+              .detach(db)
+              .then(refreshCatalog)
+              .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+          },
+        },
+      ],
+    });
+  };
 
   // Right-click a geometry-bearing table → "Add to map" (QGIS "Add Layer").
   // Only spatial tables get the menu (T-001 flagged their geometry columns);
@@ -165,7 +203,11 @@ export function App() {
               <section className="tree-section">
                 <div className="section-head">
                   <span>Attached databases</span>
-                  <button className="mini" title="Attach database">
+                  <button
+                    className="mini"
+                    title="Attach database"
+                    onClick={() => setAttachOpen(true)}
+                  >
                     +
                   </button>
                 </div>
@@ -180,7 +222,11 @@ export function App() {
                   <ul className="tree">
                     {databases.map((db) => (
                       <li key={db.name}>
-                        <div className="node">
+                        <div
+                          className={`node${attach.has(db.name) ? " attached" : ""}`}
+                          title={attach.has(db.name) ? "Right-click to detach" : undefined}
+                          onContextMenu={(e) => openDatabaseMenu(e, db.name)}
+                        >
                           <span className="twisty">▾</span>
                           <span className="db-dot" aria-hidden="true" />
                           <span>{db.name}</span>
@@ -257,6 +303,10 @@ export function App() {
 
       {overtureOpen && (
         <OvertureModal onClose={() => setOvertureOpen(false)} onLoad={loadOverture} />
+      )}
+
+      {attachOpen && (
+        <AttachModal onClose={() => setAttachOpen(false)} onAttached={refreshCatalog} />
       )}
     </div>
   );
