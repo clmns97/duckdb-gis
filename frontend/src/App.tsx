@@ -3,12 +3,30 @@ import "./App.css";
 import { MapView } from "./components/MapView";
 import { SelectionChip } from "./components/SelectionChip";
 import { EditorPanel } from "./components/EditorPanel";
-import { loadCatalog, type CatalogDatabase } from "./lib/catalog";
+import { LayersPanel } from "./components/LayersPanel";
+import { OvertureModal } from "./components/OvertureModal";
+import { ContextMenu, type MenuItem } from "./components/ContextMenu";
+import { loadCatalog, type CatalogDatabase, type CatalogTable } from "./lib/catalog";
 import { query } from "./lib/duckdb";
 import { getMap } from "./lib/mapBus";
 import { addTileLayer, removeTileLayer, prepareTileLayer } from "./lib/tiles";
 import { renderGeoArrow, clearDeck } from "./lib/deckRender";
 import { selection } from "./lib/selection";
+import { layers } from "./lib/layers";
+import {
+  OVERTURE_THEMES,
+  buildOvertureQuery,
+  selectionBbox,
+  viewportBbox,
+  type OvertureRequest,
+} from "./lib/overture";
+import { ensureOvertureAccess } from "./lib/remote";
+
+interface MenuState {
+  x: number;
+  y: number;
+  items: MenuItem[];
+}
 
 export function App() {
   const [databases, setDatabases] = useState<CatalogDatabase[] | null>(null);
@@ -17,6 +35,53 @@ export function App() {
   // populate the Layers panel (T-001/T-021) it's empty, so the catalog is the
   // more useful landing panel.
   const [tab, setTab] = useState<"layers" | "browser">("browser");
+  const [menu, setMenu] = useState<MenuState | null>(null);
+  const [overtureOpen, setOvertureOpen] = useState(false);
+
+  // Right-click a geometry-bearing table → "Add to map" (QGIS "Add Layer").
+  // Only spatial tables get the menu (T-001 flagged their geometry columns);
+  // one item per geometry column so a multi-geometry table exposes each.
+  const openTableMenu = (
+    e: React.MouseEvent,
+    db: string,
+    schema: string,
+    table: CatalogTable,
+  ) => {
+    if (table.geomColumns.length === 0) return; // let the native menu through
+    e.preventDefault();
+    const multi = table.geomColumns.length > 1;
+    const items: MenuItem[] = table.geomColumns.map((col) => ({
+      label: multi ? `Add to map (${col})` : "Add to map",
+      onSelect: () => {
+        setTab("layers");
+        void layers.add({ db, schema, table: table.name, geomColumn: col });
+      },
+    }));
+    setMenu({ x: e.clientX, y: e.clientY, items });
+  };
+
+  // Overture quick-load (T-012): resolve the chosen extent to a bbox, then add
+  // one query-backed layer per selected theme. The S3 query itself is a
+  // placeholder until the data path lands (see lib/overture); errors surface on
+  // the layer row like any other failed layer.
+  const loadOverture = async (req: OvertureRequest) => {
+    setTab("layers");
+    const bbox = req.extent === "selected" ? await selectionBbox() : viewportBbox();
+    if (!bbox) return; // no map / empty selection — nothing to clip to
+    // Bring up httpfs + anonymous S3 access on demand (T-008). If it fails the
+    // read below still errors readably on the layer row, so don't block on it.
+    await ensureOvertureAccess().catch(() => {});
+    for (const themeId of req.themes) {
+      const theme = OVERTURE_THEMES.find((t) => t.id === themeId);
+      if (!theme) continue;
+      const id = `L_ov_${req.release}_${theme.id}`.replace(/[^A-Za-z0-9]/g, "_");
+      void layers.addQuery({
+        id,
+        name: `Overture ${theme.label}`,
+        sql: buildOvertureQuery(theme, req.release, bbox),
+      });
+    }
+  };
 
   useEffect(() => {
     (async () => {
@@ -73,10 +138,22 @@ export function App() {
                   +
                 </button>
               </div>
-              <p className="empty">No layers yet</p>
+              <LayersPanel />
             </section>
           ) : (
             <>
+              <button
+                className="overture-node"
+                title="Add Overture Maps data (QuickOSM-style)"
+                onClick={() => setOvertureOpen(true)}
+              >
+                <span className="tbl-icon" aria-hidden="true">
+                  ◈
+                </span>
+                <span>Overture Maps</span>
+                <span className="node-hint">quick load…</span>
+              </button>
+
               <div className="search">
                 <svg viewBox="0 0 16 16" className="icon" aria-hidden="true">
                   <circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
@@ -117,12 +194,20 @@ export function App() {
                               </div>
                               {schema.tables.length > 0 && (
                                 <ul>
-                                  {schema.tables.map((t) => (
-                                    <li key={t} className="node indent-2">
-                                      <span className="tbl-icon">▦</span>
-                                      <span>{t}</span>
-                                    </li>
-                                  ))}
+                                  {schema.tables.map((t) => {
+                                    const geo = t.geomColumns.length > 0;
+                                    return (
+                                      <li
+                                        key={t.name}
+                                        className={`node indent-2${geo ? " geo" : ""}`}
+                                        title={geo ? "Right-click to add to map" : undefined}
+                                        onContextMenu={(e) => openTableMenu(e, db.name, schema.name, t)}
+                                      >
+                                        <span className="tbl-icon">{geo ? "◈" : "▦"}</span>
+                                        <span>{t.name}</span>
+                                      </li>
+                                    );
+                                  })}
                                 </ul>
                               )}
                             </li>
@@ -165,6 +250,14 @@ export function App() {
           <EditorPanel />
         </main>
       </div>
+
+      {menu && (
+        <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />
+      )}
+
+      {overtureOpen && (
+        <OvertureModal onClose={() => setOvertureOpen(false)} onLoad={loadOverture} />
+      )}
     </div>
   );
 }
