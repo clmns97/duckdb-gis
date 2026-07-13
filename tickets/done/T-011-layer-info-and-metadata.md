@@ -50,3 +50,20 @@ Open points:
 
 - 2026-07-09: Ticket created. Not started. Co-design the "Layer Properties"
   surface with [[T-010]].
+- 2026-07-13: Done, built together with [[T-010]] on one Layer Properties
+  dialog (Information + Symbology tabs), opened from the Layers-panel context
+  menu ("Layer properties…"). Implementation:
+  - `lib/layers.ts`: `loadLayerInfo(layer)` — columns + types from
+    `duckdb_columns()`, feature count + `ST_GeometryType` in one round-trip;
+    extent reuses the add-time bounds (no recompute). Computed **lazily** when
+    the Information tab mounts (not eagerly on selection), so a costly
+    count/extent on a large table doesn't block the UI — the tab shows a
+    loading state and guards against a late resolve after close.
+  - `components/LayerProperties.tsx` (Information tab): source db.schema.table,
+    geometry column, geometry type, feature count, extent, CRS, and an
+    attributes table.
+  - CRS: layers are lon/lat today, shown as "EPSG:4326 (assumed)"; genuine
+    per-layer CRS is unknown for plain GEOMETRY — revisit when reprojection
+    lands. Query-backed layers (Overture) show what's known (name/extent) and
+    note attributes aren't resolved without re-running the query.
+  - `tsc --noEmit` + `vite build` pass. Runtime not driven end-to-end.

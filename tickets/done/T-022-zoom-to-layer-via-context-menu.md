@@ -63,3 +63,19 @@ Edge cases to handle (note decisions in Progress log):
 <!-- Append newest at the bottom: what changed, what's next, any blocker. -->
 - 2026-07-10: Ticket created. Not started. Gated on [[T-021]] (needs the Layers
   panel entries + context menu + active-layers store to hang the action on).
+- 2026-07-13: Done. [[T-021]] dep is complete (context menu + active-layers
+  store + Layers panel all present). Implementation:
+  - `lib/layers.ts`: store the add-time extent on each `ActiveLayer`
+    (`bounds`, from the `probeGeometry`/`ST_Extent_Agg` result `addDeckLayer`
+    already returns) in both `add` and `addQuery`; new `zoomTo(id)` action
+    reuses that extent via the existing `fitTo` (padding + `maxZoom: 14`).
+  - `components/LayersPanel.tsx`: right-click a layer row opens the reusable
+    `ContextMenu` with a **Zoom to layer** item.
+  - Decision: reuse the cached extent rather than re-querying SQL on demand.
+    It's the exact extent of what's drawn, needs no round-trip, and works for
+    query-backed layers (Overture, T-012) too — which a source-table SQL query
+    couldn't reach. Edge cases fall out for free: null bounds (empty / all-NULL
+    geometry) → item disabled + `fitTo` no-ops; single-point/zero-area extent →
+    `maxZoom: 14` clamp so it lands sensibly, not slammed fully in. Antimeridian
+    crossing punted (noted). CRS: layers are lon/lat today, so extent = map coords.
+  - `tsc --noEmit` passes.
