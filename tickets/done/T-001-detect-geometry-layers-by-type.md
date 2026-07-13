@@ -1,11 +1,11 @@
 ---
 id: T-001
 title: Detect usable map layers by GEOMETRY column type, across all databases
-status: open
+status: done
 priority: P1
 area: frontend
 depends_on: []
-branch:
+branch: t-002-sidebar-tabs
 ---
 
 ## Goal
@@ -62,23 +62,35 @@ deckRender consume a layer.
 
 ## Acceptance criteria
 
-- [ ] `catalog.ts` detects geometry columns via `duckdb_columns()` where
+- [x] `catalog.ts` detects geometry columns via `duckdb_columns()` where
       `data_type = 'GEOMETRY'`, joined across `duckdb_databases()` (not
       name-matching).
-- [ ] Detection works for tables in **attached** databases, not only the
+- [x] Detection works for tables in **attached** databases, not only the
       default/in-memory one.
-- [ ] Geometry columns are detected regardless of column name; non-geometry
+- [x] Geometry columns are detected regardless of column name; non-geometry
       columns are never treated as layers (no false positives).
-- [ ] The catalog result exposes, per table, which column(s) are geometry (so
+- [x] The catalog result exposes, per table, which column(s) are geometry (so
       the UI can offer them as layers) — shape agreed with how a layer is
       consumed downstream (`MapView` / `deckRender`).
-- [ ] Sidebar reflects usable layers (at minimum: the data is available to the
+- [x] Sidebar reflects usable layers (at minimum: the data is available to the
       "Layers" section; wiring the add-layer UI can be a follow-up if scoped
       out here — note it in the Progress log).
-- [ ] Build passes (`make` for the extension is unaffected; run the frontend
+- [x] Build passes (`make` for the extension is unaffected; run the frontend
       build/lint for the TS change).
 
 ## Progress log
 
 <!-- Append newest at the bottom: what changed, what's next, any blocker. -->
 - 2026-07-09: Ticket created from design note. Not started.
+- 2026-07-10: Implemented alongside [[T-021]] (which needed it as a dependency),
+  on branch `t-002-sidebar-tabs`. `frontend/src/lib/catalog.ts` now runs the
+  geometry-by-type detection query (`duckdb_columns()` where
+  `data_type = 'GEOMETRY'` joined to `duckdb_databases()` on `NOT internal`) as a
+  third parallel query and enriches each table with a `geomColumns[]` field
+  (chose per-(table, column) exposure so multi-geometry tables offer each column
+  as its own layer). `App.tsx` marks geometry tables in the Browser tree (indigo
+  ◈) and offers them for "Add to map" — full add-layer UI wired in T-021, not a
+  follow-up. Verified against `build/release/duckdb`: correctly finds an
+  odd-named geometry column (`the_shape`) in an attached database, excludes a
+  non-geometry table (no false positive). `pnpm typecheck` + `pnpm build` clean.
+  Done.

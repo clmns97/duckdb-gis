@@ -1,11 +1,11 @@
 ---
 id: T-021
 title: Add a catalog table to the Layers panel via a right-click context menu
-status: open
+status: done
 priority: P1
 area: frontend
 depends_on: [T-001]
-branch:
+branch: t-002-sidebar-tabs
 ---
 
 ## Goal
@@ -75,21 +75,21 @@ if T-002 has landed, the new layer entries live under its Layers tab.
 
 ## Acceptance criteria
 
-- [ ] Right-clicking a geometry-bearing table in the catalog tree opens a
+- [x] Right-clicking a geometry-bearing table in the catalog tree opens a
       context menu with an **Add to map** action (only offered for tables that
       T-001 flags as geometry layers).
-- [ ] Choosing it adds the table to an active-layers store and renders its
+- [x] Choosing it adds the table to an active-layers store and renders its
       features on the map at the correct location.
-- [ ] The **Layers** panel renders one entry per active layer (name + a way to
+- [x] The **Layers** panel renders one entry per active layer (name + a way to
       remove it), replacing the hardcoded "No layers yet" when layers exist and
       restoring the empty state when the last layer is removed.
-- [ ] Works for tables in **attached** databases, not just the default one
+- [x] Works for tables in **attached** databases, not just the default one
       (fully-qualified, quoted table refs).
-- [ ] Adding the same table twice is handled sanely (either dedupe or allow a
+- [x] Adding the same table twice is handled sanely (either dedupe or allow a
       second instance — pick one and note it).
-- [ ] Active-layers store lives in its own module and is documented as the
+- [x] Active-layers store lives in its own module and is documented as the
       foundation for [[T-010]] / [[T-011]] / [[T-022]].
-- [ ] Frontend build/lint passes; menu + Layers list render correctly light and
+- [x] Frontend build/lint passes; menu + Layers list render correctly light and
       dark (`frontend/src/lib/tokens.css`).
 
 ## Progress log
@@ -99,3 +99,46 @@ if T-002 has landed, the new layer entries live under its Layers tab.
   detection + geom column before an "Add to map" action is meaningful). This is
   the ticket that introduces the active-layers model; [[T-022]] (zoom-to)
   builds on it.
+- 2026-07-10: Implemented (on branch `t-002-sidebar-tabs`). [[T-001]] was the
+  dependency and was still open, so its geometry-by-type detection landed here
+  too (see that ticket) — `catalog.ts` now enriches each table with
+  `geomColumns[]`.
+  - **Active-layers store** — new `frontend/src/lib/layers.ts`, a subscribable
+    store mirroring `selection.ts` (scalar `version` snapshot read via
+    `useSyncExternalStore`). `layers.add(source)` / `layers.remove(id)`;
+    documented as the foundation for [[T-010]] / [[T-011]] / [[T-022]].
+  - **Render path decision:** the **tile** path (`tiles.ts`), not the Arrow/deck
+    path. Table-backed layers must *stack* (several on the map at once), which
+    the MVT registry supports (one MapLibre source per layer); the deck overlay
+    holds only a single result. `add()` runs `prepareTileLayer` (materialises a
+    3857 + R-tree copy at `main.<id>_tiles`) then `addTileLayer`, then frames the
+    map on the source's extent (add-time fit; the per-layer zoom-to gesture stays
+    [[T-022]]).
+  - **Fully-qualified refs:** `"db"."schema"."table"` quoted idents — verified
+    cross-database (materialise from an attached db into `main`) against the real
+    engine.
+  - **Dedupe:** keyed on (db, schema, table, geom column) → the same source is a
+    no-op re-add (chose dedupe over a second instance).
+  - **Reusable context menu** — new `ContextMenu.tsx` (backdrop + Escape close);
+    the catalog tree uses it now, the Layers panel will for remove/zoom-to.
+    Geometry tables are marked in the tree (indigo ◈) and are the only ones that
+    open the menu. Multi-geometry tables offer one "Add to map (col)" per column.
+  - **SRID assumption:** `add()` treats source geometry as EPSG:4326 (the common
+    case); other CRSes are future work. **Tiles carry geometry only** (no
+    attributes) for now — sidesteps MVT's inability to encode non-scalar columns
+    (e.g. a second GEOMETRY column); attribute carry-through is [[T-011]].
+  - No dark theme exists (`tokens.css` is light-only, per [[T-002]]); all new
+    styles use tokens.
+  - Verified end-to-end: `pnpm typecheck` + `pnpm build` clean; SQL (detection,
+    cross-db materialise, ST_AsMVT tile, fit-bounds) exercised against
+    `build/release/duckdb`; drove the running UI (Playwright) — right-click
+    `cities` → Add to map → layer row reaches `ready`, map gets the
+    fill/line/circle source and renders the points worldwide; dedupe holds at one
+    row; remove restores the empty state and drops the map source. Zero console
+    errors.
+  - **Known follow-up (finding):** the materialised `main.<id>_tiles` tables are
+    GEOMETRY-bearing, so on the next catalog reload they appear in the Browser
+    tree as addable layers (clutter). Not fixed here to avoid connection-scoping
+    risk (TEMP tables are connection-local; the SQL-over-HTTP path may not keep a
+    stable connection). Candidate fix: materialise into an excluded/internal
+    location. Worth its own ticket.
