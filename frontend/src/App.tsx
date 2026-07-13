@@ -12,6 +12,7 @@ import { addTileLayer, removeTileLayer, prepareTileLayer } from "./lib/tiles";
 import { renderGeoArrow, clearDeck } from "./lib/deckRender";
 import { selection } from "./lib/selection";
 import { layers } from "./lib/layers";
+import { editing } from "./lib/editing";
 import { attach } from "./lib/attach";
 import {
   OVERTURE_THEMES,
@@ -152,6 +153,8 @@ export function App() {
       clearDeck,
     };
     (window as unknown as { gisSelection: unknown }).gisSelection = selection;
+    (window as unknown as { gisEditing: unknown }).gisEditing = editing;
+    (window as unknown as { gisQuery: unknown }).gisQuery = query;
   }, []);
 
   return (

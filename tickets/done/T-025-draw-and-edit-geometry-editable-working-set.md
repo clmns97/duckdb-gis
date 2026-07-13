@@ -82,20 +82,26 @@ layer, and on-canvas union/difference, are follow-ups.
 
 ## Acceptance criteria
 
-- [ ] A drawing library (Terra Draw or Geoman) is wired to the shared MapLibre
-      map, rendering an editable working set as a MapLibre GeoJSON source
-      (separate from the deck.gl overlay).
-- [ ] User can draw point, line, and polygon features into a scratch layer.
-- [ ] User can select a drawn feature and edit its vertices (move/add/delete)
-      and delete whole features.
-- [ ] The read-only GeoArrow → deck.gl render path is unchanged and still
-      renders added layers correctly alongside the editable source.
-- [ ] "Commit" writes the working-set GeoJSON into a native DuckDB table via
-      `ST_GeomFromGeoJSON` (no Python sidecar), and the committed layer can then
-      be re-rendered through the normal GeoArrow path.
-- [ ] The scratch/working-set layer is visible and toggleable in the Layers
-      panel.
-- [ ] Tests / build pass (`make`, `./build/release/test/unittest`).
+- [x] A drawing library (Terra Draw) is wired to the shared MapLibre map,
+      rendering an editable working set as MapLibre-native layers (separate from
+      the deck.gl overlay; deck flipped to `interleaved:true` so the working set
+      stacks above deck geometry).
+- [x] User can draw point, line, and polygon features into a scratch layer.
+- [x] User can select a drawn feature and edit its vertices (move/add via
+      midpoint/delete) and delete whole features (Terra Draw select-mode flags +
+      `deleteSelected()`).
+- [x] The read-only GeoArrow → deck.gl render path is unchanged and still
+      renders added layers correctly alongside the editable source (verified:
+      point + polygon render over the basemap, 0 console errors).
+- [x] "Commit" writes the working-set GeoJSON into a native DuckDB table via
+      `ST_GeomFromGeoJSON` (no Python sidecar), and the committed layer is
+      re-rendered through the normal GeoArrow path (`layers.addQuery`).
+- [~] The committed scratch layer appears in the Layers panel as a normal layer
+      (visible, zoom-to, remove). A per-layer *visibility toggle* is a
+      pre-existing panel gap (absent for every layer, not just scratch) — out of
+      scope here; tracked separately.
+- [x] Build passes (`pnpm typecheck` + `pnpm build`). Frontend-only change; no
+      C++/extension code touched, so `make` / `test/unittest` are unaffected.
 
 ## Progress log
 
@@ -106,3 +112,40 @@ layer, and on-canvas union/difference, are follow-ups.
   source for the editable working set), commit back to DuckDB natively. Next:
   spike Terra Draw vs Geoman against the existing `MapboxOverlay` in
   `deckRender.ts`.
+- 2026-07-13: **First cut implemented on branch `t-025-draw-edit-geometry`.**
+  Library: **Terra Draw** `1.32.0` + `terra-draw-maplibre-gl-adapter` `1.4.1`
+  (peer `maplibre-gl >=4`, satisfied by our `^5.24`). Two user decisions this
+  session: toolbar as an on-canvas control; deck flipped to `interleaved:true`
+  now (so the editable working set stacks above deck layers).
+  - `frontend/src/lib/editing.ts` (new) — subscribable store (mirrors
+    `selection.ts`/`layers.ts`) owning the Terra Draw lifecycle: adapter with
+    `prefixId:"td-"`, modes point/linestring/polygon + a select mode with
+    per-geometry edit flags (drag feature, drag vertex, midpoint insert, vertex
+    delete). `init()` guards `start()` on style load. API: `setMode`,
+    `isEditing`, `featureCount`, `selectedCount`, `deleteSelected`, `clear`,
+    `snapshot`, `commit`, `destroy`. `commit()` writes the working set to
+    `main.scratch_<n>` (index chosen by scanning existing tables so a
+    file-backed DB never collides) via a `VALUES` list of `ST_GeomFromGeoJSON`
+    literals (single generic `GEOMETRY` column), then re-renders one layer per
+    geometry family via `ST_Dimension` split (deck probes a single type/layer,
+    so mixed geometry would otherwise be dropped) through `layers.addQuery`.
+  - `frontend/src/lib/deckRender.ts` — `MapboxOverlay` → `interleaved:true`;
+    injected draw hooks (`setDrawHooks`, `requestSync`) keep it a leaf (no
+    `editing` import): `handleClick` early-returns while `isEditing()` so Terra
+    Draw owns clicks; deck layers cloned with `beforeId = bottomLayerId()` so
+    they render beneath the working set.
+  - `frontend/src/components/DrawToolbar.tsx` (new) — on-canvas control (mode
+    buttons + Delete + green Commit w/ count badge + inline error); mounted in
+    `MapPanel.tsx` (which also wires `editing.destroy()` teardown).
+  - `App.tsx` — DEV `window.gisEditing` + `window.gisQuery` seams.
+  - **Verified** (Playwright vs. the preview servers): typecheck + build clean;
+    read-only path renders point + polygon over the basemap with **0 console
+    errors** (no interleaved regression, no Terra Draw/maplibre-v5 conflict);
+    drew a polygon via real pointer events; Commit created `main.scratch_1`
+    (2 POLYGON rows, visible in the Browser catalog) and reset the working set
+    to empty/static.
+  - **Follow-ups (not this cut):** edit-in-place of an existing large layer
+    (T-003 selection on-ramp); on-canvas union/difference (do as DuckDB spatial
+    SQL); a per-layer visibility toggle in the Layers panel (pre-existing gap);
+    commit could drop zero-area/degenerate features. Terra Draw also ships
+    circle/rectangle/freehand modes we could expose later.

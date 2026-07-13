@@ -56,6 +56,12 @@ importers:
       react-dom:
         specifier: ^19.2.7
         version: 19.2.7(react@19.2.7)
+      terra-draw:
+        specifier: ^1.32.0
+        version: 1.32.0
+      terra-draw-maplibre-gl-adapter:
+        specifier: ^1.4.1
+        version: 1.4.1(maplibre-gl@5.24.0)(terra-draw@1.32.0)
     devDependencies:
       '@tailwindcss/vite':
         specifier: ^4.3.2
@@ -1169,6 +1175,15 @@ packages:
   tapable@2.3.3:
     resolution: {integrity: sha512-uxc/zpqFg6x7C8vOE7lh6Lbda8eEL9zmVm/PLeTPBRhh1xCgdWaQ+J1CUieGpIfm2HdtsUpRv+HshiasBMcc6A==}
     engines: {node: '>=6'}
+
+  terra-draw-maplibre-gl-adapter@1.4.1:
+    resolution: {integrity: sha512-qZ/bc9bVPnyt0keLVTofV8xiTPkdkbO6RzqrfNLe9zH/edW5PsjvJw97m1EksPZeXNJtFxsVbhi12cPaoNiWfg==}
+    peerDependencies:
+      maplibre-gl: '>=4'
+      terra-draw: ^1.0.0
+
+  terra-draw@1.32.0:
+    resolution: {integrity: sha512-G/LmiDSL+oAzMuVO7uOaTWs5Vm9NX2l4/wI6/mSbY24uNwi6o9xcGrfo+X3nuwUEbTwRiIrJ4YtHYMTRfdbv7w==}
 
   texture-compressor@1.0.2:
     resolution: {integrity: sha512-dStVgoaQ11mA5htJ+RzZ51ZxIZqNOgWKAIvtjLrW1AliQQLCmrDqNzQZ8Jh91YealQ95DXt4MEduLzJmbs6lig==}
@@ -2481,6 +2496,13 @@ snapshots:
   tailwindcss@4.3.2: {}
 
   tapable@2.3.3: {}
+
+  terra-draw-maplibre-gl-adapter@1.4.1(maplibre-gl@5.24.0)(terra-draw@1.32.0):
+    dependencies:
+      maplibre-gl: 5.24.0
+      terra-draw: 1.32.0
+
+  terra-draw@1.32.0: {}
 
   texture-compressor@1.0.2:
     dependencies:

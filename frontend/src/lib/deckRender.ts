@@ -28,6 +28,30 @@ const clean = (sql: string) => sql.trim().replace(/;\s*$/, "");
 let overlay: MapboxOverlay | null = null;
 let overlayMap: maplibregl.Map | null = null;
 
+// Hooks injected by the editing store (T-025) so the read-only render path stays
+// a leaf module (no import of `editing`). `editGate` lets Terra Draw own map
+// clicks while digitizing (deck must not pick/clear selection); `beforeIdFn`
+// returns the MapLibre layer id the deck layers should render *beneath*, so the
+// editable working set (a MapLibre-native source) draws on top of deck geometry.
+let editGate: (() => boolean) | null = null;
+let beforeIdFn: (() => string | undefined) | null = null;
+
+/** Wire the editing store's gate + z-order provider into the render path. */
+export function setDrawHooks(hooks: {
+  isEditing: () => boolean;
+  beforeId: () => string | undefined;
+}): void {
+  editGate = hooks.isEditing;
+  beforeIdFn = hooks.beforeId;
+  syncOverlay();
+}
+
+/** Let the editing store nudge deck to re-apply layer ordering when the Terra
+ *  Draw layers appear or change (deck only re-syncs on its own mutations). */
+export function requestSync(): void {
+  syncOverlay();
+}
+
 // The SQL editor's Run preview: the last query result, kept so selection changes
 // can rebuild its deck.gl layers (with updated highlight colors) without
 // re-querying DuckDB. Composed *over* the persistent added layers (see `added`).
@@ -49,7 +73,11 @@ const added = new Map<string, AddedLayer>();
 function ensureOverlay(map: maplibregl.Map): MapboxOverlay {
   if (overlay && overlayMap === map) return overlay;
   overlay = new MapboxOverlay({
-    interleaved: false,
+    // Interleaved so deck layers share MapLibre's layer stack (T-025): the
+    // editable working set (a MapLibre-native Terra Draw source) can then stack
+    // *above* deck geometry. Ordering is enforced via each layer's `beforeId`
+    // (see syncOverlay). The read-only GeoArrow path is otherwise unchanged.
+    interleaved: true,
     layers: [],
     // Click a feature to select it; shift-click adds/removes; clicking empty
     // map clears. Picking info comes from the GeoArrow layers (pickable below).
@@ -125,6 +153,9 @@ if (typeof window !== "undefined") {
 }
 
 function handleClick(info: PickingInfo, event: { srcEvent?: { shiftKey?: boolean } }): void {
+  // While a draw/edit mode is active, Terra Draw owns the click — don't pick or
+  // clear the selection out from under it (T-025).
+  if (editGate?.()) return;
   const additive = Boolean(event?.srcEvent?.shiftKey) || shiftHeld;
   const fid = info?.picked ? pickFid(info) : null;
   if (fid == null) {
@@ -425,7 +456,7 @@ function buildLayers({ table, spec }: { table: Table; spec: GeomSpec }): Layer[]
 function syncOverlay(): void {
   const map = getMap();
   if (!map) return;
-  const layers: Layer[] = [];
+  let layers: Layer[] = [];
   for (const [id, al] of added) {
     if (!al.visible) continue;
     al.table.batches.forEach((batch, i) => {
@@ -436,6 +467,12 @@ function syncOverlay(): void {
     });
   }
   if (rendered) layers.push(...buildLayers(rendered));
+  // Render deck geometry beneath the editable working set when one exists, so
+  // drawn/edited features stay visible on top (T-025). No-op otherwise.
+  // `beforeId` is honoured by MapboxOverlay in interleaved mode but isn't in
+  // deck.gl's LayerProps type — cast past it.
+  const beforeId = beforeIdFn?.();
+  if (beforeId) layers = layers.map((l) => l.clone({ beforeId } as never));
   ensureOverlay(map).setProps({ layers });
 }
 
