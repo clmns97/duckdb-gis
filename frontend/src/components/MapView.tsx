@@ -33,5 +33,5 @@ export function MapView() {
     };
   }, []);
 
-  return <div className="map" ref={ref} />;
+  return <div className="absolute inset-0" ref={ref} />;
 }

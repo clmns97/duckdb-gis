@@ -1,26 +1,64 @@
+@import "tailwindcss";
 @import "./lib/tokens.css";
 
-* {
-  box-sizing: border-box;
+/* App-level base. Preflight already resets margins/box-sizing; here we set the
+   full-height app frame and the DuckDB-UI-matched default type/colour. */
+@layer base {
+  html,
+  body,
+  #app {
+    height: 100%;
+  }
+  html,
+  body {
+    overflow: clip;
+  }
+  body {
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: var(--leading-base);
+    color: var(--color-text);
+    background: var(--color-bg);
+    -webkit-font-smoothing: antialiased;
+  }
 }
 
-html,
-body,
-#app {
-  height: 100%;
+/* Third-party widget theming. Dockview only exposes styling through its own
+   `--dv-*` custom properties, so we map them onto our design tokens here (the
+   component chrome itself is authored by the library, not by us). Everything we
+   render is styled with Tailwind utilities in the components. */
+@layer components {
+  .dock-root {
+    --dv-border-radius: var(--radius-md);
+    --dv-group-view-background-color: var(--color-bg);
+    --dv-tabs-and-actions-container-background-color: var(--color-bg-subtle);
+    --dv-tabs-and-actions-container-font-size: var(--text-sm);
+    --dv-separator-border: var(--color-border);
+    --dv-tab-divider-color: var(--color-border);
+    --dv-activegroup-visiblepanel-tab-background-color: var(--color-bg);
+    --dv-activegroup-visiblepanel-tab-color: var(--color-text);
+    --dv-inactivegroup-visiblepanel-tab-background-color: var(--color-bg-subtle);
+    --dv-inactivegroup-visiblepanel-tab-color: var(--color-text-muted);
+    --dv-activegroup-hiddenpanel-tab-color: var(--color-text-muted);
+    --dv-inactivegroup-hiddenpanel-tab-color: var(--color-text-muted);
+  }
+  /* Indigo underline on the visible (active) tab, mirroring the sidebar tabs. */
+  .dock-root .dv-tab.dv-active-tab {
+    box-shadow: inset 0 -2px 0 var(--color-accent);
+  }
 }
 
-html,
-body {
-  overflow: clip;
+/* MapLibre map canvas + controls. These MUST stay UNLAYERED: maplibre-gl.css is
+   an unlayered stylesheet and sets `.maplibregl-map { position: relative }`,
+   which would beat any Tailwind @layer utility regardless of specificity and
+   collapse the canvas to zero height (blank map). Scoping under `.map-wrap`
+   (specificity 0,2,0) outranks maplibre's single-class rule so the canvas fills
+   the panel — the same trick the pre-Tailwind CSS used. */
+.map-wrap .maplibregl-map {
+  position: absolute;
+  inset: 0;
 }
-
-body {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-size: var(--text-base);
-  line-height: var(--leading-base);
-  color: var(--color-text);
-  background: var(--color-bg);
-  -webkit-font-smoothing: antialiased;
+.map-wrap .maplibregl-ctrl-group {
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
 }

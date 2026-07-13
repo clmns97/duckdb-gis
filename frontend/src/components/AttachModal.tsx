@@ -1,11 +1,15 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { attach, aliasFromPath } from "../lib/attach";
+import { Modal, Button, FieldLabel, ModalNote } from "./Modal";
 
 // Attach a DuckDB database file to the catalog (T-007). A form over
 // `attach.run`: a server-side file path, an optional alias (defaults to the
 // filename stem), and a read-only toggle (default on). Owns the async attach so
 // it can show inline errors and stay open on failure; on success it refreshes
 // the catalog via `onAttached` and closes.
+
+const INPUT =
+  "text-editor text-gray-900 px-2 py-1.5 bg-white border border-gray-200 rounded-md focus:outline-none focus:border-primary";
 
 export function AttachModal({
   onClose,
@@ -19,14 +23,6 @@ export function AttachModal({
   const [readOnly, setReadOnly] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
 
   const canAttach = path.trim().length > 0 && !busy;
 
@@ -45,81 +41,69 @@ export function AttachModal({
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div
-        className="modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="attach-title"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="modal-head">
-          <h2 id="attach-title">Attach database</h2>
-          <button className="modal-close" aria-label="Close" onClick={onClose}>
-            ×
-          </button>
-        </div>
-
-        <div className="modal-body">
-          <label className="field">
-            <span className="field-label">Database file path</span>
-            <input
-              className="text-input"
-              type="text"
-              value={path}
-              placeholder="/data/example.duckdb"
-              spellCheck={false}
-              autoFocus
-              onChange={(e) => setPath(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void submit();
-              }}
-            />
-          </label>
-
-          <label className="field">
-            <span className="field-label">Alias (optional)</span>
-            <input
-              className="text-input"
-              type="text"
-              value={alias}
-              placeholder={path.trim() ? aliasFromPath(path) : "database name"}
-              spellCheck={false}
-              onChange={(e) => setAlias(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void submit();
-              }}
-            />
-          </label>
-
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={readOnly}
-              onChange={(e) => setReadOnly(e.target.checked)}
-            />
-            <span>Read-only</span>
-          </label>
-
-          {error && <p className="modal-note err">{error}</p>}
-
-          <p className="modal-note">
-            The path is on the server (the DuckDB extension host), not this
-            browser — a file picker needs a server-side browse endpoint (not yet
-            available). Attaches with <code>ATTACH</code>; the database and its
-            tables appear in the Browser tree once attached.
-          </p>
-        </div>
-
-        <div className="modal-foot">
-          <button className="ghost" onClick={onClose}>
+    <Modal
+      title="Attach database"
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
             Cancel
-          </button>
-          <button className="primary" disabled={!canAttach} onClick={() => void submit()}>
+          </Button>
+          <Button variant="primary" disabled={!canAttach} onClick={() => void submit()}>
             {busy ? "Attaching…" : "Attach"}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </>
+      }
+    >
+      <label className="flex flex-col gap-2">
+        <FieldLabel>Database file path</FieldLabel>
+        <input
+          className={INPUT}
+          type="text"
+          value={path}
+          placeholder="/data/example.duckdb"
+          spellCheck={false}
+          autoFocus
+          onChange={(e) => setPath(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void submit();
+          }}
+        />
+      </label>
+
+      <label className="flex flex-col gap-2">
+        <FieldLabel>Alias (optional)</FieldLabel>
+        <input
+          className={INPUT}
+          type="text"
+          value={alias}
+          placeholder={path.trim() ? aliasFromPath(path) : "database name"}
+          spellCheck={false}
+          onChange={(e) => setAlias(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void submit();
+          }}
+        />
+      </label>
+
+      <label className="flex items-center gap-2 text-editor cursor-pointer">
+        <input
+          type="checkbox"
+          className="accent-primary"
+          checked={readOnly}
+          onChange={(e) => setReadOnly(e.target.checked)}
+        />
+        <span>Read-only</span>
+      </label>
+
+      {error && <ModalNote error>{error}</ModalNote>}
+
+      <ModalNote>
+        The path is on the server (the DuckDB extension host), not this browser —
+        a file picker needs a server-side browse endpoint (not yet available).
+        Attaches with <code className="font-mono text-[0.95em]">ATTACH</code>; the
+        database and its tables appear in the Browser tree once attached.
+      </ModalNote>
+    </Modal>
   );
 }

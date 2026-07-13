@@ -31,9 +31,13 @@ export function ContextMenu({
   }, [onClose]);
 
   return (
-    <div className="context-menu-backdrop" onClick={onClose} onContextMenu={(e) => e.preventDefault()}>
+    <div
+      className="fixed inset-0 z-20"
+      onClick={onClose}
+      onContextMenu={(e) => e.preventDefault()}
+    >
       <ul
-        className="context-menu"
+        className="fixed min-w-[160px] m-0 p-1 list-none bg-white border border-gray-200 rounded-lg shadow-md"
         role="menu"
         style={{ left: x, top: y }}
         onClick={(e) => e.stopPropagation()}
@@ -41,7 +45,7 @@ export function ContextMenu({
         {items.map((item, i) => (
           <li key={i} role="menuitem">
             <button
-              className="context-menu-item"
+              className="block w-full text-left text-editor text-gray-900 px-2.5 py-1.5 rounded-md cursor-pointer enabled:hover:bg-subtle enabled:hover:text-accent disabled:text-gray-500 disabled:cursor-default"
               disabled={item.disabled}
               onClick={() => {
                 item.onSelect();
