@@ -28,9 +28,23 @@ const clean = (sql: string) => sql.trim().replace(/;\s*$/, "");
 let overlay: MapboxOverlay | null = null;
 let overlayMap: maplibregl.Map | null = null;
 
-// The last rendered result, kept so selection changes can rebuild the deck.gl
-// layers (with updated highlight colors) without re-querying DuckDB.
+// The SQL editor's Run preview: the last query result, kept so selection changes
+// can rebuild its deck.gl layers (with updated highlight colors) without
+// re-querying DuckDB. Composed *over* the persistent added layers (see `added`).
 let rendered: { table: Table; spec: GeomSpec } | null = null;
+
+// Persistent layers added from the catalog (T-024): each is an Arrow table +
+// its geometry spec + a user-editable style (T-010), drawn with static
+// (non-selection) colours and not pickable. Insertion order = draw order
+// (oldest at the bottom), so a newly added layer stacks on top. Map insertion
+// order gives us that for free.
+interface AddedLayer {
+  table: Table;
+  spec: GeomSpec;
+  style: LayerStyle;
+  visible: boolean;
+}
+const added = new Map<string, AddedLayer>();
 
 function ensureOverlay(map: maplibregl.Map): MapboxOverlay {
   if (overlay && overlayMap === map) return overlay;
@@ -122,8 +136,9 @@ function handleClick(info: PickingInfo, event: { srcEvent?: { shiftKey?: boolean
 }
 
 // Rebuild layers in place when the selection changes (no DuckDB round-trip).
+// Re-syncs the whole overlay so the persistent added layers survive the rebuild.
 selection.subscribe(() => {
-  if (overlay && rendered) overlay.setProps({ layers: buildLayers(rendered) });
+  if (overlay) syncOverlay();
 });
 
 export interface DeckTimings {
@@ -149,8 +164,60 @@ interface Probe {
 // PointData/MultiPointData, Polygon/MultiPolygon, …).
 interface GeomSpec {
   fn: string; // duck_geoarrow encoder
+  // Selection-aware builder for the editor's Run preview (highlights picks).
   layer: (batch: RecordBatch, geom: unknown, id: string) => Layer;
+  // Plain builder for persistent added layers (T-024): static colors from the
+  // layer's user-editable style (T-010), not pickable, no coupling to the
+  // single-source selection set.
+  staticLayer: (batch: RecordBatch, geom: unknown, id: string, s: LayerStyle) => Layer;
 }
+
+// ---------------------------------------------------------------------------
+// Per-layer symbology (T-010). The single-symbol style the Layer Properties ▸
+// Symbology tab edits and the static layer factories below read. Colours are
+// RGB; `fillOpacity` (0..1) is the fill/stroke alpha. Categorised / graduated
+// (data-driven) styling is a later follow-up — this is one style per layer.
+export interface LayerStyle {
+  fillColor: [number, number, number]; // fill (points, polygons)
+  lineColor: [number, number, number]; // stroke / line
+  fillOpacity: number; // 0..1, applied to the fill and to line-only layers
+  lineWidth: number; // px
+  pointRadius: number; // px
+}
+
+// A per-layer colour pair seeding a new layer's default style: a fill and a
+// matching darker stroke. Cycled so stacked layers are visually distinct.
+interface Palette {
+  fill: [number, number, number];
+  line: [number, number, number];
+}
+const PALETTES: Palette[] = [
+  { fill: [99, 102, 241], line: [73, 74, 185] }, // indigo (the Run-preview base)
+  { fill: [16, 185, 129], line: [5, 150, 105] }, // emerald
+  { fill: [244, 114, 182], line: [190, 24, 93] }, // pink
+  { fill: [249, 115, 22], line: [194, 65, 12] }, // orange
+  { fill: [56, 189, 248], line: [2, 132, 199] }, // sky
+  { fill: [168, 85, 247], line: [126, 34, 206] }, // purple
+];
+let paletteTick = 0; // monotonic so removing a layer never recolours the others
+
+// Seed a new layer's editable style (T-010) from the next palette. Opacity and
+// widths lean on geometry type so polygons default translucent with a thin
+// outline while points/lines read solid — the prior hardcoded look, now editable.
+function nextStyle(geomType: string): LayerStyle {
+  const p = PALETTES[paletteTick++ % PALETTES.length];
+  const polygon = geomType.includes("POLYGON");
+  return {
+    fillColor: p.fill,
+    lineColor: p.line,
+    fillOpacity: polygon ? 0.35 : geomType.includes("POINT") ? 0.85 : 0.9,
+    lineWidth: polygon ? 1 : 2,
+    pointRadius: 4,
+  };
+}
+
+const rgba = (c: [number, number, number], a: number): Color => [c[0], c[1], c[2], Math.round(a * 255)];
+const opaque = (c: [number, number, number]): Color => [c[0], c[1], c[2], 255];
 
 // Amber highlight for selected features, over the indigo base palette.
 const SEL_FILL: Color = [255, 159, 28, 230];
@@ -205,13 +272,58 @@ const POLYGON = (batch: RecordBatch, geom: unknown, id: string): Layer =>
     updateTriggers: hiTriggers(),
   });
 
+// Static counterparts for persistent added layers (T-024): palette-coloured,
+// not pickable, no selection accessors — just draw the geometry.
+const POINT_STATIC = (batch: RecordBatch, geom: unknown, id: string, s: LayerStyle): Layer =>
+  new GeoArrowScatterplotLayer({
+    id,
+    data: batch,
+    getPosition: geom as never,
+    pickable: false,
+    getRadius: s.pointRadius,
+    radiusUnits: "pixels",
+    getFillColor: rgba(s.fillColor, s.fillOpacity),
+    stroked: true,
+    getLineColor: opaque(s.lineColor),
+    lineWidthUnits: "pixels",
+    getLineWidth: s.lineWidth,
+  });
+
+const PATH_STATIC = (batch: RecordBatch, geom: unknown, id: string, s: LayerStyle): Layer =>
+  new GeoArrowPathLayer({
+    id,
+    data: batch,
+    getPath: geom as never,
+    pickable: false,
+    getColor: rgba(s.lineColor, s.fillOpacity),
+    widthUnits: "pixels",
+    getWidth: s.lineWidth,
+    capRounded: true,
+    jointRounded: true,
+  });
+
+const POLYGON_STATIC = (batch: RecordBatch, geom: unknown, id: string, s: LayerStyle): Layer =>
+  new GeoArrowPolygonLayer({
+    id,
+    data: batch,
+    getPolygon: geom as never,
+    pickable: false,
+    filled: true,
+    getFillColor: rgba(s.fillColor, s.fillOpacity),
+    stroked: true,
+    getLineColor: opaque(s.lineColor),
+    getLineWidth: s.lineWidth,
+    lineWidthUnits: "pixels",
+    earcutWorkerUrl: null, // main-thread earcut; offline-safe (see POLYGON above)
+  });
+
 const SPECS: Record<string, GeomSpec> = {
-  POINT: { fn: "st_asgeoarrowpoint", layer: POINT },
-  MULTIPOINT: { fn: "st_asgeoarrowmultipoint", layer: POINT },
-  LINESTRING: { fn: "st_asgeoarrowlinestring", layer: PATH },
-  MULTILINESTRING: { fn: "st_asgeoarrowmultilinestring", layer: PATH },
-  POLYGON: { fn: "st_asgeoarrowpolygon", layer: POLYGON },
-  MULTIPOLYGON: { fn: "st_asgeoarrowmultipolygon", layer: POLYGON },
+  POINT: { fn: "st_asgeoarrowpoint", layer: POINT, staticLayer: POINT_STATIC },
+  MULTIPOINT: { fn: "st_asgeoarrowmultipoint", layer: POINT, staticLayer: POINT_STATIC },
+  LINESTRING: { fn: "st_asgeoarrowlinestring", layer: PATH, staticLayer: PATH_STATIC },
+  MULTILINESTRING: { fn: "st_asgeoarrowmultilinestring", layer: PATH, staticLayer: PATH_STATIC },
+  POLYGON: { fn: "st_asgeoarrowpolygon", layer: POLYGON, staticLayer: POLYGON_STATIC },
+  MULTIPOLYGON: { fn: "st_asgeoarrowmultipolygon", layer: POLYGON, staticLayer: POLYGON_STATIC },
 };
 
 /**
@@ -246,11 +358,10 @@ export async function renderGeoArrow(userSql: string): Promise<DeckOutcome> {
   const t1 = performance.now();
 
   rendered = { table, spec };
-  const layers = buildLayers(rendered);
 
   const map = getMap();
   if (map) {
-    ensureOverlay(map).setProps({ layers });
+    syncOverlay();
     fitToBounds(map, probe.bounds);
   }
   const t2 = performance.now();
@@ -295,7 +406,8 @@ async function fetchArrow(innerSql: string): Promise<{ table: Table; bytes: numb
   return { table: tableFromIPC(merged), bytes };
 }
 
-// Build one deck.gl layer per non-empty Arrow batch from a rendered result.
+// Build one selection-aware deck.gl layer per non-empty Arrow batch from the
+// editor's Run-preview result. The `geoarrow-<i>` ids are matched by pickFid.
 function buildLayers({ table, spec }: { table: Table; spec: GeomSpec }): Layer[] {
   const layers: Layer[] = [];
   table.batches.forEach((batch, i) => {
@@ -307,10 +419,82 @@ function buildLayers({ table, spec }: { table: Table; spec: GeomSpec }): Layer[]
   return layers;
 }
 
-/** Remove the deck overlay's layers (used when switching render paths). */
+// Compose the overlay's layer array: every persistent added layer (bottom,
+// insertion order) then the editor's Run preview (top, pickable/highlighted).
+// The single place layers reach the overlay, so both paths always coexist.
+function syncOverlay(): void {
+  const map = getMap();
+  if (!map) return;
+  const layers: Layer[] = [];
+  for (const [id, al] of added) {
+    if (!al.visible) continue;
+    al.table.batches.forEach((batch, i) => {
+      if (batch.numRows === 0) return;
+      const geom = batch.getChild("geom")?.data[0];
+      if (!geom) return;
+      layers.push(al.spec.staticLayer(batch, geom, `added-${id}-${i}`, al.style));
+    });
+  }
+  if (rendered) layers.push(...buildLayers(rendered));
+  ensureOverlay(map).setProps({ layers });
+}
+
+export interface AddedLayerOutcome {
+  featureCount: number;
+  bounds: [number, number, number, number] | null;
+  /** The default style seeded for this layer (T-010), so the store can mirror
+   *  it for the Symbology UI. On re-add of an existing id the current style is
+   *  kept. */
+  style: LayerStyle;
+}
+
+/**
+ * Register a persistent layer from a source relation (must expose a `geom`
+ * column) and draw it on the overlay, stacked over any existing added layers.
+ * Probes the geometry type, encodes it to GeoArrow, and returns the feature
+ * count + extent so the caller can frame the map. Re-adding the same `id`
+ * replaces it. Not selection-coupled — see `renderGeoArrow` for the pickable path.
+ */
+export async function addDeckLayer(id: string, sourceSql: string): Promise<AddedLayerOutcome> {
+  const inner = clean(sourceSql);
+  const probe = await probeGeometry(inner);
+  const spec = SPECS[probe.type];
+  if (!spec) throw new Error(`unsupported geometry type for rendering: ${probe.type}`);
+
+  const encoded = `SELECT ${spec.fn}(geom) AS geom FROM (${inner}) _t WHERE geom IS NOT NULL`;
+  const { table } = await fetchArrow(encoded);
+  // Keep an existing layer's style on replace so its symbology stays stable.
+  const style = added.get(id)?.style ?? nextStyle(probe.type);
+  added.set(id, { table, spec, style, visible: true });
+  syncOverlay();
+  return { featureCount: probe.count, bounds: probe.bounds, style };
+}
+
+/** Drop a persistent added layer from the overlay. */
+export function removeDeckLayer(id: string): void {
+  if (added.delete(id)) syncOverlay();
+}
+
+/** Show/hide a persistent added layer without re-querying. */
+export function setDeckLayerVisible(id: string, visible: boolean): void {
+  const al = added.get(id);
+  if (!al || al.visible === visible) return;
+  al.visible = visible;
+  syncOverlay();
+}
+
+/** Re-style a persistent added layer live (T-010) without re-querying. */
+export function setDeckLayerStyle(id: string, style: LayerStyle): void {
+  const al = added.get(id);
+  if (!al) return;
+  al.style = style;
+  syncOverlay();
+}
+
+/** Clear only the editor's Run preview; persistent added layers are kept. */
 export function clearDeck(): void {
   rendered = null;
-  overlay?.setProps({ layers: [] });
+  syncOverlay();
 }
 
 function fitToBounds(map: maplibregl.Map, bounds: [number, number, number, number] | null): void {
