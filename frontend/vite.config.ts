@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 
 // The duckdb-gis extension server (started via `CALL start_gis()`) binds
 // "localhost", which resolves to IPv6 [::1] here.
@@ -15,7 +16,7 @@ const withOrigin = (extra: Record<string, string> = {}) => ({
 });
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   server: {
     host: "127.0.0.1",
     port: 5173,

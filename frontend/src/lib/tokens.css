@@ -5,13 +5,20 @@
  * frontend proxied from ui.duckdb.org) so duckdb-gis reads as an ecosystem
  * sibling. Aesthetic matching only — no proprietary assets/logos/source reused.
  *
- * Most values are verified via getComputedStyle (see artifacts/design-tokens*.json).
- * Values marked (approx) are read from screenshots (logo/brand accents) and should
- * be eyeballed against artifacts/ before shipping. The DuckDB UI is light-theme
- * only today; dark-mode values below are our own proposal, not observed.
+ * Most values are verified via getComputedStyle (see
+ * design-reference/artifacts/design-tokens*.json). Values marked (approx) are
+ * read from screenshots (logo/brand accents) and should be eyeballed against
+ * artifacts/ before shipping. The DuckDB UI is light-theme only today; any
+ * dark-mode values are our own proposal, not observed.
+ *
+ * Consumed via Tailwind v4: the `@theme` block below registers these as Tailwind
+ * theme values, so they are available both as utilities (`text-editor`,
+ * `bg-gray-900`, `rounded-lg`, `shadow-md`, `text-accent`, …) AND as plain
+ * `var(--…)` custom properties. The `:root` block holds semantic aliases and
+ * non-utility tokens (syntax colors, layout metrics, back-compat names).
  */
 
-:root {
+@theme {
   /* ---- Type ---------------------------------------------------------- */
   --font-sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
@@ -23,42 +30,30 @@
   --text-base: 14px;   /* app default */
   --text-lg: 16px;
 
-  --weight-regular: 400;
-  --weight-medium: 500; /* labels, section headers, buttons */
-  --weight-bold: 700;   /* rare */
-
-  --leading-base: 1.29; /* ~18px on 14px */
-  --leading-editor: 19px;
+  --font-weight-medium: 500; /* labels, section headers, buttons */
 
   /* ---- Neutrals (Tailwind gray family, as used by DuckDB UI) --------- */
-  --gray-900: #111827; /* primary text */
-  --gray-600: #4b5563; /* secondary text */
-  --gray-500: #6b7280; /* muted / placeholder / icons */
-  --gray-200: #e5e7eb; /* borders, dividers, hover fills */
-  --white: #ffffff;
-
-  --color-text: var(--gray-900);
-  --color-text-muted: var(--gray-500);
-  --color-bg: var(--white);
-  --color-bg-subtle: #f0f4fd;   /* active notebook cell tint (indigo-50-ish) */
-  --color-border: var(--gray-200);
+  --color-white: #ffffff;
+  --color-gray-200: #e5e7eb; /* borders, dividers, hover fills */
+  --color-gray-500: #6b7280; /* muted / placeholder / icons */
+  --color-gray-600: #4b5563; /* secondary text */
+  --color-gray-900: #111827; /* primary text */
 
   /* ---- Accent (indigo) ---------------------------------------------- */
-  --indigo: #494ab9;            /* verified: links, SQL keywords, accents */
-  --indigo-primary: #6366f1;    /* (approx) primary CTA / run button */
-  --indigo-border-active: #afc0f2; /* focused cell border */
-  --selection: rgba(194, 217, 240, 0.83); /* editor text selection */
+  --color-accent: #494ab9;               /* verified: links, SQL keywords, accents */
+  --color-primary: #6366f1;              /* (approx) primary CTA / run button */
+  --color-primary-border-active: #afc0f2; /* focused cell border */
 
   /* ---- Brand accents (observed in logo / top bar) ------------------- */
-  --duck-yellow: #fbe200; /* (approx) DuckDB duck mark */
-  --brand-orange: #fb7115; /* (approx) MotherDuck "Sign in" accent */
+  --color-duck-yellow: #fbe200; /* (approx) DuckDB duck mark */
+  --color-brand-orange: #fb7115; /* (approx) MotherDuck "Sign in" accent */
 
-  /* ---- SQL syntax highlighting (CodeMirror) ------------------------- */
-  --syntax-keyword: var(--indigo);  /* SELECT, CREATE, FROM ... */
-  --syntax-string: #05635a;         /* verified teal for strings/literals */
-  --syntax-comment: var(--gray-500); /* italic */
+  /* ---- Semantic surfaces / status ---------------------------------- */
+  --color-subtle: #f0f4fd; /* active cell tint (indigo-50-ish); menu/hover */
+  --color-danger: #b91c1c; /* error text */
+  --color-success: #05635a; /* verified teal — string literals, run "ok" */
 
-  /* ---- Radii --------------------------------------------------------- */
+  /* ---- Radii (DuckDB UI is near-flat: mostly 0px, a few 6px) -------- */
   --radius-sm: 2px;
   --radius-md: 4px;
   --radius-lg: 6px; /* cards, buttons, cells */
@@ -66,6 +61,44 @@
   /* ---- Elevation (Tailwind shadow-sm / shadow-md) ------------------- */
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+}
+
+:root {
+  /* ---- Line height --------------------------------------------------- */
+  --leading-base: 1.29; /* ~18px on 14px */
+  --leading-editor: 19px;
+
+  /* ---- Weight aliases ------------------------------------------------ */
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-bold: 700; /* rare */
+
+  /* ---- Palette back-compat aliases ---------------------------------- */
+  --gray-900: var(--color-gray-900);
+  --gray-600: var(--color-gray-600);
+  --gray-500: var(--color-gray-500);
+  --gray-200: var(--color-gray-200);
+  --white: var(--color-white);
+
+  /* ---- Accent back-compat aliases ----------------------------------- */
+  --indigo: var(--color-accent);
+  --indigo-primary: var(--color-primary);
+  --indigo-border-active: var(--color-primary-border-active);
+  --duck-yellow: var(--color-duck-yellow);
+  --brand-orange: var(--color-brand-orange);
+
+  /* ---- Semantic colors ---------------------------------------------- */
+  --color-text: var(--color-gray-900);
+  --color-text-muted: var(--color-gray-500);
+  --color-bg: var(--color-white);
+  --color-bg-subtle: var(--color-subtle); /* active notebook cell tint */
+  --color-border: var(--color-gray-200);
+  --selection: rgba(194, 217, 240, 0.83); /* editor text selection */
+
+  /* ---- SQL syntax highlighting (CodeMirror) ------------------------- */
+  --syntax-keyword: var(--color-accent); /* SELECT, CREATE, FROM ... */
+  --syntax-string: var(--color-success); /* verified teal for strings/literals */
+  --syntax-comment: var(--color-gray-500); /* italic */
 
   /* ---- Layout -------------------------------------------------------- */
   --topbar-height: 56px;   /* verified */

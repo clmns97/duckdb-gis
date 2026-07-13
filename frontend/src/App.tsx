@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import "./App.css";
 import { Dock } from "./components/Dock";
+import { Button } from "./components/Button";
 import { LayersPanel } from "./components/LayersPanel";
 import { OvertureModal } from "./components/OvertureModal";
 import { AttachModal } from "./components/AttachModal";
@@ -155,99 +155,118 @@ export function App() {
   }, []);
 
   return (
-    <div className="shell">
-      <header className="topbar">
-        <span className="mark" aria-hidden="true" />
-        <b className="wordmark">duckdb-gis</b>
-        <span className="spacer" />
-        <button className="ghost">Help</button>
+    <div className="flex flex-col h-full">
+      <header className="h-14 shrink-0 flex items-center gap-2.5 px-4 border-b border-gray-200 bg-white">
+        <span
+          className="w-[26px] h-[26px] shrink-0 rounded-full bg-black grid place-items-center"
+          aria-hidden="true"
+        >
+          <span className="w-[11px] h-[11px] rounded-full bg-duck-yellow" />
+        </span>
+        <b className="font-medium text-lg">duckdb-gis</b>
+        <span className="flex-1" />
+        <Button variant="ghost">Help</Button>
       </header>
 
-      <div className="body">
-        <aside className="sidebar">
-          <div className="sidebar-body">
+      <div className="flex-1 flex min-h-0">
+        <aside className="w-[300px] shrink-0 border-r border-gray-200 p-3 overflow-hidden flex flex-col">
+          <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-[18px]">
           {tab === "layers" ? (
-            <section className="tree-section">
-              <div className="section-head">
+            <section>
+              <div className="flex items-center justify-between text-gray-500 text-sm font-medium mb-1.5">
                 <span>Layers</span>
-                <button className="mini" title="Add layer">
+                <Button variant="mini" title="Add layer">
                   +
-                </button>
+                </Button>
               </div>
               <LayersPanel />
             </section>
           ) : (
             <>
               <button
-                className="overture-node"
+                className="flex items-center gap-1.5 w-full mb-2 px-2 py-1.5 text-editor text-gray-900 text-left bg-subtle border border-gray-200 rounded-md cursor-pointer hover:border-primary-border-active hover:text-accent"
                 title="Add Overture Maps data (QuickOSM-style)"
                 onClick={() => setOvertureOpen(true)}
               >
-                <span className="tbl-icon" aria-hidden="true">
+                <span className="text-sm text-accent" aria-hidden="true">
                   ◈
                 </span>
                 <span>Overture Maps</span>
-                <span className="node-hint">quick load…</span>
+                <span className="ml-auto text-xs text-gray-500">quick load…</span>
               </button>
 
-              <div className="search">
-                <svg viewBox="0 0 16 16" className="icon" aria-hidden="true">
+              <div className="flex items-center gap-2 text-gray-500">
+                <svg viewBox="0 0 16 16" className="w-4 h-4 shrink-0" aria-hidden="true">
                   <circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
                   <line x1="10.5" y1="10.5" x2="14" y2="14" stroke="currentColor" strokeWidth="1.4" />
                 </svg>
-                <input type="text" placeholder="Search" spellCheck={false} />
+                <input
+                  type="text"
+                  placeholder="Search"
+                  spellCheck={false}
+                  className="w-full border-0 outline-none text-gray-900 bg-transparent"
+                />
               </div>
 
-              <section className="tree-section">
-                <div className="section-head">
+              <section>
+                <div className="flex items-center justify-between text-gray-500 text-sm font-medium mb-1.5">
                   <span>Attached databases</span>
-                  <button
-                    className="mini"
+                  <Button
+                    variant="mini"
                     title="Attach database"
                     onClick={() => setAttachOpen(true)}
                   >
                     +
-                  </button>
+                  </Button>
                 </div>
 
                 {error ? (
-                  <p className="empty err">Catalog error: {error}</p>
+                  <p className="mt-0.5 text-editor text-danger">Catalog error: {error}</p>
                 ) : databases === null ? (
-                  <p className="empty">Loading catalog…</p>
+                  <p className="mt-0.5 text-editor text-gray-500 italic">Loading catalog…</p>
                 ) : databases.length === 0 ? (
-                  <p className="empty">No databases</p>
+                  <p className="mt-0.5 text-editor text-gray-500 italic">No databases</p>
                 ) : (
-                  <ul className="tree">
+                  <ul className="list-none m-0 p-0">
                     {databases.map((db) => (
                       <li key={db.name}>
                         <div
-                          className={`node${attach.has(db.name) ? " attached" : ""}`}
+                          className={`flex items-center gap-1.5 px-1 py-[3px] rounded-md text-editor hover:bg-gray-200 ${
+                            attach.has(db.name) ? "cursor-context-menu" : "cursor-default"
+                          }`}
                           title={attach.has(db.name) ? "Right-click to detach" : undefined}
                           onContextMenu={(e) => openDatabaseMenu(e, db.name)}
                         >
-                          <span className="twisty">▾</span>
-                          <span className="db-dot" aria-hidden="true" />
+                          <span className="text-[10px] text-gray-500 w-2.5">▾</span>
+                          <span
+                            className="w-3 h-3 rounded-[3px] border-[1.5px] border-gray-500"
+                            aria-hidden="true"
+                          />
                           <span>{db.name}</span>
                         </div>
-                        <ul>
+                        <ul className="list-none m-0 p-0">
                           {db.schemas.map((schema) => (
                             <li key={schema.name}>
-                              <div className="node indent">
-                                <span className="sch-icon">▤</span>
+                              <div className="flex items-center gap-1.5 pl-[22px] pr-1 py-[3px] rounded-md text-editor hover:bg-gray-200 cursor-default">
+                                <span className="text-gray-500 text-sm">▤</span>
                                 <span>{schema.name}</span>
                               </div>
                               {schema.tables.length > 0 && (
-                                <ul>
+                                <ul className="list-none m-0 p-0">
                                   {schema.tables.map((t) => {
                                     const geo = t.geomColumns.length > 0;
                                     return (
                                       <li
                                         key={t.name}
-                                        className={`node indent-2${geo ? " geo" : ""}`}
+                                        className={`flex items-center gap-1.5 pl-10 pr-1 py-[3px] rounded-md text-editor hover:bg-gray-200 ${
+                                          geo ? "cursor-context-menu" : "cursor-default"
+                                        }`}
                                         title={geo ? "Right-click to add to map" : undefined}
                                         onContextMenu={(e) => openTableMenu(e, db.name, schema.name, t)}
                                       >
-                                        <span className="tbl-icon">{geo ? "◈" : "▦"}</span>
+                                        <span className={`text-sm ${geo ? "text-accent" : "text-gray-500"}`}>
+                                          {geo ? "◈" : "▦"}
+                                        </span>
                                         <span>{t.name}</span>
                                       </li>
                                     );
@@ -266,27 +285,21 @@ export function App() {
           )}
           </div>
 
-          <div className="tabs" role="tablist" aria-label="Sidebar panels">
-            <button
-              role="tab"
-              aria-selected={tab === "layers"}
-              className={`tab${tab === "layers" ? " active" : ""}`}
-              onClick={() => setTab("layers")}
-            >
+          <div
+            className="flex gap-0.5 shrink-0 border-t border-gray-200 mt-2 -mx-3 -mb-3 px-3"
+            role="tablist"
+            aria-label="Sidebar panels"
+          >
+            <SidebarTab active={tab === "layers"} onClick={() => setTab("layers")}>
               Layers
-            </button>
-            <button
-              role="tab"
-              aria-selected={tab === "browser"}
-              className={`tab${tab === "browser" ? " active" : ""}`}
-              onClick={() => setTab("browser")}
-            >
+            </SidebarTab>
+            <SidebarTab active={tab === "browser"} onClick={() => setTab("browser")}>
               Browser
-            </button>
+            </SidebarTab>
           </div>
         </aside>
 
-        <main className="canvas">
+        <main className="flex-1 min-w-0 flex flex-col">
           <Dock />
         </main>
       </div>
@@ -303,5 +316,30 @@ export function App() {
         <AttachModal onClose={() => setAttachOpen(false)} onAttached={refreshCatalog} />
       )}
     </div>
+  );
+}
+
+// Sidebar panel switcher tab (Layers / Browser), QGIS-style: an indigo top
+// border marks the active panel, mirroring the Layer Properties tab strip.
+function SidebarTab({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={`text-sm font-medium border-t-2 -mt-px py-2 px-2.5 cursor-pointer hover:text-gray-900 ${
+        active ? "text-gray-900 border-accent" : "text-gray-500 border-transparent"
+      }`}
+    >
+      {children}
+    </button>
   );
 }

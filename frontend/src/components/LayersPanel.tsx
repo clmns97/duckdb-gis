@@ -40,21 +40,27 @@ export function LayersPanel() {
     setMenu({ x: e.clientX, y: e.clientY, items });
   };
 
-  if (list.length === 0) return <p className="empty">No layers yet</p>;
+  if (list.length === 0)
+    return <p className="mt-0.5 text-editor text-gray-500 italic">No layers yet</p>;
 
   return (
     <>
-    <ul className="layer-list">
+    <ul className="list-none m-0 p-0">
       {list.map((layer) => (
         <li
           key={layer.id}
-          className={`layer-row status-${layer.status}`}
+          className={`flex items-center gap-1.5 px-1 py-[3px] rounded-md text-editor hover:bg-gray-200 ${
+            layer.status === "loading" ? "text-gray-500" : ""
+          }`}
           title="Right-click for layer actions"
           onContextMenu={(e) => openLayerMenu(e, layer)}
         >
-          <span className="layer-swatch" aria-hidden="true" />
           <span
-            className="layer-name"
+            className="w-3 h-3 shrink-0 rounded-[3px] bg-primary border border-accent"
+            aria-hidden="true"
+          />
+          <span
+            className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap"
             title={
               layer.source
                 ? `${layer.source.schema}.${layer.name} (${layer.source.geomColumn})`
@@ -63,14 +69,16 @@ export function LayersPanel() {
           >
             {layer.name}
           </span>
-          {layer.status === "loading" && <span className="layer-note">loading…</span>}
+          {layer.status === "loading" && (
+            <span className="shrink-0 text-xs text-gray-500">loading…</span>
+          )}
           {layer.status === "error" && (
-            <span className="layer-note err" title={layer.error}>
+            <span className="shrink-0 text-xs text-danger" title={layer.error}>
               failed
             </span>
           )}
           <button
-            className="layer-remove"
+            className="shrink-0 leading-none text-gray-500 px-1 rounded-md cursor-pointer hover:bg-white hover:text-gray-900"
             title="Remove layer"
             aria-label={`Remove ${layer.name}`}
             onClick={() => layers.remove(layer.id)}

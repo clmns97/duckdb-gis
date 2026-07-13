@@ -41,7 +41,7 @@ function onReady(event: DockviewReadyEvent) {
 export function Dock() {
   return (
     <DockviewReact
-      className="dock-root dockview-theme-light"
+      className="dock-root dockview-theme-light flex-1 min-h-0"
       components={components}
       defaultRenderer="always"
       onReady={onReady}

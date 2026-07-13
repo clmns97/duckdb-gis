@@ -17,8 +17,11 @@ export function MapPanel(props: IDockviewPanelProps) {
     return () => disposable.dispose();
   }, [props.api]);
 
+  // The `map-wrap` class is the hook for the unlayered MapLibre overrides in
+  // global.css (canvas fill + control chrome) — those can't be Tailwind
+  // utilities because maplibre-gl.css is unlayered and would win.
   return (
-    <div className="map-wrap">
+    <div className="map-wrap relative w-full h-full min-h-0">
       <MapView />
       <SelectionChip />
     </div>
