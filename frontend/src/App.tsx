@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
 import "./App.css";
-import { MapView } from "./components/MapView";
-import { SelectionChip } from "./components/SelectionChip";
-import { EditorPanel } from "./components/EditorPanel";
+import { Dock } from "./components/Dock";
 import { LayersPanel } from "./components/LayersPanel";
 import { OvertureModal } from "./components/OvertureModal";
 import { AttachModal } from "./components/AttachModal";
@@ -289,11 +287,7 @@ export function App() {
         </aside>
 
         <main className="canvas">
-          <div className="map-wrap">
-            <MapView />
-            <SelectionChip />
-          </div>
-          <EditorPanel />
+          <Dock />
         </main>
       </div>
 
