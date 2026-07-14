@@ -39,6 +39,30 @@ export function App() {
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [overtureOpen, setOvertureOpen] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
+  // Left sidebar collapse (T-030). Collapsing hands the reclaimed width to the
+  // map; a thin rail keeps the expand affordance visible. Persisted across
+  // reloads. Toggle-only for v1 (no drag-resize).
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("gis.sidebar.collapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("gis.sidebar.collapsed", collapsed ? "1" : "0");
+    } catch {
+      // ignore: private-mode / storage-disabled — collapse just stays session-only
+    }
+  }, [collapsed]);
+
+  // Reveal a panel from the collapsed rail: expand the sidebar and bring that
+  // panel forward in one click.
+  const revealTab = (t: "layers" | "browser") => {
+    setTab(t);
+    setCollapsed(false);
+  };
 
   // Re-read the live catalog into the Browser tree. Called after an attach /
   // detach so a newly `ATTACH`ed database (and its schemas/tables) shows up, or
@@ -181,6 +205,25 @@ export function App() {
       </header>
 
       <div className="flex-1 flex min-h-0">
+        {collapsed ? (
+          <aside className="w-10 shrink-0 border-r border-gray-200 py-2 flex flex-col items-center gap-1">
+            <button
+              title="Expand panel"
+              aria-label="Expand sidebar"
+              onClick={() => setCollapsed(false)}
+              className="w-7 h-7 grid place-items-center rounded-md text-gray-500 cursor-pointer hover:bg-gray-200 hover:text-gray-900"
+            >
+              »
+            </button>
+            <div className="w-6 border-t border-gray-200 my-1" />
+            <RailTab active={tab === "layers"} onClick={() => revealTab("layers")} label="Layers">
+              ▤
+            </RailTab>
+            <RailTab active={tab === "browser"} onClick={() => revealTab("browser")} label="Browser">
+              ▦
+            </RailTab>
+          </aside>
+        ) : (
         <aside className="w-[300px] shrink-0 border-r border-gray-200 p-3 overflow-hidden flex flex-col">
           <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-[18px]">
           {tab === "layers" ? (
@@ -308,8 +351,18 @@ export function App() {
             <SidebarTab active={tab === "browser"} onClick={() => setTab("browser")}>
               Browser
             </SidebarTab>
+            <span className="flex-1" />
+            <button
+              title="Collapse panel"
+              aria-label="Collapse sidebar"
+              onClick={() => setCollapsed(true)}
+              className="self-center px-1.5 py-1 rounded-md text-gray-500 cursor-pointer hover:bg-gray-200 hover:text-gray-900"
+            >
+              «
+            </button>
           </div>
         </aside>
+        )}
 
         <main className="flex-1 min-w-0 flex flex-col">
           <Dock />
@@ -348,6 +401,34 @@ function SidebarTab({
       aria-selected={active}
       onClick={onClick}
       className={`text-sm font-medium border-t-2 -mt-px py-2 px-2.5 cursor-pointer hover:text-gray-900 ${
+        active ? "text-gray-900 border-accent" : "text-gray-500 border-transparent"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+// Icon button shown on the collapsed rail (T-030): clicking expands the sidebar
+// and brings that panel forward. An indigo left border marks the active panel,
+// echoing the expanded tab strip.
+function RailTab({
+  active,
+  onClick,
+  label,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      title={label}
+      aria-label={label}
+      onClick={onClick}
+      className={`w-7 h-7 grid place-items-center rounded-md border-l-2 cursor-pointer hover:bg-gray-200 hover:text-gray-900 ${
         active ? "text-gray-900 border-accent" : "text-gray-500 border-transparent"
       }`}
     >
