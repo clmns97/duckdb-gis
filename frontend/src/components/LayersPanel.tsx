@@ -55,6 +55,10 @@ export function LayersPanel() {
     e.preventDefault();
     const items: MenuItem[] = [
       {
+        label: layer.visible ? "Hide layer" : "Show layer",
+        onSelect: () => layers.setVisible(layer.id, !layer.visible),
+      },
+      {
         label: "Zoom to layer",
         disabled: layer.status !== "ready" || layer.bounds == null,
         onSelect: () => layers.zoomTo(layer.id),
@@ -111,6 +115,19 @@ export function LayersPanel() {
           >
             {layer.name}
           </span>
+          {layer.temporary && (
+            <span
+              className="shrink-0 rounded bg-subtle border border-gray-200 px-1 text-[10px] leading-tight text-gray-500 uppercase tracking-wide"
+              title="Temporary layer — the SQL editor Run result, not persisted"
+            >
+              temp
+            </span>
+          )}
+          {!layer.visible && layer.status === "ready" && (
+            <span className="shrink-0 text-xs text-gray-500" title="Hidden">
+              hidden
+            </span>
+          )}
           {layer.status === "loading" && (
             <span className="shrink-0 text-xs text-gray-500">loading…</span>
           )}

@@ -26,6 +26,9 @@ import {
   removeDeckLayer,
   setDeckLayerStyle,
   setDeckLayerOrder,
+  setDeckLayerVisible,
+  setPreviewVisible,
+  clearDeck,
   type LayerStyle,
 } from "./deckRender";
 
@@ -58,7 +61,17 @@ export interface ActiveLayer {
   /** Editable symbology (T-010), mirrored from the render layer so the Layer
    *  Properties ▸ Symbology tab can drive it. Present once the layer is ready. */
   style?: LayerStyle;
+  /** True for the SQL-editor Run result (T-027): a single, replaceable layer
+   *  that mirrors the pickable preview slot rather than a persistent `added`
+   *  layer. Marked in the panel so the user knows it isn't persisted. */
+  temporary?: boolean;
+  /** The query behind a temporary layer, kept for re-inspection / future re-run. */
+  sql?: string;
 }
+
+/** Fixed id of the single SQL-editor Run-result temp layer (T-027). Re-Running
+ *  replaces this row rather than accumulating new ones. */
+export const PREVIEW_ID = "L_sql_preview";
 
 type Listener = () => void;
 
@@ -228,6 +241,53 @@ export const layers = {
   },
 
   /**
+   * Mark the SQL-editor Run result as loading (T-027). The actual geometry is
+   * drawn by `renderGeoArrow` on the pickable preview slot (so it stays
+   * selectable); this gives that result a home in the Layers panel as a single,
+   * replaceable *temporary* layer. Call before running; `readyPreview` /
+   * `errorPreview` close the lifecycle. Re-Running keeps the existing row's
+   * position (and last extent) instead of stacking a new one.
+   */
+  startPreview(sql: string): void {
+    const existing = byId.get(PREVIEW_ID);
+    byId.set(PREVIEW_ID, {
+      id: PREVIEW_ID,
+      name: "SQL result",
+      temporary: true,
+      sql,
+      visible: true,
+      status: "loading",
+      bounds: existing?.bounds ?? null,
+    });
+    if (!existing) order = [PREVIEW_ID, ...order]; // newest-first / on top
+    emit();
+  },
+
+  /** Settle the Run-result temp layer as ready with its extent (T-027). */
+  readyPreview(bounds: [number, number, number, number] | null): void {
+    patch(PREVIEW_ID, { status: "ready", bounds, visible: true });
+  },
+
+  /** Settle the Run-result temp layer as failed (T-027). */
+  errorPreview(message: string): void {
+    patch(PREVIEW_ID, { status: "error", error: message });
+  },
+
+  /**
+   * Show/hide a layer (T-027 adds visibility to the standard actions). Routes to
+   * the right render path — the temp layer toggles the preview slot (no
+   * re-query, selection preserved); a persistent `added` layer toggles its deck
+   * layer. Keeps the model's `visible` flag in sync for the panel.
+   */
+  setVisible(id: string, visible: boolean): void {
+    const layer = byId.get(id);
+    if (!layer || layer.visible === visible) return;
+    if (layer.temporary) setPreviewVisible(visible);
+    else setDeckLayerVisible(id, visible);
+    patch(id, { visible });
+  },
+
+  /**
    * Reorder a layer to a new list position — the QGIS Layers-panel drag gesture
    * (T-031). List index 0 is the top of the list, drawn in *front* on the map.
    * `toIndex` is the insertion point in the current list (the row it was dropped
@@ -248,10 +308,13 @@ export const layers = {
     emit();
   },
 
-  /** Remove a layer from the map (drops it from the deck overlay). */
+  /** Remove a layer from the map (drops it from the deck overlay). The temp
+   *  Run-result layer clears the preview slot instead of an `added` layer. */
   remove(id: string): void {
-    if (!byId.has(id)) return;
-    removeDeckLayer(id);
+    const layer = byId.get(id);
+    if (!layer) return;
+    if (layer.temporary) clearDeck();
+    else removeDeckLayer(id);
     byId.delete(id);
     order = order.filter((x) => x !== id);
     syncDeckOrder();
