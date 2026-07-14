@@ -61,6 +61,17 @@ export interface Bbox {
   ymax: number;
 }
 
+/** Above this span (degrees, in either dimension) the direct GeoParquet-on-S3
+ *  read globs too many whole-planet files to load interactively — the Overture
+ *  modal warns and nudges the user to zoom in (T-029). A metro-area viewport is
+ *  well under this; the default world/continent view is far over it. */
+export const LARGE_EXTENT_DEGREES = 5;
+
+/** Whether a bbox is too large for the interactive direct-read path (T-029). */
+export function isLargeExtent(b: Bbox): boolean {
+  return b.xmax - b.xmin > LARGE_EXTENT_DEGREES || b.ymax - b.ymin > LARGE_EXTENT_DEGREES;
+}
+
 /** Bbox of the current MapLibre viewport (lon/lat), or null if no map yet. */
 export function viewportBbox(): Bbox | null {
   const map = getMap();
@@ -88,15 +99,22 @@ export async function selectionBbox(): Promise<Bbox | null> {
 /**
  * Build the geometry query for one theme, clipped to `bbox`. Reads Overture's
  * public GeoParquet on S3 (caller must have run `ensureOvertureAccess` first),
- * aliasing `geometry` → `geom` for the render path and filtering on the
+ * projecting `geometry` → `geom` for the render path and filtering on the
  * partition's `bbox` struct with a standard bbox-overlap predicate. The `bbox`
  * columns carry parquet statistics, so this prunes row groups server-side.
+ *
+ * The `::GEOMETRY` cast strips the CRS annotation that `read_parquet` attaches
+ * to GeoParquet geometry (`GEOMETRY('OGC:CRS84')`): spatial's aggregate
+ * functions (`any_value`, `ST_Extent_Agg`) — which the render probe uses — throw
+ * a spurious "Only little-endian WKB is supported" on that CRS-tagged type for
+ * polygon themes (buildings/base/divisions), while plain `GEOMETRY` (what every
+ * other layer uses) works. The cast is a no-op for themes that already worked.
  */
 export function buildOvertureQuery(theme: OvertureTheme, release: string, bbox: Bbox): string {
   const path = `${OVERTURE_BUCKET}/release/${release}/theme=${theme.id}/type=${theme.type}/*`;
   // Standard bbox-overlap: feature bbox intersects the requested extent.
   return (
-    `SELECT geometry AS geom ` +
+    `SELECT geometry::GEOMETRY AS geom ` +
     `FROM read_parquet('${path}', hive_partitioning=1) ` +
     `WHERE bbox.xmin <= ${bbox.xmax} AND bbox.xmax >= ${bbox.xmin} ` +
     `AND bbox.ymin <= ${bbox.ymax} AND bbox.ymax >= ${bbox.ymin}`

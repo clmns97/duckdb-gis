@@ -132,3 +132,15 @@ selection", "divisions geocoding spike").
       divisions spike).
     - Worth adopting à la carte later: `overture_category()` (80+→~30 category
       normalization) for places styling/filtering ([[T-010]]). Optional, not now.
+- 2026-07-14: **Browser fetch fixed under [[T-029]]** — the "fetches nothing on
+  PC/phone" bug. Root cause was the default zoom-4 viewport globbing the whole
+  planet (even places didn't finish in 240 s), doubled by a probe+Arrow
+  double-scan and hidden by a swallowed `ensureOvertureAccess` error. Fixed:
+  `SET enable_object_cache=true`, materialise each theme once into a temp table
+  (local probe now 0.003 s), unswallowed errors → layer row, and a large-extent
+  warning in the modal. See [[T-029]] for detail.
+  - **Large-extent mitigation follow-up (was "perf caveat" above):** heavy/global
+    themes (buildings, transportation) are inherently slow over a wide extent via
+    direct `read_parquet` — the file glob dominates. Direction: serve them as
+    **PMTiles** (pre-tiled), as GeoLibre (opengeos) does, reusing our ST_AsMVT
+    tiler. Not yet ticketed; capture as its own sub-ticket when picked up.
