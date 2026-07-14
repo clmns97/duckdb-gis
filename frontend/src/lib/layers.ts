@@ -92,11 +92,13 @@ function syncDeckOrder(): void {
   setDeckLayerOrder([...order].reverse());
 }
 
-function ident(name: string): string {
+/** Quote a DuckDB identifier (double-quote, doubling embedded quotes). */
+export function ident(name: string): string {
   return `"${name.replace(/"/g, '""')}"`;
 }
 
-function qualified(s: LayerSource): string {
+/** Fully-qualified `"db"."schema"."table"` for a layer source. */
+export function qualified(s: LayerSource): string {
   return `${ident(s.db)}.${ident(s.schema)}.${ident(s.table)}`;
 }
 
