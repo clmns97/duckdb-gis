@@ -21,7 +21,13 @@
 
 import { getMap } from "./mapBus";
 import { query, str } from "./duckdb";
-import { addDeckLayer, removeDeckLayer, setDeckLayerStyle, type LayerStyle } from "./deckRender";
+import {
+  addDeckLayer,
+  removeDeckLayer,
+  setDeckLayerStyle,
+  setDeckLayerOrder,
+  type LayerStyle,
+} from "./deckRender";
 
 export type { LayerStyle };
 
@@ -64,6 +70,13 @@ const listeners = new Set<Listener>();
 function emit(): void {
   version += 1;
   listeners.forEach((l) => l());
+}
+
+// Push the list order down to the deck overlay as its z-order (T-031). `order`
+// is newest-first (index 0 = top of list = drawn in front); deck draws
+// last-in-array on top, so the bottom→top draw order is `order` reversed.
+function syncDeckOrder(): void {
+  setDeckLayerOrder([...order].reverse());
 }
 
 function ident(name: string): string {
@@ -134,6 +147,7 @@ export const layers = {
 
     byId.set(id, { id, name: source.table, source, visible: true, status: "loading" });
     order = [id, ...order];
+    syncDeckOrder();
     emit();
 
     try {
@@ -173,6 +187,7 @@ export const layers = {
 
     byId.set(id, { id, name, visible: true, status: "loading" });
     if (!existing) order = [id, ...order]; // keep position on retry
+    syncDeckOrder();
     emit();
 
     try {
@@ -212,12 +227,34 @@ export const layers = {
     fitTo(layer.bounds ?? null);
   },
 
+  /**
+   * Reorder a layer to a new list position — the QGIS Layers-panel drag gesture
+   * (T-031). List index 0 is the top of the list, drawn in *front* on the map.
+   * `toIndex` is the insertion point in the current list (the row it was dropped
+   * before; `order.length` means the bottom). Pure z-order: no re-query, no
+   * restyle, visibility untouched. `order` is the single source of truth and is
+   * pushed to the deck overlay via `syncDeckOrder`.
+   */
+  reorder(id: string, toIndex: number): void {
+    const from = order.indexOf(id);
+    if (from === -1) return;
+    const insertAt = toIndex > from ? toIndex - 1 : toIndex; // removal shifts rows above down
+    if (insertAt === from) return; // no-op
+    const next = order.slice();
+    next.splice(from, 1);
+    next.splice(insertAt, 0, id);
+    order = next;
+    syncDeckOrder();
+    emit();
+  },
+
   /** Remove a layer from the map (drops it from the deck overlay). */
   remove(id: string): void {
     if (!byId.has(id)) return;
     removeDeckLayer(id);
     byId.delete(id);
     order = order.filter((x) => x !== id);
+    syncDeckOrder();
     emit();
   },
 };

@@ -70,6 +70,24 @@ interface AddedLayer {
 }
 const added = new Map<string, AddedLayer>();
 
+// Explicit bottom→top draw order for the added layers (T-031). When set, it is
+// the single source of truth for z-order and overrides the Map's insertion
+// order; the `layers` store drives it from its own list order. Null until the
+// store first sets it — until then we fall back to insertion order (oldest
+// bottom), which is the historical behaviour.
+let drawOrder: string[] | null = null;
+
+/**
+ * Set the bottom→top stacking order of the added layers (T-031). Ids not
+ * currently registered are ignored; any registered id missing from `ids` is
+ * drawn on top (so a just-added layer never vanishes if the store hasn't
+ * threaded it through yet). Re-syncs the overlay.
+ */
+export function setDeckLayerOrder(idsBottomToTop: string[]): void {
+  drawOrder = idsBottomToTop;
+  syncOverlay();
+}
+
 function ensureOverlay(map: maplibregl.Map): MapboxOverlay {
   if (overlay && overlayMap === map) return overlay;
   overlay = new MapboxOverlay({
@@ -462,7 +480,17 @@ function syncOverlay(): void {
   const map = getMap();
   if (!map) return;
   let layers: Layer[] = [];
-  for (const [id, al] of added) {
+  // Draw in the store-driven order when set (T-031), else Map insertion order.
+  // Registered ids missing from `drawOrder` are appended last (on top) so a
+  // freshly added layer is never dropped by a stale order list.
+  const ids = drawOrder
+    ? [
+        ...drawOrder.filter((id) => added.has(id)),
+        ...[...added.keys()].filter((id) => !drawOrder!.includes(id)),
+      ]
+    : [...added.keys()];
+  for (const id of ids) {
+    const al = added.get(id)!;
     if (!al.visible) continue;
     al.table.batches.forEach((batch, i) => {
       if (batch.numRows === 0) return;
