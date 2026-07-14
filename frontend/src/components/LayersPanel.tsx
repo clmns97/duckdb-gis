@@ -19,6 +19,33 @@ export function LayersPanel() {
   const list = layers.list();
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [propsId, setPropsId] = useState<string | null>(null);
+  // Drag-to-reorder z-order (T-031). `dragId` is the row being dragged; `dropAt`
+  // is the insertion point (0 = above the first row … list.length = below the
+  // last), rendered as an accent bar. Native HTML5 drag — no dnd dependency.
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropAt, setDropAt] = useState<number | null>(null);
+
+  const resetDrag = () => {
+    setDragId(null);
+    setDropAt(null);
+  };
+
+  // Insertion point for the row under the cursor: its top half drops *before*
+  // the row, its bottom half *after* it.
+  const overRow = (e: React.DragEvent, index: number) => {
+    if (dragId == null) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    const rect = e.currentTarget.getBoundingClientRect();
+    const after = e.clientY > rect.top + rect.height / 2;
+    setDropAt(after ? index + 1 : index);
+  };
+
+  const drop = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (dragId != null && dropAt != null) layers.reorder(dragId, dropAt);
+    resetDrag();
+  };
 
   // Right-click a layer → layer actions, reusing the shared ContextMenu (T-022).
   // "Zoom to layer" (QGIS "Zoom to Layer(s)") is disabled until the layer has a
@@ -46,17 +73,32 @@ export function LayersPanel() {
   return (
     <>
     <ul className="list-none m-0 p-0">
-      {list.map((layer) => (
+      {list.map((layer, index) => (
         <li
           key={layer.id}
-          className={`flex items-center gap-1.5 px-1 py-[3px] rounded-md text-editor hover:bg-gray-200 ${
+          className={`relative flex items-center gap-1.5 px-1 py-[3px] rounded-md text-editor hover:bg-gray-200 ${
             layer.status === "loading" ? "text-gray-500" : ""
-          }`}
-          title="Right-click for layer actions"
+          } ${dragId === layer.id ? "opacity-50" : ""}`}
+          title="Drag to reorder · right-click for layer actions"
+          draggable
+          onDragStart={(e) => {
+            setDragId(layer.id);
+            e.dataTransfer.effectAllowed = "move";
+            e.dataTransfer.setData("text/plain", layer.id);
+          }}
+          onDragOver={(e) => overRow(e, index)}
+          onDrop={drop}
+          onDragEnd={resetDrag}
           onContextMenu={(e) => openLayerMenu(e, layer)}
         >
+          {dropAt === index && (
+            <span className="pointer-events-none absolute left-0 right-0 -top-px h-0.5 rounded bg-accent" />
+          )}
+          {index === list.length - 1 && dropAt === list.length && (
+            <span className="pointer-events-none absolute left-0 right-0 -bottom-px h-0.5 rounded bg-accent" />
+          )}
           <span
-            className="w-3 h-3 shrink-0 rounded-[3px] bg-primary border border-accent"
+            className="w-3 h-3 shrink-0 rounded-[3px] bg-primary border border-accent cursor-grab"
             aria-hidden="true"
           />
           <span
@@ -81,6 +123,7 @@ export function LayersPanel() {
             className="shrink-0 leading-none text-gray-500 px-1 rounded-md cursor-pointer hover:bg-white hover:text-gray-900"
             title="Remove layer"
             aria-label={`Remove ${layer.name}`}
+            draggable={false}
             onClick={() => layers.remove(layer.id)}
           >
             ×
