@@ -56,6 +56,9 @@ export function requestSync(): void {
 // can rebuild its deck.gl layers (with updated highlight colors) without
 // re-querying DuckDB. Composed *over* the persistent added layers (see `added`).
 let rendered: { table: Table; spec: GeomSpec } | null = null;
+// Whether the Run preview is drawn. The SQL-result temp layer (T-027) toggles
+// this to hide/show without re-querying — selection and highlight state survive.
+let renderedVisible = true;
 
 // Persistent layers added from the catalog (T-024): each is an Arrow table +
 // its geometry spec + a user-editable style (T-010), drawn with static
@@ -198,6 +201,9 @@ export interface DeckTimings {
 
 export interface DeckOutcome {
   featureCount: number;
+  /** Result extent [xmin,ymin,xmax,ymax] (lon/lat), null when empty/all-NULL —
+   *  lets the SQL-result temp layer (T-027) support zoom-to like other layers. */
+  bounds: [number, number, number, number] | null;
   timings: DeckTimings;
 }
 
@@ -395,7 +401,11 @@ export async function renderGeoArrow(userSql: string): Promise<DeckOutcome> {
 
   if (probe.count === 0) {
     clearDeck();
-    return { featureCount: 0, timings: { queryMs: performance.now() - t0, parseMs: 0, bytes: 0 } };
+    return {
+      featureCount: 0,
+      bounds: null,
+      timings: { queryMs: performance.now() - t0, parseMs: 0, bytes: 0 },
+    };
   }
 
   // Carry a deterministic `__fid` alongside the encoded geometry so picked
@@ -407,6 +417,7 @@ export async function renderGeoArrow(userSql: string): Promise<DeckOutcome> {
   const t1 = performance.now();
 
   rendered = { table, spec };
+  renderedVisible = true; // a fresh Run is always shown, even if the last was hidden
 
   const map = getMap();
   if (map) {
@@ -417,6 +428,7 @@ export async function renderGeoArrow(userSql: string): Promise<DeckOutcome> {
 
   return {
     featureCount: probe.count,
+    bounds: probe.bounds,
     timings: { queryMs: t1 - t0, parseMs: t2 - t1, bytes },
   };
 }
@@ -499,7 +511,7 @@ function syncOverlay(): void {
       layers.push(al.spec.staticLayer(batch, geom, `added-${id}-${i}`, al.style));
     });
   }
-  if (rendered) layers.push(...buildLayers(rendered));
+  if (rendered && renderedVisible) layers.push(...buildLayers(rendered));
   // Render deck geometry beneath the editable working set when one exists, so
   // drawn/edited features stay visible on top (T-025). No-op otherwise.
   // `beforeId` is honoured by MapboxOverlay in interleaved mode but isn't in
@@ -564,6 +576,15 @@ export function setDeckLayerStyle(id: string, style: LayerStyle): void {
 /** Clear only the editor's Run preview; persistent added layers are kept. */
 export function clearDeck(): void {
   rendered = null;
+  renderedVisible = true;
+  syncOverlay();
+}
+
+/** Show/hide the Run preview without re-querying (T-027 temp-layer visibility).
+ *  Keeps `rendered` and its selection state intact so re-showing is instant. */
+export function setPreviewVisible(visible: boolean): void {
+  if (renderedVisible === visible) return;
+  renderedVisible = visible;
   syncOverlay();
 }
 

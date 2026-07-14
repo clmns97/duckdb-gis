@@ -3,6 +3,7 @@ import { EditorView, basicSetup } from "codemirror";
 import { keymap } from "@codemirror/view";
 import { sql, PostgreSQL } from "@codemirror/lang-sql";
 import { renderGeoArrow } from "../lib/deckRender";
+import { layers } from "../lib/layers";
 
 const DEFAULT_SQL = `SELECT 'Zürich' AS name, ST_Point(8.54, 47.37) AS geom
 UNION ALL SELECT 'Bern', ST_Point(7.45, 46.95)
@@ -19,13 +20,20 @@ export function EditorPanel() {
     const text = view.current?.state.doc.toString() ?? "";
     if (!text.trim()) return;
     setStatus({ kind: "running", msg: "Running…" });
+    // Give the Run result a home in the Layers panel as a single, replaceable
+    // temporary layer (T-027) — the geometry itself still renders on the pickable
+    // preview slot via renderGeoArrow, so it stays selectable.
+    layers.startPreview(text);
     try {
       const t0 = performance.now();
-      const { featureCount } = await renderGeoArrow(text);
+      const { featureCount, bounds } = await renderGeoArrow(text);
       const ms = Math.round(performance.now() - t0);
+      layers.readyPreview(bounds);
       setStatus({ kind: "ok", msg: `${featureCount} feature${featureCount === 1 ? "" : "s"} · ${ms} ms` });
     } catch (e) {
-      setStatus({ kind: "err", msg: e instanceof Error ? e.message : String(e) });
+      const msg = e instanceof Error ? e.message : String(e);
+      layers.errorPreview(msg);
+      setStatus({ kind: "err", msg });
     }
   };
 
