@@ -97,17 +97,17 @@ export function App() {
     setMenu({ x: e.clientX, y: e.clientY, items });
   };
 
-  // Overture quick-load (T-012): resolve the chosen extent to a bbox, then add
-  // one query-backed layer per selected theme. The S3 query itself is a
-  // placeholder until the data path lands (see lib/overture); errors surface on
-  // the layer row like any other failed layer.
+  // Overture quick-load (T-012 / T-029): resolve the chosen extent to a bbox,
+  // then add one query-backed layer per selected theme. Each theme's remote S3
+  // read is materialised into a local temp table *once* (a single S3 scan)
+  // before the layer renders from it — the render path otherwise scans the
+  // source twice (probe + Arrow), which over the network doubles the wall time.
+  // httpfs/S3 setup + the materialise run inside `addQuery`'s `prepare`, so any
+  // access or read failure surfaces on the layer row instead of being swallowed.
   const loadOverture = async (req: OvertureRequest) => {
     setTab("layers");
     const bbox = req.extent === "selected" ? await selectionBbox() : viewportBbox();
     if (!bbox) return; // no map / empty selection — nothing to clip to
-    // Bring up httpfs + anonymous S3 access on demand (T-008). If it fails the
-    // read below still errors readably on the layer row, so don't block on it.
-    await ensureOvertureAccess().catch(() => {});
     for (const themeId of req.themes) {
       const theme = OVERTURE_THEMES.find((t) => t.id === themeId);
       if (!theme) continue;
@@ -115,7 +115,13 @@ export function App() {
       void layers.addQuery({
         id,
         name: `Overture ${theme.label}`,
-        sql: buildOvertureQuery(theme, req.release, bbox),
+        sql: `SELECT geom FROM ${id}`,
+        prepare: async () => {
+          await ensureOvertureAccess();
+          await query(
+            `CREATE OR REPLACE TEMP TABLE ${id} AS ${buildOvertureQuery(theme, req.release, bbox)}`,
+          );
+        },
       });
     }
   };
@@ -129,6 +135,9 @@ export function App() {
         await query("INSTALL spatial; LOAD spatial;");
         await query("INSTALL arrow FROM community; LOAD arrow;");
         await query("INSTALL duck_geoarrow FROM community; LOAD duck_geoarrow;");
+        // Cache parquet metadata across queries so remote reads (Overture on S3,
+        // T-029) don't re-fetch file footers each scan — ~10x on repeat reads.
+        await query("SET enable_object_cache=true;");
       } catch {
         // ignore; catalog still loads, spatial/arrow queries will report errors
       }

@@ -2,6 +2,8 @@ import { useState, useSyncExternalStore } from "react";
 import {
   OVERTURE_THEMES,
   OVERTURE_RELEASES,
+  isLargeExtent,
+  viewportBbox,
   type ExtentMode,
   type OvertureRequest,
 } from "../lib/overture";
@@ -27,6 +29,12 @@ export function OvertureModal({
   const [themes, setThemes] = useState<Set<string>>(new Set());
   const [release, setRelease] = useState(OVERTURE_RELEASES[0]);
   const [extent, setExtent] = useState<ExtentMode>("viewport");
+
+  // Warn when the viewport extent is large enough that the direct-read path
+  // globs the whole-planet fileset and takes minutes (T-029). Captured on open
+  // (the map is behind the modal and not being panned); advisory, not blocking.
+  const [vpBbox] = useState(viewportBbox);
+  const viewportTooLarge = extent === "viewport" && vpBbox != null && isLargeExtent(vpBbox);
 
   // Enable the "selected feature" extent only when something is selected (T-003).
   const selVersion = useSyncExternalStore(selection.subscribe, () => selection.version);
@@ -133,10 +141,18 @@ export function OvertureModal({
         </label>
       </fieldset>
 
+      {viewportTooLarge && (
+        <p className="m-0 text-xs text-amber-600">
+          This extent is large — the load reads Overture's whole-planet files and
+          may take minutes (or stall on heavy themes like Buildings). Zoom in to a
+          city before loading for a fast result.
+        </p>
+      )}
+
       <ModalNote>
         Data is fetched from Overture GeoParquet on S3, clipped to the chosen
-        extent. Requires the S3/httpfs data path (T-008); until it lands a load
-        may report a missing-extension error.
+        extent. Large extents or heavy themes (Buildings, Transportation) can
+        take minutes; zoom in to narrow the extent.
       </ModalNote>
     </Modal>
   );

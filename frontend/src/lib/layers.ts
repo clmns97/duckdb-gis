@@ -151,16 +151,32 @@ export const layers = {
    * the Overture quick-load (T-012), and later the SQL editor (T-005), use this.
    * The caller owns `id` (the dedupe key) and the display `name`; `sql` must
    * project a `geom` column. Same loading/ready/error lifecycle as `add`.
+   *
+   * `prepare` runs once, inside the same try, before the render query — the
+   * Overture path uses it to bring up httpfs/S3 access and materialise its
+   * remote read into a local temp table (a single S3 scan; see App.loadOverture).
+   * Any setup/materialise failure therefore surfaces on the layer row like any
+   * other error instead of being swallowed by the caller.
    */
-  async addQuery(opts: { id: string; name: string; sql: string }): Promise<void> {
-    const { id, name, sql } = opts;
-    if (byId.has(id)) return; // dedupe: a layer with this id is already present
+  async addQuery(opts: {
+    id: string;
+    name: string;
+    sql: string;
+    prepare?: () => Promise<void>;
+  }): Promise<void> {
+    const { id, name, sql, prepare } = opts;
+    const existing = byId.get(id);
+    // Dedupe, but let a previously-failed layer be retried (e.g. Overture after
+    // zooming to a smaller extent or fixing access) — its row is replaced below.
+    if (existing && existing.status !== "error") return;
+    if (existing) removeDeckLayer(id);
 
     byId.set(id, { id, name, visible: true, status: "loading" });
-    order = [id, ...order];
+    if (!existing) order = [id, ...order]; // keep position on retry
     emit();
 
     try {
+      if (prepare) await prepare();
       const { bounds, style } = await addDeckLayer(id, sql);
       patch(id, { status: "ready", bounds, style });
       fitTo(bounds);

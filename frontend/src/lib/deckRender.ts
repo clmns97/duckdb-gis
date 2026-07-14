@@ -403,13 +403,18 @@ export async function renderGeoArrow(userSql: string): Promise<DeckOutcome> {
   };
 }
 
-// One cheap round-trip for everything Run needs before choosing a layer: the
-// geometry type (via any_value), the feature count, and the extent for fitBounds.
+// One cheap round-trip for everything Run needs before choosing a layer: a
+// representative geometry type, the feature count, and the extent for fitBounds.
+// Deliberately uses per-row scalars (`ST_GeometryType`/`ST_XMin` … then plain
+// `any_value`/`min`/`max`) rather than geometry-typed aggregates: combining
+// `any_value(geom)` with `ST_Extent_Agg(geom)` over the same column throws a
+// spurious "Only little-endian WKB is supported" in spatial for some geometries
+// (hit by Overture buildings/polygons; the encoder decodes the same rows fine).
 async function probeGeometry(innerSql: string): Promise<Probe> {
   const rows = await query(
-    `SELECT ST_GeometryType(any_value(geom)) AS gt, COUNT(*) AS n,
-            ST_XMin(ST_Extent_Agg(geom)) AS xmin, ST_YMin(ST_Extent_Agg(geom)) AS ymin,
-            ST_XMax(ST_Extent_Agg(geom)) AS xmax, ST_YMax(ST_Extent_Agg(geom)) AS ymax
+    `SELECT any_value(ST_GeometryType(geom)) AS gt, COUNT(*) AS n,
+            min(ST_XMin(geom)) AS xmin, min(ST_YMin(geom)) AS ymin,
+            max(ST_XMax(geom)) AS xmax, max(ST_YMax(geom)) AS ymax
      FROM (${innerSql}) _q WHERE geom IS NOT NULL`,
   );
   const r = rows[0] ?? {};
