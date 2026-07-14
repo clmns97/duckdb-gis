@@ -1,7 +1,9 @@
 import { DockviewReact, type DockviewReadyEvent, type IDockviewPanelProps } from "dockview";
 import "dockview/dist/styles/dockview.css";
 import { MapPanel } from "./panels/MapPanel";
+import { AttributesPanel } from "./panels/AttributesPanel";
 import { EditorPanel } from "./EditorPanel";
+import { setDockApi } from "../lib/dockBus";
 
 // The dockable workspace (T-005). The map and the SQL editor are dock panels in
 // a Dockview layout: the map fills the canvas and the editor docks below it by
@@ -19,9 +21,14 @@ import { EditorPanel } from "./EditorPanel";
 const components: Record<string, React.FunctionComponent<IDockviewPanelProps>> = {
   map: MapPanel,
   editor: () => <EditorPanel />,
+  // Attribute tables (T-026): one panel per layer, opened via dockBus.
+  attributes: AttributesPanel,
 };
 
 function onReady(event: DockviewReadyEvent) {
+  // Expose the dock api so the Layers panel can open attribute-table tabs
+  // (T-026) without prop-drilling — mirrors mapBus.
+  setDockApi(event.api);
   const map = event.api.addPanel({
     id: "map",
     component: "map",

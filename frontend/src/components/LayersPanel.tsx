@@ -1,5 +1,6 @@
 import { useState, useSyncExternalStore } from "react";
 import { layers, type ActiveLayer } from "../lib/layers";
+import { openAttributes } from "../lib/dockBus";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { LayerProperties } from "./LayerProperties";
 
@@ -62,6 +63,13 @@ export function LayersPanel() {
         label: "Zoom to layer",
         disabled: layer.status !== "ready" || layer.bounds == null,
         onSelect: () => layers.zoomTo(layer.id),
+      },
+      {
+        label: "Open attribute table",
+        // Query-backed layers (Overture / SQL result) have no catalog source to
+        // page yet (T-026 v1) — only catalog tables get a browsable grid.
+        disabled: !layer.source,
+        onSelect: () => openAttributes(layer),
       },
       {
         label: "Layer properties…",
