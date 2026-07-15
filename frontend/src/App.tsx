@@ -15,6 +15,7 @@ import { layers } from "./lib/layers";
 import { editing } from "./lib/editing";
 import { attach } from "./lib/attach";
 import { basemap, basemapMenuItems } from "./lib/basemaps";
+import { TOOLS } from "./lib/geoprocessing";
 import {
   OVERTURE_THEMES,
   buildOvertureQuery,
@@ -101,6 +102,24 @@ export function App() {
         },
       ],
     });
+  };
+
+  // Processing menu (T-004): a dropdown driven by the geoprocessing tool
+  // registry, anchored under its header button. A disabled tool shows why it
+  // can't run; run() errors surface on the catalog error line.
+  const openProcessingMenu = (e: React.MouseEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const items: MenuItem[] = TOOLS.map((tool) => {
+      const enabled = tool.enabled();
+      return {
+        label: enabled || !tool.disabledHint ? tool.label : `${tool.label} (${tool.disabledHint})`,
+        disabled: !enabled,
+        onSelect: () => {
+          tool.run().catch((err) => setError(err instanceof Error ? err.message : String(err)));
+        },
+      };
+    });
+    setMenu({ x: rect.left, y: rect.bottom + 4, items });
   };
 
   // Basemap picker (T-033): the Browser-pane entry opens the shared basemap
@@ -212,6 +231,9 @@ export function App() {
         </span>
         <b className="font-medium text-lg">duckdb-gis</b>
         <span className="flex-1" />
+        <Button variant="ghost" onClick={openProcessingMenu} title="Geoprocessing tools">
+          Processing
+        </Button>
         <Button variant="ghost">Help</Button>
       </header>
 
