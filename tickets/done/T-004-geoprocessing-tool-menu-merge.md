@@ -1,12 +1,12 @@
 ---
 id: T-004
 title: Geoprocessing tool menu (top bar) — first function: Merge selected features
-status: open
+status: done
 priority: P2
 area: frontend
 depends_on: [T-003]
 related: [T-025]
-branch:
+branch: t-033-t-004-basemaps-processing
 ---
 
 ## Goal
@@ -165,3 +165,23 @@ Design implications to keep the first cut from boxing us in:
   the dropdown as a **tool registry** and keep `run()` growable to a param
   dialog (Buffer/Simplify) and two-operand inputs (Difference/Clip) without
   building them now. First-cut scope unchanged: menu + Merge only.
+- 2026-07-16: **Implemented and done.** New `frontend/src/lib/geoprocessing.ts`:
+  a `GeoTool` registry (`{ id, label, enabled(), disabledHint?, run() }`) with
+  one entry, **Merge**. `enabled()` = `selection.size >= 2`; `run()` reads
+  `selection.query()`, rebuilds rows via `fidTaggedRelation(sql)` and filters on
+  `${FID} IN (...)`, then
+  `SELECT ST_Union_Agg(geom) AS geom FROM (<rel>) WHERE __fid IN (<fids>)`.
+  **Result handling (chosen first cut): render-only** — the geom query is passed
+  straight to `layers.addQuery({ id:"merge_result_<n>", name:"Merge result <n>",
+  sql })` (no `CREATE TABLE`; a session counter keeps ids distinct). Persisting
+  as a table (the `editing.commit()` pattern) is deferred. A top-bar **Processing**
+  ghost `Button` in the header (`App.tsx`, next to Help) opens `ContextMenu`
+  anchored under it, items generated from `TOOLS`: disabled tools append their
+  `disabledHint` in parens; `run()` rejections surface on the catalog error line.
+  Confirmed `ST_Union_Agg` exists in the loaded `spatial` build (probe:
+  `MULTIPOINT (0 0, 1 1)`). Verified: `pnpm typecheck` + `pnpm build` clean;
+  headless Playwright drive showed the Processing menu with **Merge** present and
+  correctly **disabled** with its hint when nothing is selected — zero errors.
+  The live selection→union→layer round-trip needs the extension server + loaded
+  data (best seen via the `preview` skill); the SQL itself is verified against
+  the real build. Later tools are the roadmap above (registry makes each +1 entry).
