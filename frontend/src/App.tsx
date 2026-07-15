@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { Dock } from "./components/Dock";
 import { Button } from "./components/Button";
 import { LayersPanel } from "./components/LayersPanel";
@@ -14,6 +14,7 @@ import { selection } from "./lib/selection";
 import { layers } from "./lib/layers";
 import { editing } from "./lib/editing";
 import { attach } from "./lib/attach";
+import { basemap, basemapMenuItems } from "./lib/basemaps";
 import {
   OVERTURE_THEMES,
   buildOvertureQuery,
@@ -39,6 +40,9 @@ export function App() {
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [overtureOpen, setOvertureOpen] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
+  // Re-render when the active basemap changes so both the Browser entry label
+  // and the pinned Layers row (via LayersPanel) reflect it.
+  useSyncExternalStore(basemap.subscribe, basemap.getSnapshot);
   // Left sidebar collapse (T-030). Collapsing hands the reclaimed width to the
   // map; a thin rail keeps the expand affordance visible. Persisted across
   // reloads. Toggle-only for v1 (no drag-resize).
@@ -97,6 +101,13 @@ export function App() {
         },
       ],
     });
+  };
+
+  // Basemap picker (T-033): the Browser-pane entry opens the shared basemap
+  // submenu, anchored under the button (same menu the pinned Layers row uses).
+  const openBasemapMenu = (e: React.MouseEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setMenu({ x: rect.left, y: rect.bottom + 4, items: basemapMenuItems() });
   };
 
   // Right-click a geometry-bearing table → "Add to map" (QGIS "Add Layer").
@@ -248,6 +259,18 @@ export function App() {
                 </span>
                 <span>Overture Maps</span>
                 <span className="ml-auto text-xs text-gray-500">quick load…</span>
+              </button>
+
+              <button
+                className="flex items-center gap-1.5 w-full mb-2 px-2 py-1.5 text-editor text-gray-900 text-left bg-subtle border border-gray-200 rounded-md cursor-pointer hover:border-primary-border-active hover:text-accent"
+                title="Switch the map basemap"
+                onClick={openBasemapMenu}
+              >
+                <span className="text-sm text-accent" aria-hidden="true">
+                  ▦
+                </span>
+                <span>Basemap</span>
+                <span className="ml-auto text-xs text-gray-500">{basemap.current().label}</span>
               </button>
 
               <div className="flex items-center gap-2 text-gray-500">

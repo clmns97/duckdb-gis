@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { setMap } from "../lib/mapBus";
+import { basemap } from "../lib/basemaps";
 
 export function MapView() {
   const ref = useRef<HTMLDivElement>(null);
@@ -10,13 +11,16 @@ export function MapView() {
     if (!ref.current) return;
     const map = new maplibregl.Map({
       container: ref.current,
-      // Placeholder basemap; real layers will come from native DuckDB
-      // (ST_AsMVT via a custom protocol) and PMTiles in later phases.
-      style: "https://demotiles.maplibre.org/style.json",
+      // Empty style; the basemap (T-033) is added as a raster source/layer at
+      // the bottom, and data layers come from native DuckDB (ST_AsMVT via a
+      // custom protocol / GeoArrow deck.gl overlay).
+      style: { version: 8, sources: {}, layers: [] },
       center: [8.54, 47.37], // Zürich
       zoom: 4,
       attributionControl: { compact: true },
     });
+    // Add the default / last-chosen basemap once the (empty) style is ready.
+    basemap.applyInitial(map);
     // Shift-click is our additive-selection gesture (see deckRender picking).
     // MapLibre's shift+drag box-zoom otherwise swallows the shift+mousedown, so
     // deck.gl never computes a pick — disable it so selection wins the modifier.
