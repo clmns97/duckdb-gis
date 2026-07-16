@@ -5,6 +5,7 @@ import { openAttributes } from "../lib/dockBus";
 import { basemap, basemapMenuItems } from "../lib/basemaps";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { LayerProperties } from "./LayerProperties";
+import { SymbologyGlyph } from "./SymbologyGlyph";
 
 interface MenuState {
   x: number;
@@ -151,10 +152,7 @@ export function LayersPanel() {
           >
             {layer.visible ? <Eye size={14} strokeWidth={2} /> : <EyeOff size={14} strokeWidth={2} />}
           </button>
-          <span
-            className="w-3 h-3 shrink-0 rounded-[3px] bg-primary border border-accent"
-            aria-hidden="true"
-          />
+          <SymbologyGlyph kind={layer.geometryKind} style={layer.style} />
           <span
             className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap"
             title={
