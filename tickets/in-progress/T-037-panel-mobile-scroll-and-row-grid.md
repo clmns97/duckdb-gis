@@ -1,7 +1,7 @@
 ---
 id: T-037
 title: Lock left-panel to vertical scroll on touch + align rows on a shared grid
-status: open
+status: in-progress
 priority: P2
 area: frontend
 depends_on: []
@@ -59,14 +59,14 @@ the panel edge (App.tsx padding is `p-3`).
 
 ## Acceptance criteria
 
-- [ ] On touch, a vertical swipe scrolls the panel; the row contents do not slide
-      or rubber-band horizontally (tested in the preview on a phone / touch
-      emulation).
-- [ ] No leading icon (Eye, swatch/glyph, MapIcon) is clipped in any state.
-- [ ] The ⋮ kebab buttons align in one column across data-layer rows and the
+- [~] On touch, a vertical swipe scrolls the panel; the row contents do not slide
+      or rubber-band horizontally (code done — Part 1; preview check pending).
+- [x] No leading icon (Eye, swatch/glyph, MapIcon) is clipped in any state.
+- [x] The ⋮ kebab buttons align in one column across data-layer rows and the
       pinned Basemap row (and any other pinned rows).
-- [ ] Desktop drag-to-reorder (T-031) still works after the touch-action change.
-- [ ] `pnpm --dir frontend typecheck` and `build` pass; exercised in the preview.
+- [~] Desktop drag-to-reorder (T-031) still works after the touch-action change
+      (`touch-action` doesn't affect pointer drag; preview check pending).
+- [x] `pnpm --dir frontend typecheck` and `build` pass; [ ] exercised in the preview.
 
 ## Progress log
 
@@ -81,3 +81,12 @@ the panel edge (App.tsx padding is `p-3`).
   drag-to-reorder (T-031) is unaffected by `touch-action`. Ticket stays open for
   **Part 2 (shared row-grid / kebab alignment)** across data-layer + pinned
   basemap rows — deferred. `typecheck` + `build` clean.
+- 2026-07-16: **Part 2 (shared row grid) done.** Centralised the column widths
+  as `LEAD_SLOT` / `GLYPH_SLOT` / `KEBAB_SLOT` / `REMOVE_SLOT` constants in
+  `LayersPanel.tsx` and applied them to both the data-layer row and the pinned
+  basemap row. The basemap row now renders empty spacers for the missing
+  symbology-glyph and X-remove columns, so its leading icon + name line up with
+  data-layer rows and its ⋮ lands in the same column as theirs (the always-space
+  `opacity-0` X slot is what fixes the kebab x-position). Future pinned rows
+  reuse the same constants. `typecheck` + `build` clean. Only the preview
+  eyeball (touch scroll + visual alignment on a phone) remains before → done.
