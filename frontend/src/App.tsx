@@ -288,7 +288,7 @@ export function App() {
           </aside>
         ) : (
         <aside className="w-[300px] shrink-0 border-r border-gray-200 p-3 overflow-hidden flex flex-col">
-          <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-[18px]">
+          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden touch-pan-y overscroll-x-none flex flex-col gap-[18px]">
           {tab === "layers" ? (
             <section>
               <SectionHeader label="Layers" addTitle="Add layer" />

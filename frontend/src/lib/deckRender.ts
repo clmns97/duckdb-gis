@@ -259,6 +259,17 @@ let paletteTick = 0; // monotonic so removing a layer never recolours the others
 // Seed a new layer's editable style (T-010) from the next palette. Opacity and
 // widths lean on geometry type so polygons default translucent with a thin
 // outline while points/lines read solid — the prior hardcoded look, now editable.
+/** Geometry family a layer draws with — drives the Layers-panel symbology glyph
+ *  (T-039). Collapses the Multi* probe types onto their base family. */
+export type GeometryKind = "point" | "line" | "polygon";
+
+/** Reduce a raw `ST_GeometryType` probe string to its symbology family. */
+export function geometryKindOf(geomType: string): GeometryKind {
+  if (geomType.includes("POINT")) return "point";
+  if (geomType.includes("POLYGON")) return "polygon";
+  return "line";
+}
+
 function nextStyle(geomType: string): LayerStyle {
   const p = PALETTES[paletteTick++ % PALETTES.length];
   const polygon = geomType.includes("POLYGON");
@@ -528,6 +539,9 @@ export interface AddedLayerOutcome {
    *  it for the Symbology UI. On re-add of an existing id the current style is
    *  kept. */
   style: LayerStyle;
+  /** Geometry family (T-039), resolved once from the add-time probe so the
+   *  Layers panel can draw a symbology glyph without re-probing per render. */
+  geometryKind: GeometryKind;
 }
 
 /**
@@ -549,7 +563,12 @@ export async function addDeckLayer(id: string, sourceSql: string): Promise<Added
   const style = added.get(id)?.style ?? nextStyle(probe.type);
   added.set(id, { table, spec, style, visible: true });
   syncOverlay();
-  return { featureCount: probe.count, bounds: probe.bounds, style };
+  return {
+    featureCount: probe.count,
+    bounds: probe.bounds,
+    style,
+    geometryKind: geometryKindOf(probe.type),
+  };
 }
 
 /** Drop a persistent added layer from the overlay. */

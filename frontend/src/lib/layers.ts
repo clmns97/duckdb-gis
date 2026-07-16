@@ -30,9 +30,10 @@ import {
   setPreviewVisible,
   clearDeck,
   type LayerStyle,
+  type GeometryKind,
 } from "./deckRender";
 
-export type { LayerStyle };
+export type { LayerStyle, GeometryKind };
 
 /** A concrete geometry column in the catalog: the source of one layer. */
 export interface LayerSource {
@@ -61,6 +62,9 @@ export interface ActiveLayer {
   /** Editable symbology (T-010), mirrored from the render layer so the Layer
    *  Properties ▸ Symbology tab can drive it. Present once the layer is ready. */
   style?: LayerStyle;
+  /** Geometry family (T-039), resolved once at add time, so the Layers panel can
+   *  draw a symbology glyph tinted from `style`. Absent while still loading. */
+  geometryKind?: GeometryKind;
   /** True for the SQL-editor Run result (T-027): a single, replaceable layer
    *  that mirrors the pickable preview slot rather than a persistent `added`
    *  layer. Marked in the panel so the user knows it isn't persisted. */
@@ -167,8 +171,8 @@ export const layers = {
 
     try {
       const sql = `SELECT ${ident(source.geomColumn)} AS geom FROM ${qualified(source)}`;
-      const { bounds, style } = await addDeckLayer(id, sql);
-      patch(id, { status: "ready", bounds, style });
+      const { bounds, style, geometryKind } = await addDeckLayer(id, sql);
+      patch(id, { status: "ready", bounds, style, geometryKind });
       fitTo(bounds);
     } catch (e) {
       patch(id, { status: "error", error: e instanceof Error ? e.message : String(e) });
@@ -207,8 +211,8 @@ export const layers = {
 
     try {
       if (prepare) await prepare();
-      const { bounds, style } = await addDeckLayer(id, sql);
-      patch(id, { status: "ready", bounds, style });
+      const { bounds, style, geometryKind } = await addDeckLayer(id, sql);
+      patch(id, { status: "ready", bounds, style, geometryKind });
       fitTo(bounds);
     } catch (e) {
       patch(id, { status: "error", error: e instanceof Error ? e.message : String(e) });
