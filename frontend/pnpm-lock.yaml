@@ -47,6 +47,9 @@ importers:
       dockview:
         specifier: ^6.6.1
         version: 6.6.1(react@19.2.7)
+      lucide-react:
+        specifier: ^1.24.0
+        version: 1.24.0(react@19.2.7)
       maplibre-gl:
         specifier: ^5.24.0
         version: 5.24.0
@@ -1016,6 +1019,11 @@ packages:
 
   long@5.3.2:
     resolution: {integrity: sha512-mNAgZ1GmyNhD7AuqnTG3/VQ26o760+ZYBPKjPvugO8+nLbYfX6TVpJPseBvopbdY+qpZ/lKUnmEc1LeZYS3QAA==}
+
+  lucide-react@1.24.0:
+    resolution: {integrity: sha512-YT6mBD8lGKkg4nM39enlm94/sfJIiW0YKUT60fBy4YK8tai31ylg1VhGNWxkpSKHo9UagfnZqwIff3HTDQwXeA==}
+    peerDependencies:
+      react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
   lz4js@0.2.0:
     resolution: {integrity: sha512-gY2Ia9Lm7Ep8qMiuGRhvUq0Q7qUereeldZPP1PMEJxPtEWHJLqw9pgX68oHajBH0nzJK4MaZEA/YNV3jT8u8Bg==}
@@ -2322,6 +2330,10 @@ snapshots:
   long@3.2.0: {}
 
   long@5.3.2: {}
+
+  lucide-react@1.24.0(react@19.2.7):
+    dependencies:
+      react: 19.2.7
 
   lz4js@0.2.0:
     optional: true

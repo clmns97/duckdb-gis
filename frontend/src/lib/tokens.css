@@ -34,10 +34,16 @@
 
   /* ---- Neutrals (Tailwind gray family, as used by DuckDB UI) --------- */
   --color-white: #ffffff;
-  --color-gray-200: #e5e7eb; /* borders, dividers, hover fills */
+  --color-gray-100: #f3f4f6; /* THE universal hover fill (rows/buttons/menus) */
+  --color-gray-200: #e5e7eb; /* solid borders, dividers */
+  --color-gray-400: #9ca3af; /* faint icon/border (basemap swatch) */
   --color-gray-500: #6b7280; /* muted / placeholder / icons */
-  --color-gray-600: #4b5563; /* secondary text */
+  --color-gray-600: #4b5563; /* secondary text, section headers */
   --color-gray-900: #111827; /* primary text */
+
+  /* ---- Grid / hairline (verified: results grid, COMPONENTS.md §7) ---- */
+  --color-grid-cell: #fcfcfd;       /* results header bg + data-cell hover */
+  --color-hairline: rgba(0, 0, 0, 0.1); /* grid lines, menu/input borders */
 
   /* ---- Accent (indigo) ---------------------------------------------- */
   --color-accent: #494ab9;               /* verified: links, SQL keywords, accents */
@@ -98,6 +104,7 @@
   /* ---- SQL syntax highlighting (CodeMirror) ------------------------- */
   --syntax-keyword: var(--color-accent); /* SELECT, CREATE, FROM ... */
   --syntax-string: var(--color-success); /* verified teal for strings/literals */
+  --syntax-number: #92400e; /* verified amber — numeric literals */
   --syntax-comment: var(--color-gray-500); /* italic */
 
   /* ---- Layout -------------------------------------------------------- */
