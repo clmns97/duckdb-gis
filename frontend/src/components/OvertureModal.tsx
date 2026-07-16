@@ -9,6 +9,7 @@ import {
 } from "../lib/overture";
 import { selection } from "../lib/selection";
 import { Modal, Button, ModalNote } from "./Modal";
+import { OvertureLogo } from "./OvertureLogo";
 
 // Overture quick-load form (T-012), QuickOSM-style: pick theme(s), a release
 // (latest preselected), and an extent, then Load. Purely a form — it collects
@@ -60,7 +61,12 @@ export function OvertureModal({
 
   return (
     <Modal
-      title="Add Overture Maps data"
+      title={
+        <span className="flex items-center gap-2">
+          <OvertureLogo size={18} className="shrink-0" />
+          Add Overture Maps data
+        </span>
+      }
       onClose={onClose}
       footer={
         <>

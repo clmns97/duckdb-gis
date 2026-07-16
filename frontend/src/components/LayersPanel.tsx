@@ -1,4 +1,5 @@
 import { useState, useSyncExternalStore } from "react";
+import { Eye, EyeOff, GripVertical, X, Map as MapIcon, EllipsisVertical } from "lucide-react";
 import { layers, type ActiveLayer } from "../lib/layers";
 import { openAttributes } from "../lib/dockBus";
 import { basemap, basemapMenuItems } from "../lib/basemaps";
@@ -28,6 +29,8 @@ export function LayersPanel() {
   // last), rendered as an accent bar. Native HTML5 drag — no dnd dependency.
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropAt, setDropAt] = useState<number | null>(null);
+  // Persistent selected-row highlight (matches the DuckDB tree selection).
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const resetDrag = () => {
     setDragId(null);
@@ -78,6 +81,10 @@ export function LayersPanel() {
         label: "Layer properties…",
         onSelect: () => setPropsId(layer.id),
       },
+      {
+        label: "Remove layer",
+        onSelect: () => layers.remove(layer.id),
+      },
     ];
     setMenu({ x: e.clientX, y: e.clientY, items });
   };
@@ -100,13 +107,18 @@ export function LayersPanel() {
     {list.length === 0 ? (
       <p className="mt-0.5 text-editor text-gray-500 italic">No layers yet</p>
     ) : (
-    <ul className="list-none m-0 p-0">
-      {list.map((layer, index) => (
+    <ul className="list-none m-0 p-0 -mx-3">
+      {list.map((layer, index) => {
+        const dim =
+          layer.status === "loading" || (!layer.visible && layer.status === "ready");
+        return (
         <li
           key={layer.id}
-          className={`relative flex items-center gap-1.5 px-1 py-[3px] rounded-md text-editor hover:bg-gray-200 ${
-            layer.status === "loading" ? "text-gray-500" : ""
-          } ${dragId === layer.id ? "opacity-50" : ""}`}
+          className={`group relative flex items-center gap-1.5 h-7 pl-2 pr-1 text-editor select-none hover:bg-gray-100 ${
+            dim ? "text-gray-500" : ""
+          } ${dragId === layer.id ? "opacity-50" : ""} ${
+            selectedId === layer.id ? "bg-gray-100" : ""
+          }`}
           title="Drag to reorder · right-click for layer actions"
           draggable
           onDragStart={(e) => {
@@ -117,6 +129,7 @@ export function LayersPanel() {
           onDragOver={(e) => overRow(e, index)}
           onDrop={drop}
           onDragEnd={resetDrag}
+          onClick={() => setSelectedId(layer.id)}
           onContextMenu={(e) => openLayerMenu(e, layer)}
         >
           {dropAt === index && (
@@ -125,8 +138,21 @@ export function LayersPanel() {
           {index === list.length - 1 && dropAt === list.length && (
             <span className="pointer-events-none absolute left-0 right-0 -bottom-px h-0.5 rounded bg-accent" />
           )}
+          <button
+            className="w-4 h-4 grid place-items-center shrink-0 text-gray-500 cursor-pointer hover:text-gray-900 disabled:opacity-40 disabled:cursor-default"
+            title={layer.visible ? "Hide layer" : "Show layer"}
+            aria-label={layer.visible ? `Hide ${layer.name}` : `Show ${layer.name}`}
+            disabled={layer.status !== "ready"}
+            draggable={false}
+            onClick={(e) => {
+              e.stopPropagation();
+              layers.setVisible(layer.id, !layer.visible);
+            }}
+          >
+            {layer.visible ? <Eye size={14} strokeWidth={2} /> : <EyeOff size={14} strokeWidth={2} />}
+          </button>
           <span
-            className="w-3 h-3 shrink-0 rounded-[3px] bg-primary border border-accent cursor-grab"
+            className="w-3 h-3 shrink-0 rounded-[3px] bg-primary border border-accent"
             aria-hidden="true"
           />
           <span
@@ -147,11 +173,6 @@ export function LayersPanel() {
               temp
             </span>
           )}
-          {!layer.visible && layer.status === "ready" && (
-            <span className="shrink-0 text-xs text-gray-500" title="Hidden">
-              hidden
-            </span>
-          )}
           {layer.status === "loading" && (
             <span className="shrink-0 text-xs text-gray-500">loading…</span>
           )}
@@ -160,33 +181,64 @@ export function LayersPanel() {
               failed
             </span>
           )}
+          <GripVertical
+            size={14}
+            strokeWidth={2}
+            className="shrink-0 text-gray-400 opacity-0 group-hover:opacity-100 cursor-grab"
+            aria-hidden="true"
+          />
           <button
-            className="shrink-0 leading-none text-gray-500 px-1 rounded-md cursor-pointer hover:bg-white hover:text-gray-900"
+            className="w-6 h-6 grid place-items-center shrink-0 rounded text-gray-400 cursor-pointer hover:bg-white hover:text-gray-900"
+            title="Layer actions"
+            aria-label={`Actions for ${layer.name}`}
+            draggable={false}
+            onClick={(e) => {
+              e.stopPropagation();
+              openLayerMenu(e, layer);
+            }}
+          >
+            <EllipsisVertical size={15} strokeWidth={2} />
+          </button>
+          <button
+            className="w-4 h-4 grid place-items-center shrink-0 rounded text-gray-500 cursor-pointer opacity-0 group-hover:opacity-100 hover:bg-white hover:text-gray-900"
             title="Remove layer"
             aria-label={`Remove ${layer.name}`}
             draggable={false}
-            onClick={() => layers.remove(layer.id)}
+            onClick={(e) => {
+              e.stopPropagation();
+              layers.remove(layer.id);
+            }}
           >
-            ×
+            <X size={14} strokeWidth={2} />
           </button>
         </li>
-      ))}
+        );
+      })}
     </ul>
     )}
     {/* Basemap — pinned below all data layers, not draggable / reorderable. */}
-    <div
-      className="mt-1 pt-1.5 border-t border-gray-200 flex items-center gap-1.5 px-1 py-[3px] rounded-md text-editor text-gray-500 cursor-context-menu hover:bg-gray-200"
-      title="Basemap — right-click to change (always below data layers)"
-      onContextMenu={openBasemapMenu}
-    >
-      <span
-        className="w-3 h-3 shrink-0 rounded-[3px] border-[1.5px] border-gray-400"
-        aria-hidden="true"
-      />
-      <span className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
-        {basemap.current().label}
-      </span>
-      <span className="shrink-0 text-[10px] uppercase tracking-wide text-gray-400">basemap</span>
+    <div className="-mx-3 mt-1 pt-1 border-t border-gray-200">
+      <div
+        className="flex items-center gap-1.5 h-7 pl-2 pr-1 text-editor text-gray-500 cursor-context-menu hover:bg-gray-100"
+        title="Basemap — right-click (or ⋮) to change (always below data layers)"
+        onContextMenu={openBasemapMenu}
+      >
+        <span className="w-4 h-4 shrink-0 grid place-items-center" aria-hidden="true">
+          <MapIcon size={14} strokeWidth={2} />
+        </span>
+        <span className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
+          {basemap.current().label}
+        </span>
+        <span className="shrink-0 text-[10px] uppercase tracking-wide text-gray-400">basemap</span>
+        <button
+          className="w-6 h-6 grid place-items-center shrink-0 rounded text-gray-400 cursor-pointer hover:bg-white hover:text-gray-900"
+          title="Change basemap"
+          aria-label="Change basemap"
+          onClick={openBasemapMenu}
+        >
+          <EllipsisVertical size={15} strokeWidth={2} />
+        </button>
+      </div>
     </div>
     {menu && (
       <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />

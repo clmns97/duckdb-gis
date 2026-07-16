@@ -1,8 +1,24 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
+import type { ReactNode } from "react";
+import {
+  PanelLeft,
+  Layers as LayersIcon,
+  Boxes,
+  Search,
+  Database,
+  Workflow,
+  Table2,
+  Map as MapIcon,
+  Plus,
+  ChevronRight,
+  ChevronDown,
+  EllipsisVertical,
+} from "lucide-react";
 import { Dock } from "./components/Dock";
 import { Button } from "./components/Button";
 import { LayersPanel } from "./components/LayersPanel";
 import { OvertureModal } from "./components/OvertureModal";
+import { OvertureLogo } from "./components/OvertureLogo";
 import { AttachModal } from "./components/AttachModal";
 import { ContextMenu, type MenuItem } from "./components/ContextMenu";
 import { loadCatalog, type CatalogDatabase, type CatalogTable } from "./lib/catalog";
@@ -68,6 +84,20 @@ export function App() {
     setTab(t);
     setCollapsed(false);
   };
+
+  // Browser tree node open/closed state. We track *collapsed* keys (presence =
+  // collapsed) so the default is "everything expanded" — the same all-open tree
+  // we had before the chevrons became functional. Keys: `db` and `db›schema`.
+  const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
+  const isOpen = (key: string) => !collapsedNodes.has(key);
+  const toggleNode = (key: string) =>
+    setCollapsedNodes((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  // Selected Browser table row (persistent highlight), keyed `db›schema›table`.
+  const [selectedTable, setSelectedTable] = useState<string | null>(null);
 
   // Re-read the live catalog into the Browser tree. Called after an attach /
   // detach so a newly `ATTACH`ed database (and its schemas/tables) shows up, or
@@ -244,16 +274,16 @@ export function App() {
               title="Expand panel"
               aria-label="Expand sidebar"
               onClick={() => setCollapsed(false)}
-              className="w-7 h-7 grid place-items-center rounded-md text-gray-500 cursor-pointer hover:bg-gray-200 hover:text-gray-900"
+              className="w-7 h-7 grid place-items-center rounded-md text-gray-500 cursor-pointer hover:bg-gray-100 hover:text-gray-900"
             >
-              »
+              <PanelLeft size={16} strokeWidth={2} />
             </button>
             <div className="w-6 border-t border-gray-200 my-1" />
             <RailTab active={tab === "layers"} onClick={() => revealTab("layers")} label="Layers">
-              ▤
+              <LayersIcon size={16} strokeWidth={2} />
             </RailTab>
             <RailTab active={tab === "browser"} onClick={() => revealTab("browser")} label="Browser">
-              ▦
+              <Boxes size={16} strokeWidth={2} />
             </RailTab>
           </aside>
         ) : (
@@ -261,12 +291,7 @@ export function App() {
           <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-[18px]">
           {tab === "layers" ? (
             <section>
-              <div className="flex items-center justify-between text-gray-500 text-sm font-medium mb-1.5">
-                <span>Layers</span>
-                <Button variant="mini" title="Add layer">
-                  +
-                </Button>
-              </div>
+              <SectionHeader label="Layers" addTitle="Add layer" />
               <LayersPanel />
             </section>
           ) : (
@@ -276,9 +301,7 @@ export function App() {
                 title="Add Overture Maps data (QuickOSM-style)"
                 onClick={() => setOvertureOpen(true)}
               >
-                <span className="text-sm text-accent" aria-hidden="true">
-                  ◈
-                </span>
+                <OvertureLogo size={16} className="shrink-0" />
                 <span>Overture Maps</span>
                 <span className="ml-auto text-xs text-gray-500">quick load…</span>
               </button>
@@ -288,18 +311,13 @@ export function App() {
                 title="Switch the map basemap"
                 onClick={openBasemapMenu}
               >
-                <span className="text-sm text-accent" aria-hidden="true">
-                  ▦
-                </span>
+                <MapIcon size={15} strokeWidth={2} className="shrink-0 text-accent" aria-hidden="true" />
                 <span>Basemap</span>
                 <span className="ml-auto text-xs text-gray-500">{basemap.current().label}</span>
               </button>
 
               <div className="flex items-center gap-2 text-gray-500">
-                <svg viewBox="0 0 16 16" className="w-4 h-4 shrink-0" aria-hidden="true">
-                  <circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
-                  <line x1="10.5" y1="10.5" x2="14" y2="14" stroke="currentColor" strokeWidth="1.4" />
-                </svg>
+                <Search size={16} strokeWidth={2} className="shrink-0" aria-hidden="true" />
                 <input
                   type="text"
                   placeholder="Search"
@@ -309,16 +327,11 @@ export function App() {
               </div>
 
               <section>
-                <div className="flex items-center justify-between text-gray-500 text-sm font-medium mb-1.5">
-                  <span>Attached databases</span>
-                  <Button
-                    variant="mini"
-                    title="Attach database"
-                    onClick={() => setAttachOpen(true)}
-                  >
-                    +
-                  </Button>
-                </div>
+                <SectionHeader
+                  label="Attached databases"
+                  addTitle="Attach database"
+                  onAdd={() => setAttachOpen(true)}
+                />
 
                 {error ? (
                   <p className="mt-0.5 text-editor text-danger">Catalog error: {error}</p>
@@ -327,57 +340,91 @@ export function App() {
                 ) : databases.length === 0 ? (
                   <p className="mt-0.5 text-editor text-gray-500 italic">No databases</p>
                 ) : (
-                  <ul className="list-none m-0 p-0">
-                    {databases.map((db) => (
-                      <li key={db.name}>
-                        <div
-                          className={`flex items-center gap-1.5 px-1 py-[3px] rounded-md text-editor hover:bg-gray-200 ${
-                            attach.has(db.name) ? "cursor-context-menu" : "cursor-default"
-                          }`}
-                          title={attach.has(db.name) ? "Right-click to detach" : undefined}
-                          onContextMenu={(e) => openDatabaseMenu(e, db.name)}
-                        >
-                          <span className="text-[10px] text-gray-500 w-2.5">▾</span>
-                          <span
-                            className="w-3 h-3 rounded-[3px] border-[1.5px] border-gray-500"
-                            aria-hidden="true"
+                  <ul className="list-none m-0 p-0 -mx-3">
+                    {databases.map((db) => {
+                      const dbKey = db.name;
+                      const dbOpen = isOpen(dbKey);
+                      return (
+                        <li key={db.name}>
+                          <TreeRow
+                            depth={0}
+                            expandable
+                            open={dbOpen}
+                            onToggle={() => toggleNode(dbKey)}
+                            icon={<Database size={15} strokeWidth={2} className="text-gray-500" />}
+                            label={db.name}
+                            cursor={attach.has(db.name) ? "cursor-context-menu" : "cursor-pointer"}
+                            title={attach.has(db.name) ? "Right-click (or ⋮) to detach" : undefined}
+                            onClick={() => toggleNode(dbKey)}
+                            onContextMenu={(e) => openDatabaseMenu(e, db.name)}
+                            onMenu={attach.has(db.name) ? (e) => openDatabaseMenu(e, db.name) : undefined}
                           />
-                          <span>{db.name}</span>
-                        </div>
-                        <ul className="list-none m-0 p-0">
-                          {db.schemas.map((schema) => (
-                            <li key={schema.name}>
-                              <div className="flex items-center gap-1.5 pl-[22px] pr-1 py-[3px] rounded-md text-editor hover:bg-gray-200 cursor-default">
-                                <span className="text-gray-500 text-sm">▤</span>
-                                <span>{schema.name}</span>
-                              </div>
-                              {schema.tables.length > 0 && (
-                                <ul className="list-none m-0 p-0">
-                                  {schema.tables.map((t) => {
-                                    const geo = t.geomColumns.length > 0;
-                                    return (
-                                      <li
-                                        key={t.name}
-                                        className={`flex items-center gap-1.5 pl-10 pr-1 py-[3px] rounded-md text-editor hover:bg-gray-200 ${
-                                          geo ? "cursor-context-menu" : "cursor-default"
-                                        }`}
-                                        title={geo ? "Right-click to add to map" : undefined}
-                                        onContextMenu={(e) => openTableMenu(e, db.name, schema.name, t)}
-                                      >
-                                        <span className={`text-sm ${geo ? "text-accent" : "text-gray-500"}`}>
-                                          {geo ? "◈" : "▦"}
-                                        </span>
-                                        <span>{t.name}</span>
-                                      </li>
-                                    );
-                                  })}
-                                </ul>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
-                      </li>
-                    ))}
+                          {dbOpen && (
+                            <ul className="list-none m-0 p-0">
+                              {db.schemas.map((schema) => {
+                                const scKey = `${db.name}›${schema.name}`;
+                                const scOpen = isOpen(scKey);
+                                const hasTables = schema.tables.length > 0;
+                                return (
+                                  <li key={schema.name}>
+                                    <TreeRow
+                                      depth={1}
+                                      expandable={hasTables}
+                                      open={scOpen}
+                                      onToggle={() => toggleNode(scKey)}
+                                      icon={<Workflow size={15} strokeWidth={2} className="text-gray-500" />}
+                                      label={schema.name}
+                                      cursor={hasTables ? "cursor-pointer" : "cursor-default"}
+                                      onClick={() => hasTables && toggleNode(scKey)}
+                                    />
+                                    {scOpen && hasTables && (
+                                      <ul className="list-none m-0 p-0">
+                                        {schema.tables.map((t) => {
+                                          const geo = t.geomColumns.length > 0;
+                                          const tKey = `${db.name}›${schema.name}›${t.name}`;
+                                          return (
+                                            <li key={t.name}>
+                                              <TreeRow
+                                                depth={2}
+                                                expandable={false}
+                                                icon={
+                                                  <Table2
+                                                    size={15}
+                                                    strokeWidth={2}
+                                                    className={geo ? "text-accent" : "text-gray-500"}
+                                                  />
+                                                }
+                                                label={t.name}
+                                                selected={selectedTable === tKey}
+                                                cursor={geo ? "cursor-context-menu" : "cursor-pointer"}
+                                                title={geo ? "Right-click (or ⋮) to add to map" : undefined}
+                                                onClick={() => setSelectedTable(tKey)}
+                                                onContextMenu={(e) => {
+                                                  setSelectedTable(tKey);
+                                                  openTableMenu(e, db.name, schema.name, t);
+                                                }}
+                                                onMenu={
+                                                  geo
+                                                    ? (e) => {
+                                                        setSelectedTable(tKey);
+                                                        openTableMenu(e, db.name, schema.name, t);
+                                                      }
+                                                    : undefined
+                                                }
+                                              />
+                                            </li>
+                                          );
+                                        })}
+                                      </ul>
+                                    )}
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </section>
@@ -401,9 +448,9 @@ export function App() {
               title="Collapse panel"
               aria-label="Collapse sidebar"
               onClick={() => setCollapsed(true)}
-              className="self-center px-1.5 py-1 rounded-md text-gray-500 cursor-pointer hover:bg-gray-200 hover:text-gray-900"
+              className="self-center w-7 h-7 grid place-items-center rounded-md text-gray-500 cursor-pointer hover:bg-gray-100 hover:text-gray-900"
             >
-              «
+              <PanelLeft size={16} strokeWidth={2} />
             </button>
           </div>
         </aside>
@@ -429,6 +476,104 @@ export function App() {
   );
 }
 
+// A DuckDB-style sidebar section header: 12px medium gray-600 label with an
+// optional trailing "+" icon button (Attach database / Add layer).
+function SectionHeader({
+  label,
+  addTitle,
+  onAdd,
+}: {
+  label: string;
+  addTitle: string;
+  onAdd?: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between text-gray-600 text-sm font-medium mb-1.5">
+      <span>{label}</span>
+      <Button variant="icon" title={addTitle} onClick={onAdd}>
+        <Plus size={16} strokeWidth={2} />
+      </Button>
+    </div>
+  );
+}
+
+// One row in the Browser catalog tree (database / schema / table). Flat and
+// square in the DuckDB style: full-bleed hover fill, a disclosure chevron (or a
+// spacer for leaves), a type icon, and a truncating label. `depth` drives the
+// indent; `selected` keeps a persistent highlight (matches DuckDB's selected
+// tree row). When `onMenu` is set the row carries a trailing kebab that opens
+// the same actions menu as right-click — so the actions are reachable on touch
+// devices, which have no context-menu gesture.
+function TreeRow({
+  depth,
+  expandable,
+  open,
+  onToggle,
+  icon,
+  label,
+  selected = false,
+  cursor = "cursor-default",
+  title,
+  onClick,
+  onContextMenu,
+  onMenu,
+}: {
+  depth: number;
+  expandable: boolean;
+  open?: boolean;
+  onToggle?: () => void;
+  icon: ReactNode;
+  label: string;
+  selected?: boolean;
+  cursor?: string;
+  title?: string;
+  onClick?: () => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
+  onMenu?: (e: React.MouseEvent) => void;
+}) {
+  return (
+    <div
+      className={`group flex items-center gap-1.5 h-7 pr-1 text-editor select-none hover:bg-gray-100 ${cursor} ${
+        selected ? "bg-gray-100" : ""
+      }`}
+      style={{ paddingLeft: 12 + depth * 14 }}
+      title={title}
+      onClick={onClick}
+      onContextMenu={onContextMenu}
+    >
+      {expandable ? (
+        <button
+          className="w-4 h-4 grid place-items-center shrink-0 text-gray-500 cursor-pointer hover:text-gray-900"
+          aria-label={open ? "Collapse" : "Expand"}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggle?.();
+          }}
+        >
+          {open ? <ChevronDown size={14} strokeWidth={2} /> : <ChevronRight size={14} strokeWidth={2} />}
+        </button>
+      ) : (
+        <span className="w-4 shrink-0" aria-hidden="true" />
+      )}
+      <span className="w-4 h-4 shrink-0 grid place-items-center">{icon}</span>
+      <span className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{label}</span>
+      {onMenu && (
+        <button
+          className="w-6 h-6 grid place-items-center shrink-0 rounded text-gray-400 cursor-pointer hover:bg-white hover:text-gray-900"
+          title="Actions"
+          aria-label={`Actions for ${label}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onMenu(e);
+          }}
+        >
+          <EllipsisVertical size={15} strokeWidth={2} />
+        </button>
+      )}
+    </div>
+  );
+}
+
 // Sidebar panel switcher tab (Layers / Browser), QGIS-style: an indigo top
 // border marks the active panel, mirroring the Layer Properties tab strip.
 function SidebarTab({
@@ -438,7 +583,7 @@ function SidebarTab({
 }: {
   active: boolean;
   onClick: () => void;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <button
@@ -466,14 +611,14 @@ function RailTab({
   active: boolean;
   onClick: () => void;
   label: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <button
       title={label}
       aria-label={label}
       onClick={onClick}
-      className={`w-7 h-7 grid place-items-center rounded-md border-l-2 cursor-pointer hover:bg-gray-200 hover:text-gray-900 ${
+      className={`w-7 h-7 grid place-items-center rounded-md border-l-2 cursor-pointer hover:bg-gray-100 hover:text-gray-900 ${
         active ? "text-gray-900 border-accent" : "text-gray-500 border-transparent"
       }`}
     >
