@@ -13,6 +13,18 @@ interface MenuState {
   items: MenuItem[];
 }
 
+// Shared row column template (T-037): data-layer rows and the pinned basemap row
+// use the same fixed-width slots — a leading icon, a symbology-glyph slot, the
+// flexible name, then a trailing ⋮ actions column — so the ⋮ kebabs and leading
+// glyphs line up across both. A row lacking a given control renders an empty
+// spacer of the same width to hold the column (the X-remove slot in particular
+// keeps every ⋮ in the same x-position). Any future pinned row reuses these.
+const LEAD_SLOT = "w-4 h-4 shrink-0 grid place-items-center"; // eye toggle / basemap icon
+const GLYPH_SLOT = "w-3 shrink-0"; // symbology glyph (SymbologyGlyph is w-3) / spacer
+const KEBAB_SLOT =
+  "w-6 h-6 grid place-items-center shrink-0 rounded text-gray-400 cursor-pointer hover:bg-white hover:text-gray-900";
+const REMOVE_SLOT = "w-4 h-4 shrink-0"; // X-remove button / spacer
+
 // The Layers panel body: one row per active layer (T-021), or the empty state.
 // Subscribes to the active-layers store; `version` is the external snapshot
 // (a fresh `list()` array would otherwise trip the identity check), mirroring
@@ -140,7 +152,7 @@ export function LayersPanel() {
             <span className="pointer-events-none absolute left-0 right-0 -bottom-px h-0.5 rounded bg-accent" />
           )}
           <button
-            className="w-4 h-4 grid place-items-center shrink-0 text-gray-500 cursor-pointer hover:text-gray-900 disabled:opacity-40 disabled:cursor-default"
+            className={`${LEAD_SLOT} text-gray-500 cursor-pointer hover:text-gray-900 disabled:opacity-40 disabled:cursor-default`}
             title={layer.visible ? "Hide layer" : "Show layer"}
             aria-label={layer.visible ? `Hide ${layer.name}` : `Show ${layer.name}`}
             disabled={layer.status !== "ready"}
@@ -186,7 +198,7 @@ export function LayersPanel() {
             aria-hidden="true"
           />
           <button
-            className="w-6 h-6 grid place-items-center shrink-0 rounded text-gray-400 cursor-pointer hover:bg-white hover:text-gray-900"
+            className={KEBAB_SLOT}
             title="Layer actions"
             aria-label={`Actions for ${layer.name}`}
             draggable={false}
@@ -198,7 +210,7 @@ export function LayersPanel() {
             <EllipsisVertical size={15} strokeWidth={2} />
           </button>
           <button
-            className="w-4 h-4 grid place-items-center shrink-0 rounded text-gray-500 cursor-pointer opacity-0 group-hover:opacity-100 hover:bg-white hover:text-gray-900"
+            className={`${REMOVE_SLOT} grid place-items-center rounded text-gray-500 cursor-pointer opacity-0 group-hover:opacity-100 hover:bg-white hover:text-gray-900`}
             title="Remove layer"
             aria-label={`Remove ${layer.name}`}
             draggable={false}
@@ -221,21 +233,27 @@ export function LayersPanel() {
         title="Basemap — right-click (or ⋮) to change (always below data layers)"
         onContextMenu={openBasemapMenu}
       >
-        <span className="w-4 h-4 shrink-0 grid place-items-center" aria-hidden="true">
+        <span className={LEAD_SLOT} aria-hidden="true">
           <MapIcon size={14} strokeWidth={2} />
         </span>
+        {/* No symbology glyph for the basemap — hold the column so the name lines
+            up with data-layer rows. */}
+        <span className={GLYPH_SLOT} aria-hidden="true" />
         <span className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
           {basemap.current().label}
         </span>
         <span className="shrink-0 text-[10px] uppercase tracking-wide text-gray-400">basemap</span>
         <button
-          className="w-6 h-6 grid place-items-center shrink-0 rounded text-gray-400 cursor-pointer hover:bg-white hover:text-gray-900"
+          className={KEBAB_SLOT}
           title="Change basemap"
           aria-label="Change basemap"
           onClick={openBasemapMenu}
         >
           <EllipsisVertical size={15} strokeWidth={2} />
         </button>
+        {/* No remove action — hold the X-remove column so the ⋮ above lines up
+            with the data-layer rows' ⋮. */}
+        <span className={REMOVE_SLOT} aria-hidden="true" />
       </div>
     </div>
     {menu && (
