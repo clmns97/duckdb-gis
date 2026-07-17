@@ -1,0 +1,42 @@
+{
+  "name": "@duckdb-gis/ui-kit",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "duckdb-gis UI kit — the frontend's presentational primitives, packaged as a compiled library + Storybook for fast per-component iteration and claude.ai/design (design-sync). Source of truth stays in ../frontend/src; this package imports it in place.",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./styles.css": "./dist/styles.css"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup && tailwindcss -i src/styles.css -o dist/styles.css",
+    "typecheck": "tsc --noEmit",
+    "storybook": "storybook dev -p 6006 --no-open",
+    "build-storybook": "storybook build"
+  },
+  "dependencies": {
+    "lucide-react": "^1.24.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@storybook/react-vite": "^9.0.0",
+    "@tailwindcss/cli": "^4.3.2",
+    "@tailwindcss/vite": "^4.3.2",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "storybook": "^9.0.0",
+    "tailwindcss": "^4.3.2",
+    "tsup": "^8.0.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.1.3"
+  }
+}

@@ -1,0 +1,6 @@
+# Standalone package (no workspace members). This file only carries pnpm
+# settings, which pnpm 11 no longer reads from package.json. Allow esbuild and
+# @parcel/watcher (used by tsup / Vite / Storybook) to run their install scripts.
+allowBuilds:
+  '@parcel/watcher': true
+  esbuild: true
