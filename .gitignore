@@ -9,6 +9,16 @@ test/python/__pycache__/
 .vscode/
 .cache
 
+# design-sync (claude.ai/design) transient state; durable set (config.json,
+# NOTES.md, conventions.md, previews/, overrides/) stays committed.
+.design-sync/*.log
+.design-sync/sb-reference/
+.design-sync/learnings/
+.design-sync/.cache/
+.design-sync/node_modules
+.ds-sync/
+ds-bundle/
+
 # Prototypes / design reference kept locally only (see ticket T-015).
 # spike/ is experimental (not production); design-reference/ carries large
 # design captures and its own node_modules. Ignored to keep the repo lean.
