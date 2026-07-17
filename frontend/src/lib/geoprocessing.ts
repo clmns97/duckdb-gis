@@ -15,6 +15,8 @@
 
 import { selection, fidTaggedRelation, FID } from "./selection";
 import { layers } from "./layers";
+import { errMsg } from "./duckdb";
+import type { MenuItem } from "../components/ContextMenu";
 
 export interface GeoTool {
   id: string;
@@ -61,3 +63,19 @@ export const TOOLS: GeoTool[] = [
     run: runMerge,
   },
 ];
+
+/** The Processing menu's items, built from the tool registry (parallels
+ *  `basemapMenuItems`). A disabled tool shows why it can't run; `run()` errors
+ *  are routed to `onError`. */
+export function toolMenuItems(onError: (message: string) => void): MenuItem[] {
+  return TOOLS.map((tool) => {
+    const enabled = tool.enabled();
+    return {
+      label: enabled || !tool.disabledHint ? tool.label : `${tool.label} (${tool.disabledHint})`,
+      disabled: !enabled,
+      onSelect: () => {
+        tool.run().catch((err) => onError(errMsg(err)));
+      },
+    };
+  });
+}
