@@ -1,0 +1,17 @@
+/*
+ * UI-kit stylesheet. Mirrors the frontend's own global entry
+ * (frontend/src/global.css): pull in Tailwind, then the canonical design tokens
+ * (@theme + :root aliases) so utilities like `bg-primary`, `text-accent`, and
+ * `border-hairline` resolve to the exact DuckDB-UI values. No duplication — the
+ * tokens are the same file the app ships.
+ *
+ * Tailwind v4 only generates utilities for classes it finds in scanned source,
+ * and our components live OUTSIDE this package, so @source points the scanner at
+ * them (and at the stories, which add a little layout glue). This CSS is what
+ * ships as dist/styles.css and is imported by Storybook's preview.
+ */
+@import "tailwindcss";
+@import "../../frontend/src/lib/tokens.css";
+
+@source "./stories";
+@source "../../frontend/src/components";
