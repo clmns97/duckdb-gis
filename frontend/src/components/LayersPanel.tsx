@@ -6,6 +6,7 @@ import { basemap, basemapMenuItems } from "../lib/basemaps";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { LayerProperties } from "./LayerProperties";
 import { SymbologyGlyph } from "./SymbologyGlyph";
+import { ROW_BASE, LEAD_SLOT, GLYPH_SLOT, KEBAB_SLOT, REMOVE_SLOT } from "./rowSlots";
 
 interface MenuState {
   x: number;
@@ -13,17 +14,8 @@ interface MenuState {
   items: MenuItem[];
 }
 
-// Shared row column template (T-037): data-layer rows and the pinned basemap row
-// use the same fixed-width slots — a leading icon, a symbology-glyph slot, the
-// flexible name, then a trailing ⋮ actions column — so the ⋮ kebabs and leading
-// glyphs line up across both. A row lacking a given control renders an empty
-// spacer of the same width to hold the column (the X-remove slot in particular
-// keeps every ⋮ in the same x-position). Any future pinned row reuses these.
-const LEAD_SLOT = "w-4 h-4 shrink-0 grid place-items-center"; // eye toggle / basemap icon
-const GLYPH_SLOT = "w-3 shrink-0"; // symbology glyph (SymbologyGlyph is w-3) / spacer
-const KEBAB_SLOT =
-  "w-6 h-6 grid place-items-center shrink-0 rounded text-gray-400 cursor-pointer hover:bg-white hover:text-gray-900";
-const REMOVE_SLOT = "w-4 h-4 shrink-0"; // X-remove button / spacer
+// Row column template (LEAD/GLYPH/KEBAB/REMOVE slots) is shared with the Browser
+// tree via ./rowSlots so the leading glyphs and ⋮ kebabs line up across panels.
 
 // The Layers panel body: one row per active layer (T-021), or the empty state.
 // Subscribes to the active-layers store; `version` is the external snapshot
@@ -127,7 +119,7 @@ export function LayersPanel() {
         return (
         <li
           key={layer.id}
-          className={`group relative flex items-center gap-1.5 h-7 pl-2 pr-1 text-editor select-none hover:bg-gray-100 ${
+          className={`group relative ${ROW_BASE} pl-3 select-none ${
             dim ? "text-gray-500" : ""
           } ${dragId === layer.id ? "opacity-50" : ""} ${
             selectedId === layer.id ? "bg-gray-100" : ""
@@ -164,7 +156,9 @@ export function LayersPanel() {
           >
             {layer.visible ? <Eye size={14} strokeWidth={2} /> : <EyeOff size={14} strokeWidth={2} />}
           </button>
-          <SymbologyGlyph kind={layer.geometryKind} style={layer.style} />
+          <span className={GLYPH_SLOT}>
+            <SymbologyGlyph kind={layer.geometryKind} style={layer.style} />
+          </span>
           <span
             className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap"
             title={
@@ -229,7 +223,7 @@ export function LayersPanel() {
     {/* Basemap — pinned below all data layers, not draggable / reorderable. */}
     <div className="-mx-3 mt-1 pt-1 border-t border-gray-200">
       <div
-        className="flex items-center gap-1.5 h-7 pl-2 pr-1 text-editor text-gray-500 cursor-context-menu hover:bg-gray-100"
+        className={`${ROW_BASE} pl-3 text-gray-500 cursor-context-menu`}
         title="Basemap — right-click (or ⋮) to change (always below data layers)"
         onContextMenu={openBasemapMenu}
       >

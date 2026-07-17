@@ -6,7 +6,8 @@ import type { GeometryKind, LayerStyle } from "../lib/layers";
 // own fill/line colours so the panel mirrors what's on the map (QGIS's
 // layer-tree symbol preview). Distinct from `TypeGlyph` (column data types).
 //
-// Sized to the leading-icon slot the generic swatch used (`w-3 h-3 shrink-0`).
+// The swatch itself is a fixed 12px (`w-3 h-3 shrink-0`); the caller centers it in
+// the wider `GLYPH_SLOT` column so the layer name aligns with the Browser tree.
 
 const BOX = "w-3 h-3 shrink-0";
 

@@ -21,6 +21,7 @@ import { OvertureModal } from "./components/OvertureModal";
 import { OvertureLogo } from "./components/OvertureLogo";
 import { AttachModal } from "./components/AttachModal";
 import { ContextMenu, type MenuItem } from "./components/ContextMenu";
+import { ROW_BASE, LEAD_SLOT, KEBAB_SLOT } from "./components/rowSlots";
 import { loadCatalog, type CatalogDatabase, type CatalogTable } from "./lib/catalog";
 import { query } from "./lib/duckdb";
 import { getMap } from "./lib/mapBus";
@@ -533,7 +534,7 @@ function TreeRow({
 }) {
   return (
     <div
-      className={`group flex items-center gap-1.5 h-7 pr-1 text-editor select-none hover:bg-gray-100 ${cursor} ${
+      className={`group ${ROW_BASE} select-none ${cursor} ${
         selected ? "bg-gray-100" : ""
       }`}
       style={{ paddingLeft: 12 + depth * 14 }}
@@ -555,11 +556,11 @@ function TreeRow({
       ) : (
         <span className="w-4 shrink-0" aria-hidden="true" />
       )}
-      <span className="w-4 h-4 shrink-0 grid place-items-center">{icon}</span>
+      <span className={LEAD_SLOT}>{icon}</span>
       <span className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{label}</span>
       {onMenu && (
         <button
-          className="w-6 h-6 grid place-items-center shrink-0 rounded text-gray-400 cursor-pointer hover:bg-white hover:text-gray-900"
+          className={KEBAB_SLOT}
           title="Actions"
           aria-label={`Actions for ${label}`}
           onClick={(e) => {
