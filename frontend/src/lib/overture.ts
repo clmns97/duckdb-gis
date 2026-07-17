@@ -21,7 +21,8 @@
 import { query } from "./duckdb";
 import { getMap } from "./mapBus";
 import { selection, fidTaggedRelation, FID } from "./selection";
-import { OVERTURE_BUCKET } from "./remote";
+import { layers } from "./layers";
+import { OVERTURE_BUCKET, ensureOvertureAccess } from "./remote";
 
 /** One selectable Overture theme. `type` is the representative type partition
  *  loaded for the shell; per-type refinement is a later sub-ticket. */
@@ -119,4 +120,36 @@ export function buildOvertureQuery(theme: OvertureTheme, release: string, bbox: 
     `WHERE bbox.xmin <= ${bbox.xmax} AND bbox.xmax >= ${bbox.xmin} ` +
     `AND bbox.ymin <= ${bbox.ymax} AND bbox.ymax >= ${bbox.ymin}`
   );
+}
+
+/**
+ * Resolve the request's extent to a bbox, then add one query-backed layer per
+ * selected theme (T-012 / T-029). Each theme's remote S3 read is materialised
+ * into a local temp table *once* (a single S3 scan) inside `addQuery`'s
+ * `prepare` before the layer renders from it — the render path otherwise scans
+ * the source twice (probe + Arrow), which over the network doubles the wall
+ * time. httpfs/S3 setup + the materialise run inside `prepare`, so any access or
+ * read failure surfaces on the layer row instead of being swallowed. Mirrors the
+ * geoprocessing tools' pattern (build SQL + call `layers.addQuery` in the data
+ * layer; the view only routes the request here).
+ */
+export async function addOvertureLayers(req: OvertureRequest): Promise<void> {
+  const bbox = req.extent === "selected" ? await selectionBbox() : viewportBbox();
+  if (!bbox) return; // no map / empty selection — nothing to clip to
+  for (const themeId of req.themes) {
+    const theme = OVERTURE_THEMES.find((t) => t.id === themeId);
+    if (!theme) continue;
+    const id = `L_ov_${req.release}_${theme.id}`.replace(/[^A-Za-z0-9]/g, "_");
+    void layers.addQuery({
+      id,
+      name: `Overture ${theme.label}`,
+      sql: `SELECT geom FROM ${id}`,
+      prepare: async () => {
+        await ensureOvertureAccess();
+        await query(
+          `CREATE OR REPLACE TEMP TABLE ${id} AS ${buildOvertureQuery(theme, req.release, bbox)}`,
+        );
+      },
+    });
+  }
 }

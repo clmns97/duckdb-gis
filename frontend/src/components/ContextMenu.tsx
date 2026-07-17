@@ -20,6 +20,13 @@ export interface MenuItem {
   children?: MenuItem[];
 }
 
+/** An open anchored menu: viewport position + its items. */
+export interface MenuState {
+  x: number;
+  y: number;
+  items: MenuItem[];
+}
+
 const MENU_CLASS =
   "min-w-[180px] m-0 p-1 list-none bg-white border border-hairline rounded-lg shadow-md";
 

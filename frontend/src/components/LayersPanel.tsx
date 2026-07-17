@@ -3,16 +3,10 @@ import { Eye, EyeOff, GripVertical, X, Map as MapIcon, EllipsisVertical } from "
 import { layers, type ActiveLayer } from "../lib/layers";
 import { openAttributes } from "../lib/dockBus";
 import { basemap, basemapMenuItems } from "../lib/basemaps";
-import { ContextMenu, type MenuItem } from "./ContextMenu";
+import { ContextMenu, type MenuItem, type MenuState } from "./ContextMenu";
 import { LayerProperties } from "./LayerProperties";
 import { SymbologyGlyph } from "./SymbologyGlyph";
 import { ROW_BASE, LEAD_SLOT, GLYPH_SLOT, KEBAB_SLOT, REMOVE_SLOT } from "./rowSlots";
-
-interface MenuState {
-  x: number;
-  y: number;
-  items: MenuItem[];
-}
 
 // Row column template (LEAD/GLYPH/KEBAB/REMOVE slots) is shared with the Browser
 // tree via ./rowSlots so the leading glyphs and ⋮ kebabs line up across panels.

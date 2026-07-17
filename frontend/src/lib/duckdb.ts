@@ -25,3 +25,8 @@ export async function query(sql: string): Promise<Row> {
 export function str(value: unknown): string {
   return value == null ? "" : String(value);
 }
+
+/** Extract a readable message from an unknown thrown value. */
+export function errMsg(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}

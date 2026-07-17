@@ -20,10 +20,10 @@ import { LayersPanel } from "./components/LayersPanel";
 import { OvertureModal } from "./components/OvertureModal";
 import { OvertureLogo } from "./components/OvertureLogo";
 import { AttachModal } from "./components/AttachModal";
-import { ContextMenu, type MenuItem } from "./components/ContextMenu";
+import { ContextMenu, type MenuItem, type MenuState } from "./components/ContextMenu";
 import { ROW_BASE, LEAD_SLOT, KEBAB_SLOT } from "./components/rowSlots";
 import { loadCatalog, type CatalogDatabase, type CatalogTable } from "./lib/catalog";
-import { query } from "./lib/duckdb";
+import { query, errMsg } from "./lib/duckdb";
 import { getMap } from "./lib/mapBus";
 import { addTileLayer, removeTileLayer, prepareTileLayer } from "./lib/tiles";
 import { renderGeoArrow, clearDeck } from "./lib/deckRender";
@@ -32,21 +32,8 @@ import { layers } from "./lib/layers";
 import { editing } from "./lib/editing";
 import { attach } from "./lib/attach";
 import { basemap, basemapMenuItems } from "./lib/basemaps";
-import { TOOLS } from "./lib/geoprocessing";
-import {
-  OVERTURE_THEMES,
-  buildOvertureQuery,
-  selectionBbox,
-  viewportBbox,
-  type OvertureRequest,
-} from "./lib/overture";
-import { ensureOvertureAccess } from "./lib/remote";
-
-interface MenuState {
-  x: number;
-  y: number;
-  items: MenuItem[];
-}
+import { toolMenuItems } from "./lib/geoprocessing";
+import { addOvertureLayers, type OvertureRequest } from "./lib/overture";
 
 export function App() {
   const [databases, setDatabases] = useState<CatalogDatabase[] | null>(null);
@@ -109,7 +96,13 @@ export function App() {
         setDatabases(dbs);
         setError(null);
       })
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+      .catch((e) => setError(errMsg(e)));
+  };
+
+  // Anchor a dropdown menu directly under the button that opened it.
+  const anchorMenu = (e: React.MouseEvent, items: MenuItem[]) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setMenu({ x: rect.left, y: rect.bottom + 4, items });
   };
 
   // Right-click an attached database node → "Detach". Offered only for
@@ -128,7 +121,7 @@ export function App() {
             attach
               .detach(db)
               .then(refreshCatalog)
-              .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+              .catch((err) => setError(errMsg(err)));
           },
         },
       ],
@@ -136,29 +129,13 @@ export function App() {
   };
 
   // Processing menu (T-004): a dropdown driven by the geoprocessing tool
-  // registry, anchored under its header button. A disabled tool shows why it
-  // can't run; run() errors surface on the catalog error line.
-  const openProcessingMenu = (e: React.MouseEvent) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const items: MenuItem[] = TOOLS.map((tool) => {
-      const enabled = tool.enabled();
-      return {
-        label: enabled || !tool.disabledHint ? tool.label : `${tool.label} (${tool.disabledHint})`,
-        disabled: !enabled,
-        onSelect: () => {
-          tool.run().catch((err) => setError(err instanceof Error ? err.message : String(err)));
-        },
-      };
-    });
-    setMenu({ x: rect.left, y: rect.bottom + 4, items });
-  };
+  // registry (`toolMenuItems`), anchored under its header button. A disabled
+  // tool shows why it can't run; run() errors surface on the catalog error line.
+  const openProcessingMenu = (e: React.MouseEvent) => anchorMenu(e, toolMenuItems(setError));
 
   // Basemap picker (T-033): the Browser-pane entry opens the shared basemap
   // submenu, anchored under the button (same menu the pinned Layers row uses).
-  const openBasemapMenu = (e: React.MouseEvent) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    setMenu({ x: rect.left, y: rect.bottom + 4, items: basemapMenuItems() });
-  };
+  const openBasemapMenu = (e: React.MouseEvent) => anchorMenu(e, basemapMenuItems());
 
   // Right-click a geometry-bearing table → "Add to map" (QGIS "Add Layer").
   // Only spatial tables get the menu (T-001 flagged their geometry columns);
@@ -182,33 +159,12 @@ export function App() {
     setMenu({ x: e.clientX, y: e.clientY, items });
   };
 
-  // Overture quick-load (T-012 / T-029): resolve the chosen extent to a bbox,
-  // then add one query-backed layer per selected theme. Each theme's remote S3
-  // read is materialised into a local temp table *once* (a single S3 scan)
-  // before the layer renders from it — the render path otherwise scans the
-  // source twice (probe + Arrow), which over the network doubles the wall time.
-  // httpfs/S3 setup + the materialise run inside `addQuery`'s `prepare`, so any
-  // access or read failure surfaces on the layer row instead of being swallowed.
-  const loadOverture = async (req: OvertureRequest) => {
+  // Overture quick-load (T-012 / T-029): bring the Layers panel forward, then
+  // hand the request to the data layer (`addOvertureLayers` owns the bbox
+  // resolution, temp-table materialise, and per-theme layer adds).
+  const loadOverture = (req: OvertureRequest) => {
     setTab("layers");
-    const bbox = req.extent === "selected" ? await selectionBbox() : viewportBbox();
-    if (!bbox) return; // no map / empty selection — nothing to clip to
-    for (const themeId of req.themes) {
-      const theme = OVERTURE_THEMES.find((t) => t.id === themeId);
-      if (!theme) continue;
-      const id = `L_ov_${req.release}_${theme.id}`.replace(/[^A-Za-z0-9]/g, "_");
-      void layers.addQuery({
-        id,
-        name: `Overture ${theme.label}`,
-        sql: `SELECT geom FROM ${id}`,
-        prepare: async () => {
-          await ensureOvertureAccess();
-          await query(
-            `CREATE OR REPLACE TEMP TABLE ${id} AS ${buildOvertureQuery(theme, req.release, bbox)}`,
-          );
-        },
-      });
-    }
+    void addOvertureLayers(req);
   };
 
   useEffect(() => {
@@ -228,7 +184,7 @@ export function App() {
       }
       loadCatalog()
         .then(setDatabases)
-        .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+        .catch((e) => setError(errMsg(e)));
     })();
   }, []);
 
@@ -236,19 +192,13 @@ export function App() {
   // from the console / e2e as `gisTiles.prepareTileLayer(...)` + `addTileLayer(...)`.
   useEffect(() => {
     if (!import.meta.env.DEV) return;
-    (window as unknown as { gisTiles: unknown }).gisTiles = {
-      addTileLayer,
-      removeTileLayer,
-      prepareTileLayer,
-      getMap,
-    };
-    (window as unknown as { gisDeck: unknown }).gisDeck = {
-      renderGeoArrow,
-      clearDeck,
-    };
-    (window as unknown as { gisSelection: unknown }).gisSelection = selection;
-    (window as unknown as { gisEditing: unknown }).gisEditing = editing;
-    (window as unknown as { gisQuery: unknown }).gisQuery = query;
+    Object.assign(window, {
+      gisTiles: { addTileLayer, removeTileLayer, prepareTileLayer, getMap },
+      gisDeck: { renderGeoArrow, clearDeck },
+      gisSelection: selection,
+      gisEditing: editing,
+      gisQuery: query,
+    });
   }, []);
 
   return (
@@ -297,25 +247,28 @@ export function App() {
             </section>
           ) : (
             <>
-              <button
-                className="flex items-center gap-1.5 w-full mb-2 px-2 py-1.5 text-editor text-gray-900 text-left bg-subtle border border-gray-200 rounded-md cursor-pointer hover:border-primary-border-active hover:text-accent"
+              <QuickAction
+                icon={<OvertureLogo size={16} className="shrink-0" />}
+                label="Overture Maps"
+                hint="quick load…"
                 title="Add Overture Maps data (QuickOSM-style)"
                 onClick={() => setOvertureOpen(true)}
-              >
-                <OvertureLogo size={16} className="shrink-0" />
-                <span>Overture Maps</span>
-                <span className="ml-auto text-xs text-gray-500">quick load…</span>
-              </button>
+              />
 
-              <button
-                className="flex items-center gap-1.5 w-full mb-2 px-2 py-1.5 text-editor text-gray-900 text-left bg-subtle border border-gray-200 rounded-md cursor-pointer hover:border-primary-border-active hover:text-accent"
+              <QuickAction
+                icon={
+                  <MapIcon
+                    size={15}
+                    strokeWidth={2}
+                    className="shrink-0 text-accent"
+                    aria-hidden="true"
+                  />
+                }
+                label="Basemap"
+                hint={basemap.current().label}
                 title="Switch the map basemap"
                 onClick={openBasemapMenu}
-              >
-                <MapIcon size={15} strokeWidth={2} className="shrink-0 text-accent" aria-hidden="true" />
-                <span>Basemap</span>
-                <span className="ml-auto text-xs text-gray-500">{basemap.current().label}</span>
-              </button>
+              />
 
               <div className="flex items-center gap-2 text-gray-500">
                 <Search size={16} strokeWidth={2} className="shrink-0" aria-hidden="true" />
@@ -345,6 +298,8 @@ export function App() {
                     {databases.map((db) => {
                       const dbKey = db.name;
                       const dbOpen = isOpen(dbKey);
+                      const detachable = attach.has(db.name);
+                      const detachMenu = (e: React.MouseEvent) => openDatabaseMenu(e, db.name);
                       return (
                         <li key={db.name}>
                           <TreeRow
@@ -354,11 +309,11 @@ export function App() {
                             onToggle={() => toggleNode(dbKey)}
                             icon={<Database size={15} strokeWidth={2} className="text-gray-500" />}
                             label={db.name}
-                            cursor={attach.has(db.name) ? "cursor-context-menu" : "cursor-pointer"}
-                            title={attach.has(db.name) ? "Right-click (or ⋮) to detach" : undefined}
+                            cursor={detachable ? "cursor-context-menu" : "cursor-pointer"}
+                            title={detachable ? "Right-click (or ⋮) to detach" : undefined}
                             onClick={() => toggleNode(dbKey)}
-                            onContextMenu={(e) => openDatabaseMenu(e, db.name)}
-                            onMenu={attach.has(db.name) ? (e) => openDatabaseMenu(e, db.name) : undefined}
+                            onContextMenu={detachMenu}
+                            onMenu={detachable ? detachMenu : undefined}
                           />
                           {dbOpen && (
                             <ul className="list-none m-0 p-0">
@@ -383,6 +338,10 @@ export function App() {
                                         {schema.tables.map((t) => {
                                           const geo = t.geomColumns.length > 0;
                                           const tKey = `${db.name}›${schema.name}›${t.name}`;
+                                          const selectTable = (e: React.MouseEvent) => {
+                                            setSelectedTable(tKey);
+                                            openTableMenu(e, db.name, schema.name, t);
+                                          };
                                           return (
                                             <li key={t.name}>
                                               <TreeRow
@@ -400,18 +359,8 @@ export function App() {
                                                 cursor={geo ? "cursor-context-menu" : "cursor-pointer"}
                                                 title={geo ? "Right-click (or ⋮) to add to map" : undefined}
                                                 onClick={() => setSelectedTable(tKey)}
-                                                onContextMenu={(e) => {
-                                                  setSelectedTable(tKey);
-                                                  openTableMenu(e, db.name, schema.name, t);
-                                                }}
-                                                onMenu={
-                                                  geo
-                                                    ? (e) => {
-                                                        setSelectedTable(tKey);
-                                                        openTableMenu(e, db.name, schema.name, t);
-                                                      }
-                                                    : undefined
-                                                }
+                                                onContextMenu={selectTable}
+                                                onMenu={geo ? selectTable : undefined}
                                               />
                                             </li>
                                           );
@@ -474,6 +423,35 @@ export function App() {
         <AttachModal onClose={() => setAttachOpen(false)} onAttached={refreshCatalog} />
       )}
     </div>
+  );
+}
+
+// A full-width sidebar quick-action button (Overture Maps / Basemap): leading
+// icon, label, and a trailing muted hint. Shares one flat/square style so the
+// two entries can't drift apart.
+function QuickAction({
+  icon,
+  label,
+  hint,
+  title,
+  onClick,
+}: {
+  icon: ReactNode;
+  label: string;
+  hint: ReactNode;
+  title: string;
+  onClick: (e: React.MouseEvent) => void;
+}) {
+  return (
+    <button
+      className="flex items-center gap-1.5 w-full mb-2 px-2 py-1.5 text-editor text-gray-900 text-left bg-subtle border border-gray-200 rounded-md cursor-pointer hover:border-primary-border-active hover:text-accent"
+      title={title}
+      onClick={onClick}
+    >
+      {icon}
+      <span>{label}</span>
+      <span className="ml-auto text-xs text-gray-500">{hint}</span>
+    </button>
   );
 }
 
