@@ -1,0 +1,19 @@
+{
+  "projectId": "796b4a52-44a0-4c21-adf4-6d0a55838862",
+  "shape": "storybook",
+  "pkg": "@duckdb-gis/ui-kit",
+  "storybookConfigDir": "design-system/.storybook",
+  "storybookStatic": ".design-sync/sb-reference",
+  "buildCmd": "pnpm -C design-system build",
+  "readmeHeader": ".design-sync/conventions.md",
+  "titleMap": {
+    "DrawToolbar": "DrawToolbarView",
+    "SelectionChip": "SelectionChipView"
+  },
+  "extraFonts": ["../.design-sync/fonts/fonts.css"],
+  "overrides": {
+    "Modal": { "cardMode": "single", "primaryStory": "Default", "viewport": "820x600" },
+    "ContextMenu": { "cardMode": "single", "primaryStory": "Default", "viewport": "440x340" },
+    "SelectionChipView": { "cardMode": "column" }
+  }
+}

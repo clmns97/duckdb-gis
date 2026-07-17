@@ -1,0 +1,50 @@
+/* Brand webfonts for the ui-kit design-sync bundle. The frontend's tokens.css
+ * names "Inter" (--font-sans) and "Source Code Pro" (--font-mono) as the
+ * preferred families but the app ships no @font-face — it relies on the host
+ * machine having them, else system fallbacks. For claude.ai/design we ship them
+ * so every design renders in the intended type. Files fetched from the OFL
+ * @fontsource registry (Inter + Source Code Pro, latin). See .design-sync/NOTES.md. */
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./inter-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./inter-latin-500-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("./inter-latin-600-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./inter-latin-700-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Source Code Pro";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./source-code-pro-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Source Code Pro";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./source-code-pro-latin-500-normal.woff2") format("woff2");
+}
