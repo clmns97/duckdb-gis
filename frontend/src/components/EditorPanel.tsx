@@ -69,7 +69,7 @@ export function EditorPanel() {
     <div className="h-full flex flex-col bg-white">
       <div className="flex items-center gap-3 px-2.5 py-1.5 border-b border-gray-200">
         <button
-          className="font-medium flex items-center gap-1.5 text-white bg-primary rounded-md px-3 py-[5px] cursor-pointer hover:bg-accent"
+          className="font-medium flex items-center gap-1.5 text-white bg-primary rounded-sm px-3 py-[5px] cursor-pointer hover:bg-accent"
           onClick={() => void run()}
         >
           <span aria-hidden="true">▶</span> Run{" "}

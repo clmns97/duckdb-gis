@@ -63,3 +63,14 @@ Build inputs (re-sync):
   then read a false font mismatch. Always re-inject after rebuilding sb-reference.
 - The two `*View` components are the store-free halves of store-connected
   components; if the frontend renames them, update `titleMap`.
+- **Tailwind v4 tree-shakes theme custom properties to what's used.** A token
+  defined in `tokens.css` `@theme` only lands in the closure if some component
+  uses its utility (or `var(--…)`) — otherwise it's absent, and any
+  `conventions.md`/snippet reference to it silently resolves to nothing. The
+  2026-07-18 GIS redesign (flat pass) dropped the last users of `--radius-md`
+  (4px), `--color-gray-700`, and all `shadow-sm/md` utilities, so those fell out
+  of `_ds_bundle.css`. `conventions.md` was corrected on the 2026-07-18 re-sync
+  (radii list, elevation line, neutrals list, and the input snippet's
+  `borderRadius` → `var(--radius-sm)`). **On every re-sync, re-grep the built
+  `ds-bundle/{styles,_ds_bundle}.css` for each token/utility `conventions.md`
+  names** — a name that no longer resolves is drift to fix, not to ship.

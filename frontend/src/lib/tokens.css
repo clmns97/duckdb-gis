@@ -43,7 +43,7 @@
 
   /* ---- Grid / hairline (verified: results grid, COMPONENTS.md §7) ---- */
   --color-grid-cell: #fcfcfd;       /* results header bg + data-cell hover */
-  --color-hairline: rgba(0, 0, 0, 0.1); /* grid lines, menu/input borders */
+  --color-hairline: rgba(0, 0, 0, 0.2); /* verified borderColor — grid lines, menu/input borders */
 
   /* ---- Accent (indigo) ---------------------------------------------- */
   --color-accent: #494ab9;               /* verified: links, SQL keywords, accents */

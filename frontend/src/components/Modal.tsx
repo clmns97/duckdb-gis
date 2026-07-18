@@ -37,7 +37,7 @@ export function Modal({
       onClick={onClose}
     >
       <div
-        className="flex flex-col bg-white border border-gray-200 rounded-lg shadow-md max-w-[calc(100vw-32px)] max-h-[calc(100vh-64px)]"
+        className="flex flex-col bg-white border border-gray-200 rounded-lg max-w-[calc(100vw-32px)] max-h-[calc(100vh-64px)]"
         style={{ width }}
         role="dialog"
         aria-modal="true"
@@ -50,7 +50,7 @@ export function Modal({
           </h2>
           <button
             type="button"
-            className="shrink-0 text-lg leading-none text-gray-500 px-1 rounded-md cursor-pointer hover:text-gray-900"
+            className="shrink-0 text-lg leading-none text-gray-500 px-1 rounded-sm cursor-pointer hover:text-gray-900"
             aria-label="Close"
             onClick={onClose}
           >

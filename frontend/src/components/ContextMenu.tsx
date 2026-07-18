@@ -28,7 +28,7 @@ export interface MenuState {
 }
 
 const MENU_CLASS =
-  "min-w-[180px] m-0 p-1 list-none bg-white border border-hairline rounded-lg shadow-md";
+  "min-w-[180px] m-0 p-1 list-none bg-white border border-hairline rounded-lg";
 
 // One row: a section header, a leaf action, or a parent that opens a flyout.
 function MenuRow({ item, onClose }: { item: MenuItem; onClose: () => void }) {
@@ -51,7 +51,7 @@ function MenuRow({ item, onClose }: { item: MenuItem; onClose: () => void }) {
       role="menuitem"
     >
       <button
-        className="flex items-center w-full text-left text-editor text-gray-900 px-2.5 py-1.5 rounded-md cursor-pointer enabled:hover:bg-gray-100 disabled:text-gray-500 disabled:cursor-default"
+        className="flex items-center w-full text-left text-editor text-gray-900 px-2.5 py-1.5 rounded-sm cursor-pointer enabled:hover:bg-gray-100 disabled:text-gray-500 disabled:cursor-default"
         disabled={item.disabled}
         aria-haspopup={hasChildren || undefined}
         onClick={() => {

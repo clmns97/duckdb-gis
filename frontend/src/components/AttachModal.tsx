@@ -9,7 +9,7 @@ import { Modal, Button, FieldLabel, ModalNote } from "./Modal";
 // the catalog via `onAttached` and closes.
 
 const INPUT =
-  "text-editor text-gray-900 px-2 py-1.5 bg-white border border-gray-200 rounded-md focus:outline-none focus:border-primary";
+  "text-editor text-gray-900 px-2 py-1.5 bg-white border border-gray-200 rounded-sm focus:outline-none focus:border-primary";
 
 export function AttachModal({
   onClose,
