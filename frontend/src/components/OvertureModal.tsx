@@ -99,7 +99,7 @@ export function OvertureModal({
       <label className={FIELD}>
         <span className={LEGEND}>Release</span>
         <select
-          className="text-editor text-gray-900 px-2 py-1.5 bg-white border border-gray-200 rounded-md"
+          className="text-editor text-gray-900 px-2 py-1.5 bg-white border border-gray-200 rounded-sm"
           value={release}
           onChange={(e) => setRelease(e.target.value)}
         >

@@ -225,7 +225,7 @@ export function App() {
               title="Expand panel"
               aria-label="Expand sidebar"
               onClick={() => setCollapsed(false)}
-              className="w-7 h-7 grid place-items-center rounded-md text-gray-500 cursor-pointer hover:bg-gray-100 hover:text-gray-900"
+              className="w-7 h-7 grid place-items-center rounded-sm text-gray-500 cursor-pointer hover:bg-gray-100 hover:text-gray-900"
             >
               <PanelLeft size={16} strokeWidth={2} />
             </button>
@@ -398,7 +398,7 @@ export function App() {
               title="Collapse panel"
               aria-label="Collapse sidebar"
               onClick={() => setCollapsed(true)}
-              className="self-center w-7 h-7 grid place-items-center rounded-md text-gray-500 cursor-pointer hover:bg-gray-100 hover:text-gray-900"
+              className="self-center w-7 h-7 grid place-items-center rounded-sm text-gray-500 cursor-pointer hover:bg-gray-100 hover:text-gray-900"
             >
               <PanelLeft size={16} strokeWidth={2} />
             </button>
@@ -444,7 +444,7 @@ function QuickAction({
 }) {
   return (
     <button
-      className="flex items-center gap-1.5 w-full mb-2 px-2 py-1.5 text-editor text-gray-900 text-left bg-subtle border border-gray-200 rounded-md cursor-pointer hover:border-primary-border-active hover:text-accent"
+      className="flex items-center gap-1.5 w-full mb-2 px-2 py-1.5 text-editor text-gray-900 text-left bg-subtle border border-gray-200 rounded-sm cursor-pointer hover:border-primary-border-active hover:text-accent"
       title={title}
       onClick={onClick}
     >
@@ -597,7 +597,7 @@ function RailTab({
       title={label}
       aria-label={label}
       onClick={onClick}
-      className={`w-7 h-7 grid place-items-center rounded-md border-l-2 cursor-pointer hover:bg-gray-100 hover:text-gray-900 ${
+      className={`w-7 h-7 grid place-items-center rounded-sm border-l-2 cursor-pointer hover:bg-gray-100 hover:text-gray-900 ${
         active ? "text-gray-900 border-accent" : "text-gray-500 border-transparent"
       }`}
     >

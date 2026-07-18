@@ -193,7 +193,7 @@ function SymbologyTab({ layer }: { layer: ActiveLayer }) {
 
   const set = (changes: Partial<LayerStyle>) => layers.setStyle(layer.id, changes);
 
-  const color = "w-10 h-6 p-0 border border-gray-200 rounded-md bg-transparent cursor-pointer";
+  const color = "w-10 h-6 p-0 border border-gray-200 rounded-sm bg-transparent cursor-pointer";
   const range = "accent-primary w-40";
   const output = "min-w-[42px] text-right text-gray-500 tabular-nums";
 

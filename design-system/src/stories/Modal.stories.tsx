@@ -30,7 +30,7 @@ export const Default: Story = {
       <label className="flex flex-col gap-1">
         <FieldLabel>Path</FieldLabel>
         <input
-          className="border border-hairline rounded-md px-2 py-1 text-editor text-gray-900"
+          className="border border-hairline rounded-sm px-2 py-1 text-editor text-gray-900"
           defaultValue="/data/city.duckdb"
         />
       </label>

@@ -36,9 +36,9 @@ Two layers, and the distinction matters:
      12px, `--text-editor` 13px, `--text-base` 14px, `--text-lg` 16px;
      `--font-weight-medium` 500.
    - **Neutrals:** `--color-gray-100` (the universal hover fill) · `-200`
-     (borders/dividers) · `-400` · `-500` (muted / icons) · `-600` · `-700` ·
-     `-900` (primary text); `--color-white`; `--color-hairline` (input/menu
-     borders).
+     (borders/dividers) · `-300` (disabled) · `-400` · `-500` (muted / icons) ·
+     `-600` · `-900` (primary text); `--color-white`; `--color-hairline`
+     (input/menu borders).
    - **Accent (indigo):** `--color-accent` #494ab9 (links, active) ·
      `--color-primary` #6366f1 (primary CTA) · `--color-primary-border-active`.
    - **Surfaces / status:** `--color-subtle` (active tint) · `--color-bg` ·
@@ -46,8 +46,10 @@ Two layers, and the distinction matters:
      `--color-text-muted` · `--color-danger` (error) · `--color-success` (teal) ·
      `--color-grid-cell`.
    - **Brand:** `--color-duck-yellow`, `--color-brand-orange`.
-   - **Radii:** `--radius-sm` 2px, `--radius-md` 4px, `--radius-lg` 6px.
-     **Elevation:** `shadow-sm` / `shadow-md` utilities exist.
+   - **Radii:** `--radius-sm` 2px (buttons/inputs), `--radius-lg` 6px (cards/menus).
+     The kit is deliberately flat — 4px (`--radius-md`) is unused and **not** in
+     the closure. **Elevation:** none — no shadow utilities or tokens ship;
+     separate surfaces with borders (`--color-gray-200` / `--color-hairline`).
 
 ### Where the truth lives
 
@@ -69,7 +71,7 @@ compiled tokens and component styles) before styling. Per component, read its
     <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
       <FieldLabel>Path</FieldLabel>
       <input defaultValue="/data/city.duckdb"
-        style={{ border: "1px solid var(--color-hairline)", borderRadius: "var(--radius-md)",
+        style={{ border: "1px solid var(--color-hairline)", borderRadius: "var(--radius-sm)",
                  padding: "4px 8px", font: "var(--text-editor) var(--font-mono)" }} />
     </label>
     <ModalNote>Attaches the file as a read-only catalog.</ModalNote>

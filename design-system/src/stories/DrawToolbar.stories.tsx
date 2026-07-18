@@ -10,14 +10,23 @@ export default meta;
 
 type Story = StoryObj<typeof DrawToolbarView>;
 
-// Interactive: clicking a mode toggles `active`; Commit shows the busy state.
-// Delete enables only in Select mode with a selection (simulated here).
+// A relative, map-like container the absolutely-positioned toolbar sits in.
+function Stage({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="relative w-[560px] h-[150px] bg-gray-100 rounded-lg overflow-hidden">
+      {children}
+    </div>
+  );
+}
+
+// Interactive: clicking a tool toggles `active`; Commit shows the busy spinner.
+// Delete enables only when there's a selection (simulated in Select mode).
 function Interactive() {
   const [active, setActive] = useState<EditMode>("static");
   const [busy, setBusy] = useState(false);
 
   return (
-    <div className="relative w-[560px] h-[130px] bg-gray-100 rounded-lg overflow-hidden">
+    <Stage>
       <DrawToolbarView
         active={active}
         featureCount={3}
@@ -28,11 +37,65 @@ function Interactive() {
         onDelete={() => {}}
         onCommit={() => {
           setBusy(true);
-          setTimeout(() => setBusy(false), 800);
+          setTimeout(() => setBusy(false), 900);
         }}
       />
-    </div>
+    </Stage>
   );
 }
 
 export const Default: Story = { render: () => <Interactive /> };
+
+// Select mode with a live selection → Delete enabled, dirty Commit badge.
+export const WithSelection: Story = {
+  render: () => (
+    <Stage>
+      <DrawToolbarView
+        active="select"
+        featureCount={5}
+        selectedCount={2}
+        busy={false}
+        error={null}
+        onSetMode={() => {}}
+        onDelete={() => {}}
+        onCommit={() => {}}
+      />
+    </Stage>
+  ),
+};
+
+// Committing → spinner + dimmed, disabled button, "Committing…" label.
+export const Busy: Story = {
+  render: () => (
+    <Stage>
+      <DrawToolbarView
+        active="polygon"
+        featureCount={4}
+        selectedCount={0}
+        busy
+        error={null}
+        onSetMode={() => {}}
+        onDelete={() => {}}
+        onCommit={() => {}}
+      />
+    </Stage>
+  ),
+};
+
+// Commit failure → inline error pill under the bar.
+export const Error: Story = {
+  render: () => (
+    <Stage>
+      <DrawToolbarView
+        active="line"
+        featureCount={2}
+        selectedCount={0}
+        busy={false}
+        error="Could not write features: table draw_features is read-only"
+        onSetMode={() => {}}
+        onDelete={() => {}}
+        onCommit={() => {}}
+      />
+    </Stage>
+  ),
+};
