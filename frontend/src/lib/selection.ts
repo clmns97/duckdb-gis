@@ -66,6 +66,28 @@ export const selection = {
     else selected.add(fid);
     emit();
   },
+
+  /**
+   * Select a picked feature, scoped to a single active layer (T-041). `source`
+   * is the picked layer's source query (the same string a downstream tool feeds
+   * through {@link fidTaggedRelation}). Additive (shift-click) toggles the fid
+   * *within the active layer*; a pick from a different source switches the active
+   * layer and selects just that feature — so fids from different layers (whose
+   * `__fid` spaces both start at 1) never collide in the set. Cross-layer
+   * multi-select is a deliberate follow-up.
+   */
+  pick(source: string, fid: number, additive: boolean): void {
+    const src = source.trim().replace(/;\s*$/, "");
+    if (additive && src === sourceSql) {
+      if (selected.has(fid)) selected.delete(fid);
+      else selected.add(fid);
+    } else {
+      sourceSql = src;
+      selected.clear();
+      selected.add(fid);
+    }
+    emit();
+  },
   set(fids: number[]): void {
     selected.clear();
     for (const f of fids) selected.add(f);
