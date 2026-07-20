@@ -1,11 +1,12 @@
 ---
 id: T-047
 title: Split a feature with a cut line
-status: open
+status: blocked
 priority: P2
 area: frontend
 depends_on: [T-038]
 branch:
+blocked_reason: bundled DuckDB spatial lacks ST_Split/ST_Polygonize; deferred by user 2026-07-20
 ---
 
 ## Goal
