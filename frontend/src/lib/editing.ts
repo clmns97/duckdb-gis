@@ -106,6 +106,103 @@ function isWorkingFeature(f: GeoJSONStoreFeatures): boolean {
   return DRAW_MODES.has(String(p.mode));
 }
 
+// --- geometry clone / transform helpers (T-045 / T-046 / T-048) -------------
+// GeoJSON coordinate nesting varies by type (Point `[x,y]` … MultiPolygon
+// `[[[[x,y]]]]`); these walk that uniformly. Kept `any` at the leaf so we don't
+// fight GeoJSON's union types for a simple positional map.
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyGeom = any;
+
+function walkPositions(coords: AnyGeom, fn: (p: number[]) => number[]): AnyGeom {
+  return typeof coords[0] === "number"
+    ? fn(coords as number[])
+    : (coords as AnyGeom[]).map((c) => walkPositions(c, fn));
+}
+
+/** A deep copy of `geom` with every position mapped through `fn`. */
+function transformGeometry(geom: AnyGeom, fn: (p: number[]) => number[]): AnyGeom {
+  return { ...geom, coordinates: walkPositions(geom.coordinates, fn) };
+}
+
+function collectPositions(geom: AnyGeom, out: number[][]): void {
+  const walk = (c: AnyGeom) => {
+    if (typeof c[0] === "number") out.push(c as number[]);
+    else (c as AnyGeom[]).forEach(walk);
+  };
+  walk(geom.coordinates);
+}
+
+/** Centre of the combined bounding box of some geometries — the pivot for
+ *  rotate/scale so the selection transforms about its own middle. */
+function bboxCenterOf(geoms: AnyGeom[]): [number, number] {
+  const pts: number[][] = [];
+  for (const g of geoms) collectPositions(g, pts);
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const [x, y] of pts) {
+    if (x < minX) minX = x;
+    if (y < minY) minY = y;
+    if (x > maxX) maxX = x;
+    if (y > maxY) maxY = y;
+  }
+  return [(minX + maxX) / 2, (minY + maxY) / 2];
+}
+
+/** Map a GeoJSON geometry type to the layer's geometry family. */
+function familyOf(geom: AnyGeom): GeometryKind | null {
+  switch (String(geom?.type)) {
+    case "Point":
+    case "MultiPoint":
+      return "point";
+    case "LineString":
+    case "MultiLineString":
+      return "line";
+    case "Polygon":
+    case "MultiPolygon":
+      return "polygon";
+    default:
+      return null;
+  }
+}
+
+/** A fresh, independent clone of a feature, nudged so it's visibly offset and
+ *  carrying no `__rid` (so Save INSERTs it as a new row). */
+function cloneFeatureOffset(f: GeoJSONStoreFeatures, kind: GeometryKind): GeoJSONStoreFeatures {
+  const deep = JSON.parse(JSON.stringify(f.geometry));
+  const geometry = transformGeometry(deep, ([x, y]) => [x + CLONE_OFFSET, y - CLONE_OFFSET]);
+  return {
+    id: uuid(),
+    type: "Feature",
+    geometry,
+    properties: { mode: MODE_NAME[kind] },
+  } as unknown as GeoJSONStoreFeatures;
+}
+
+/** Terra Draw snapping config for the current toggle state, or undefined (off). */
+function snapConfig(): { toCoordinate: boolean; toLine: boolean } | undefined {
+  return snapEnabled ? { toCoordinate: true, toLine: true } : undefined;
+}
+
+/** Push the current snapping config to the live draw modes (T-049). The
+ *  `updateModeOptions` generic is awkward to satisfy with a string mode name, so
+ *  we call it through a narrow cast; it does a partial update (only `snapping`). */
+function applySnapping(): void {
+  if (!draw) return;
+  const d = draw as unknown as { updateModeOptions: (m: string, o: unknown) => void };
+  const snapping = snapConfig();
+  d.updateModeOptions("linestring", { snapping });
+  d.updateModeOptions("polygon", { snapping });
+}
+
+/** The working-set features currently selected in Select mode. */
+function selectedFeatures(): GeoJSONStoreFeatures[] {
+  if (!draw) return [];
+  return draw
+    .getSnapshot()
+    .filter(isWorkingFeature)
+    .filter((f) => selectedIds.has(String(f.id)));
+}
+
 type Listener = () => void;
 
 let draw: TerraDraw | null = null;
@@ -120,6 +217,16 @@ const loadedRids = new Set<string>();
 // Terra Draw feature ids the user actually changed since edit began (T-042), so
 // commit only UPDATEs touched rows instead of rewriting all loaded features.
 const dirty = new Set<string>();
+// Copy/paste clipboard (T-048): deep-cloned GeoJSON features, no map dependency,
+// module-level so it survives across edit sessions.
+let clipboard: GeoJSONStoreFeatures[] = [];
+// Snapping (T-049): while on, drawing/vertex-editing latches onto existing
+// coordinates and edges in the working set. Point + line snap ship now; "center"
+// has no native Terra Draw support and is a deferred follow-up.
+let snapEnabled = false;
+// A small on-screen nudge so a duplicated/pasted clone is visibly offset from its
+// original (degrees; just enough to grab and drag).
+const CLONE_OFFSET = 0.0002;
 let version = 0;
 const listeners = new Set<Listener>();
 
@@ -198,10 +305,13 @@ export const editing = {
 
     const adapter = new TerraDrawMapLibreGLAdapter({ map, prefixId: "td-" });
     // Per-geometry edit affordances for select mode: drag the whole feature,
-    // drag a vertex, click a midpoint to insert a vertex, delete a vertex.
+    // drag a vertex, click a midpoint to insert a vertex, delete a vertex, and —
+    // holding the rotate/scale key — rotate/scale the whole selection (T-045).
     const editFlags = {
       feature: {
         draggable: true,
+        rotateable: true,
+        scaleable: true,
         coordinates: { draggable: true, midpoints: true, deletable: true },
       },
     };
@@ -209,10 +319,13 @@ export const editing = {
       adapter,
       modes: [
         new TerraDrawPointMode(),
-        new TerraDrawLineStringMode(),
-        new TerraDrawPolygonMode(),
+        new TerraDrawLineStringMode({ snapping: snapConfig() }),
+        new TerraDrawPolygonMode({ snapping: snapConfig() }),
         new TerraDrawSelectMode({
           flags: { point: editFlags, linestring: editFlags, polygon: editFlags },
+          // Single-key modifiers for the rotate/scale drag (hold R / S). Escape
+          // deselects; Delete removes the selection (mirrors the toolbar Delete).
+          keyEvents: { deselect: "Escape", delete: "Delete", rotate: ["r"], scale: ["s"] },
         }),
       ],
     });
@@ -357,6 +470,136 @@ export const editing = {
   /** Number of features currently selected in select mode (drives the Delete button). */
   get selectedCount(): number {
     return selectedIds.size;
+  },
+
+  /** Whether snapping is on (T-049). */
+  get snapEnabled(): boolean {
+    return snapEnabled;
+  },
+  /** Whether the clipboard holds features compatible with the current target
+   *  (drives the Paste button, T-048). */
+  get canPaste(): boolean {
+    return (
+      clipboard.length > 0 &&
+      target !== null &&
+      clipboard.every((f) => familyOf(f.geometry) === target!.geometryKind)
+    );
+  },
+
+  /** Toggle snapping and push it to the live draw modes (T-049). */
+  toggleSnapping(): void {
+    snapEnabled = !snapEnabled;
+    applySnapping();
+    emit();
+  },
+
+  /**
+   * Rotate the selected features about their shared bbox centre by `deg` (T-045).
+   * A click-increment complement to Terra Draw's native hold-R-and-drag rotate;
+   * both land in the working set and Save through the normal path.
+   */
+  rotateSelected(deg = 15): void {
+    const feats = selectedFeatures();
+    if (!draw || feats.length === 0) return;
+    const [cx, cy] = bboxCenterOf(feats.map((f) => f.geometry));
+    const rad = (deg * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    for (const f of feats) {
+      const g = transformGeometry(f.geometry, ([x, y]) => {
+        const dx = x - cx;
+        const dy = y - cy;
+        return [cx + dx * cos - dy * sin, cy + dx * sin + dy * cos];
+      });
+      draw.updateFeatureGeometry(f.id!, g);
+      dirty.add(String(f.id));
+    }
+    refresh();
+  },
+
+  /** Scale the selected features about their shared bbox centre by `factor` (T-045). */
+  scaleSelected(factor = 1.1): void {
+    const feats = selectedFeatures();
+    if (!draw || feats.length === 0) return;
+    const [cx, cy] = bboxCenterOf(feats.map((f) => f.geometry));
+    for (const f of feats) {
+      const g = transformGeometry(f.geometry, ([x, y]) => [
+        cx + (x - cx) * factor,
+        cy + (y - cy) * factor,
+      ]);
+      draw.updateFeatureGeometry(f.id!, g);
+      dirty.add(String(f.id));
+    }
+    refresh();
+  },
+
+  /**
+   * Merge the selected features into one (T-046), unioned in DuckDB (polygons →
+   * `ST_Union_Agg`; lines/points → `ST_Collect`). The merged feature keeps one
+   * source `__rid` so Save UPDATEs that row; the other consumed rows stay in
+   * `loadedRids` with no surviving feature, so commit DELETEs them.
+   */
+  async mergeSelected(): Promise<void> {
+    if (!draw || !target || selectedIds.size < 2) return;
+    const feats = selectedFeatures();
+    if (feats.length < 2) return;
+    const kind = target.geometryKind;
+    const values = feats
+      .map((f) => `(ST_GeomFromGeoJSON('${sqlLit(JSON.stringify(f.geometry))}'))`)
+      .join(", ");
+    const agg = kind === "polygon" ? "ST_Union_Agg(g)" : "ST_Collect(list(g))";
+    const rows = await query(`SELECT ST_AsGeoJSON(${agg}) AS gj FROM (VALUES ${values}) AS v(g)`);
+    const gj = str(rows[0]?.gj);
+    if (!gj) throw new Error("Merge produced no geometry.");
+    const merged = JSON.parse(gj);
+
+    const survivorRid = feats.map((f) => f.properties?.__rid).find((r) => r != null);
+    draw.removeFeatures(feats.map((f) => f.id!));
+    const id = uuid();
+    const properties: Record<string, unknown> = { mode: MODE_NAME[kind] };
+    if (survivorRid != null) properties.__rid = String(survivorRid);
+    draw.addFeatures([
+      { id, type: "Feature", geometry: merged, properties } as unknown as GeoJSONStoreFeatures,
+    ]);
+    selectedIds.clear();
+    dirty.add(id);
+    refresh();
+  },
+
+  /** Duplicate the selected features as independent clones nudged off the
+   *  originals (T-048). Fresh ids, no `__rid` → Save INSERTs them. */
+  duplicateSelected(): void {
+    if (!draw || !target) return;
+    const feats = selectedFeatures();
+    if (feats.length === 0) return;
+    const clones = feats.map((f) => cloneFeatureOffset(f, target!.geometryKind));
+    draw.addFeatures(clones);
+    clones.forEach((c) => dirty.add(String(c.id)));
+    refresh();
+  },
+
+  /** Copy the current selection into the clipboard (deep-cloned GeoJSON, T-048). */
+  copySelected(): void {
+    const feats = selectedFeatures();
+    if (feats.length === 0) return;
+    clipboard = feats.map(
+      (f) => ({ ...f, geometry: JSON.parse(JSON.stringify(f.geometry)) }) as GeoJSONStoreFeatures,
+    );
+    emit();
+  },
+
+  /** Paste clipboard features into the current target as new features (T-048).
+   *  Rejects a geometry family that doesn't match this layer. */
+  paste(): void {
+    if (!draw || !target || clipboard.length === 0) return;
+    const kind = target.geometryKind;
+    if (clipboard.some((f) => familyOf(f.geometry) !== kind)) {
+      throw new Error("Clipboard geometry doesn't match this layer's type.");
+    }
+    const clones = clipboard.map((f) => cloneFeatureOffset(f, kind));
+    draw.addFeatures(clones);
+    clones.forEach((c) => dirty.add(String(c.id)));
+    refresh();
   },
 
   /**
