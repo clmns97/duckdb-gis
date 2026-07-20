@@ -17,7 +17,7 @@
 // on those nodes — never on the default/in-memory database.
 // ---------------------------------------------------------------------------
 
-import { query } from "./duckdb";
+import { query, sqlLit } from "./duckdb";
 
 type Listener = () => void;
 
@@ -33,11 +33,6 @@ function emit(): void {
 /** Quote an identifier for SQL (alias). */
 function ident(name: string): string {
   return `"${name.replace(/"/g, '""')}"`;
-}
-
-/** Escape a single-quoted SQL string literal (path). */
-function sqlLit(v: string): string {
-  return v.replace(/'/g, "''");
 }
 
 /**

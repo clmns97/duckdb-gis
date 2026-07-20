@@ -36,6 +36,9 @@ board state is the folder (`open/` → `in-progress/` → `blocked/` → `done/`
 Tickets are the durable source of truth so work survives token resets: a cold
 session or subagent picks up a ticket without the prior chat.
 
+- **Choosing what to work on:** grep ticket frontmatter (`id`/`title`/
+  `priority`/`area`/`depends_on`) to shortlist — don't read full ticket bodies
+  until one is chosen. This keeps the selection step cheap.
 - **Resuming?** Read `tickets/in-progress/`; each ticket's Progress log says
   where it stands and what's next.
 - **Working a ticket:** move it to `in-progress/`, keep its Progress log

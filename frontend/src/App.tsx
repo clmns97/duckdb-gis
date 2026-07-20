@@ -20,6 +20,7 @@ import { LayersPanel } from "./components/LayersPanel";
 import { OvertureModal } from "./components/OvertureModal";
 import { OvertureLogo } from "./components/OvertureLogo";
 import { AttachModal } from "./components/AttachModal";
+import { NewLayerModal } from "./components/NewLayerModal";
 import { ContextMenu, type MenuItem, type MenuState } from "./components/ContextMenu";
 import { ROW_BASE, LEAD_SLOT, KEBAB_SLOT } from "./components/rowSlots";
 import { loadCatalog, type CatalogDatabase, type CatalogTable } from "./lib/catalog";
@@ -45,6 +46,7 @@ export function App() {
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [overtureOpen, setOvertureOpen] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
+  const [newLayerOpen, setNewLayerOpen] = useState(false);
   // Re-render when the active basemap changes so both the Browser entry label
   // and the pinned Layers row (via LayersPanel) reflect it.
   useSyncExternalStore(basemap.subscribe, basemap.getSnapshot);
@@ -242,7 +244,11 @@ export function App() {
           <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden touch-pan-y overscroll-x-none flex flex-col gap-[18px]">
           {tab === "layers" ? (
             <section>
-              <SectionHeader label="Layers" addTitle="Add layer" />
+              <SectionHeader
+                label="Layers"
+                addTitle="New layer"
+                onAdd={() => setNewLayerOpen(true)}
+              />
               <LayersPanel />
             </section>
           ) : (
@@ -421,6 +427,17 @@ export function App() {
 
       {attachOpen && (
         <AttachModal onClose={() => setAttachOpen(false)} onAttached={refreshCatalog} />
+      )}
+
+      {newLayerOpen && (
+        <NewLayerModal
+          onClose={() => setNewLayerOpen(false)}
+          onCreate={(name, geometryKind) => {
+            setNewLayerOpen(false);
+            setTab("layers"); // surface the Layers panel so the new layer is visible
+            editing.beginNewLayer({ name, geometryKind });
+          }}
+        />
       )}
     </div>
   );

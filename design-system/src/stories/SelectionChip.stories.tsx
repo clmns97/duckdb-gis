@@ -9,12 +9,14 @@ export default meta;
 
 type Story = StoryObj<typeof SelectionChipView>;
 
-// The chip is absolutely positioned (top-left over the map), so stage it inside
-// a relative, map-like container.
+// The chip is a top-left map control (positioned by MapPanel in the app), so
+// stage it top-left inside a relative, map-like container.
 function Stage({ count }: { count: number }) {
   return (
     <div className="relative w-[340px] h-[90px] bg-gray-100 rounded-lg overflow-hidden">
-      <SelectionChipView count={count} onClear={() => {}} />
+      <div className="absolute top-3 left-3">
+        <SelectionChipView count={count} onClear={() => {}} />
+      </div>
     </div>
   );
 }

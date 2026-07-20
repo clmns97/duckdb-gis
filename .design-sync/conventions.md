@@ -46,10 +46,11 @@ Two layers, and the distinction matters:
      `--color-text-muted` · `--color-danger` (error) · `--color-success` (teal) ·
      `--color-grid-cell`.
    - **Brand:** `--color-duck-yellow`, `--color-brand-orange`.
-   - **Radii:** `--radius-sm` 2px (buttons/inputs), `--radius-lg` 6px (cards/menus).
-     The kit is deliberately flat — 4px (`--radius-md`) is unused and **not** in
-     the closure. **Elevation:** none — no shadow utilities or tokens ship;
-     separate surfaces with borders (`--color-gray-200` / `--color-hairline`).
+   - **Radii:** `--radius-sm` 2px (buttons/inputs), `--radius-md` 4px (small
+     pills/badges, e.g. the toolbar layer chip), `--radius-lg` 6px (cards/menus).
+     The kit stays deliberately flat — these three are the whole scale.
+     **Elevation:** none — no shadow utilities or tokens ship; separate surfaces
+     with borders (`--color-gray-200` / `--color-hairline`).
 
 ### Where the truth lives
 

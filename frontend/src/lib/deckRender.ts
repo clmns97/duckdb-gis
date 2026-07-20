@@ -69,7 +69,14 @@ interface AddedLayer {
   table: Table;
   spec: GeomSpec;
   style: LayerStyle;
+  /** User-controlled visibility (the Layers-panel Eye toggle). */
   visible: boolean;
+  /** Edit-time suppression (T-043): while a layer is edited in place, its
+   *  read-only deck copy is hidden so it doesn't double-draw under the Terra Draw
+   *  working set. Kept separate from `visible` so entering/leaving edit never
+   *  clobbers the user's own show/hide state. A layer draws only when
+   *  `visible && !suppressed`. */
+  suppressed: boolean;
   /** The inner source query (projects `geom`), recorded so a picked feature can
    *  set it as the active selection source (T-041) for downstream tools. */
   source: string;
@@ -573,7 +580,7 @@ function syncOverlay(): void {
     : [...added.keys()];
   for (const id of ids) {
     const al = added.get(id)!;
-    if (!al.visible) continue;
+    if (!al.visible || al.suppressed) continue;
     al.table.batches.forEach((batch, i) => {
       if (batch.numRows === 0) return;
       const geom = batch.getChild("geom")?.data[0];
@@ -624,7 +631,10 @@ export async function addDeckLayer(id: string, sourceSql: string): Promise<Added
   const { table } = await fetchArrow(encoded);
   // Keep an existing layer's style on replace so its symbology stays stable.
   const style = added.get(id)?.style ?? nextStyle(probe.type);
-  added.set(id, { table, spec, style, visible: true, source: inner });
+  // Keep an existing layer's edit-suppression across a re-add (e.g. a commit
+  // that re-renders the layer while still editing); default false on first add.
+  const suppressed = added.get(id)?.suppressed ?? false;
+  added.set(id, { table, spec, style, visible: true, suppressed, source: inner });
   syncOverlay();
   return {
     featureCount: probe.count,
@@ -644,6 +654,19 @@ export function setDeckLayerVisible(id: string, visible: boolean): void {
   const al = added.get(id);
   if (!al || al.visible === visible) return;
   al.visible = visible;
+  syncOverlay();
+}
+
+/**
+ * Suppress/restore a layer's read-only deck copy for edit-in-place (T-043),
+ * without touching the user `visible` flag. Called by the editing store when a
+ * layer enters/leaves edit mode so its deck copy doesn't double-draw under the
+ * Terra Draw working set. Idempotent; a no-op if the layer isn't rendered.
+ */
+export function setDeckLayerSuppressed(id: string, suppressed: boolean): void {
+  const al = added.get(id);
+  if (!al || al.suppressed === suppressed) return;
+  al.suppressed = suppressed;
   syncOverlay();
 }
 

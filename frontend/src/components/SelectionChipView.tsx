@@ -32,7 +32,7 @@ export function SelectionChipView({
 }) {
   return (
     <div
-      className="absolute top-3 left-3 z-[2] flex items-center gap-1.5 pl-2.5 pr-1 py-1 text-editor bg-subtle border border-primary-border-active text-accent rounded-full"
+      className="flex items-center gap-1.5 pl-2.5 pr-1 py-1 text-editor bg-subtle border border-primary-border-active text-accent rounded-full"
       role="status"
     >
       <CursorIcon />
