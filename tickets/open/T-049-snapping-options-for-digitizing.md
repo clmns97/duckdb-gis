@@ -71,6 +71,17 @@ sensible pixel tolerance so snapping feels right across zoom levels.
 
 ## Progress log
 
+- 2026-07-20: Implemented (first cut). Snapping state (`snapEnabled`) added to the
+  `editing` store; a toolbar toggle drives `toggleSnapping()`, which pushes a
+  `Snapping` config (`toCoordinate` + `toLine`) to the live line/polygon draw
+  modes via Terra Draw's `updateModeOptions` (verified available in
+  terra-draw@1.32; called through a narrow cast for its awkward generic). So new
+  drawing latches onto existing vertices/edges within the working set. Point +
+  line snap ship; **"center" snap has no native Terra Draw support and is
+  deferred** (would need a custom snap provider). Multi-select of individual snap
+  sub-modes (a popover) also deferred — the current control is a single on/off
+  toggle enabling point+line. Frontend tsc+build + design-system tsc pass;
+  snap-onto-existing-vertex to be eyeballed in preview.
 - 2026-07-20: Filed from user request (feature-rich editing toolbar). Scope is the
   snapping *behavior* + options surface; the toggle icon comes from Claude Design
   (out of scope). Flagged that the Terra Draw snapping API must be verified against

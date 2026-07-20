@@ -68,6 +68,15 @@ doesn't move the original.
 
 ## Progress log
 
+- 2026-07-20: Implemented. `editing.duplicateSelected()` / `copySelected()` /
+  `paste()` in the store; a module-level `clipboard` holds deep-cloned GeoJSON
+  (no map dep). Clones get a fresh `uuid()`, **no `__rid`** (Save INSERTs them),
+  and a small on-screen offset (`CLONE_OFFSET`) so they're grabbable; geometry is
+  deep-copied (`JSON.parse(JSON.stringify)`) so moving a clone never moves the
+  original. Paste rejects a family mismatch (guarded by `canPaste` + a thrown
+  error to the toolbar error slot). Toolbar Duplicate/Copy enabled at
+  `selectedCount>0`, Paste at `canPaste`. Keyboard shortcuts deferred. Frontend
+  tsc+build pass; duplicate→drag→Save round-trip to be eyeballed in preview.
 - 2026-07-20: Filed from user request (feature-rich editing toolbar). Duplicate +
   copy/paste grouped as pure working-set clone operations (no spatial SQL);
   cross-layer paste deferred. Key correctness point: fresh ids, no `__rid`, deep

@@ -73,6 +73,16 @@ Related tickets to coordinate: T-042 (batched commit) touches the same
 
 ## Progress log
 
+- 2026-07-20: Implemented. `editing.mergeSelected()` collects the selected
+  working-set geometries into a DuckDB `VALUES` set and unions them —
+  `ST_Union_Agg` for polygons, `ST_Collect(list(g))` for lines/points — then
+  `ST_AsGeoJSON` back. Verified the exact query against the bundled spatial
+  (polygon union → Polygon, lines → MultiLineString; `ST_Union_Agg` did NOT trip
+  the WKB aggregate bug here, so no fallback was needed). Working-set bookkeeping:
+  the merged feature keeps the first selected `__rid` (Save UPDATEs it); the other
+  consumed rows stay in `loadedRids` with no surviving feature so `commit()`
+  DELETEs them. Toolbar Merge button enabled at `selectedCount>=2`. Frontend
+  tsc+build pass; interactive merge+Save round-trip to be eyeballed in preview.
 - 2026-07-20: Filed from user request (feature-rich editing toolbar). Feature-level
   merge (distinct from T-004's layer-level merge), done as native DuckDB
   `ST_Union`/`ST_Union_Agg`. Flagged the geometry-aggregate WKB bug and the

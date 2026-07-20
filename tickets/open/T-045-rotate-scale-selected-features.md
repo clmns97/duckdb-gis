@@ -72,6 +72,18 @@ working set.
 
 ## Progress log
 
+- 2026-07-20: Implemented. Enabled Terra Draw's `rotateable`/`scaleable` select
+  flags (`editing.ts init()`) with single-key modifiers (`keyEvents`
+  `rotate:['r']`, `scale:['s']`) — hold R/S and drag a selected feature for
+  continuous transform. Verified against terra-draw@1.32: rotate/scale are
+  **key+drag**, not on-screen handles, so as a click-driven complement the store
+  also got `rotateSelected(15°)` / `scaleSelected(1.1×)` that transform the
+  selection about its shared bbox centre via `updateFeatureGeometry` (marks the
+  rows dirty → Save persists through the T-038 path). Toolbar Rotate/Scale
+  buttons (placeholder glyphs) enabled when `selectedCount>0`. Frontend
+  tsc+build + design-system tsc pass. Interactive rotate/scale + Save round-trip
+  still to be eyeballed in preview. Note the AC "grab a handle, drag" is met via
+  key+drag (Terra Draw has no rotate/scale handles) plus the click-increment.
 - 2026-07-20: Filed from user request to make the feature-editing toolbar
   feature-rich (merge/split/duplicate/rotate/scale/copy + snapping). Rotate/scale
   grouped because both are Terra Draw select-mode transforms on the current

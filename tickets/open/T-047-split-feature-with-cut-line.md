@@ -70,6 +70,18 @@ surface a readable message (existing `error` surface, `DrawToolbar.tsx:14`,
 
 ## Progress log
 
+- 2026-07-20: **Blocked on the bundled spatial extension.** Probed the DuckDB
+  `spatial` shipped in `build/release`: **neither `ST_Split` nor `ST_Polygonize`
+  exists** (only `ST_Node`, `ST_Difference`, `ST_Boundary`, `ST_Dump`,
+  `ST_Union`, `ST_Collect`). The standard no-`ST_Split` recipe (node the polygon
+  boundary with the cut line, then `ST_Polygonize`) is therefore unavailable too,
+  and a hand-rolled half-plane construction is fragile (single straight cuts
+  only) — not worth shipping. Options to unblock: (a) upgrade/rebuild the spatial
+  extension to a version exposing `ST_Split`/`ST_Polygonize`; (b) implement a
+  line-only split (tractable: cut a LineString at its intersection with the cut
+  line via `ST_Node` + `ST_Dump`) and defer polygon split; (c) defer the whole
+  ticket. Deferred pending that decision; the other four toolbar ops
+  (T-045/046/048/049) shipped without it. No toolbar Split button added yet.
 - 2026-07-20: Filed from user request (feature-rich editing toolbar). Native
   DuckDB `ST_Split` (verify availability). Two-step draw-a-cut-line gesture; cut
   line is transient. Inverse of T-046's `__rid`/`loadedRids` commit bookkeeping.

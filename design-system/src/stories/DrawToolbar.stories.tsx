@@ -20,12 +20,22 @@ function Stage({ children }: { children: React.ReactNode }) {
   );
 }
 
-// Collapsed-mode props are irrelevant while editing; defaults keep the expanded
-// stories terse.
-const collapsedDefaults = {
+// Props that are constant across the expanded stories (collapsed-mode fields +
+// the advanced-op handlers), kept here so each story stays focused on what it
+// exercises.
+const commonDefaults = {
   canBeginEdit: false,
   activeLayerName: null,
   onBeginEdit: () => {},
+  snapEnabled: false,
+  canPaste: false,
+  onRotate: () => {},
+  onScale: () => {},
+  onMerge: () => {},
+  onDuplicate: () => {},
+  onCopy: () => {},
+  onPaste: () => {},
+  onToggleSnap: () => {},
 };
 
 // Interactive: the toolbar is scoped to one geometry family (polygon here), so
@@ -39,7 +49,7 @@ function Interactive({ allowedMode = "polygon" as DrawMode }) {
     <Stage>
       <DrawToolbarView
         expanded
-        {...collapsedDefaults}
+        {...commonDefaults}
         active={active}
         allowedMode={allowedMode}
         targetName="new_layer"
@@ -67,10 +77,10 @@ export const Collapsed: Story = {
   render: () => (
     <Stage>
       <DrawToolbarView
+        {...commonDefaults}
         expanded={false}
         canBeginEdit
         activeLayerName="buildings"
-        onBeginEdit={() => {}}
         active="static"
         allowedMode={null}
         targetName=""
@@ -93,10 +103,8 @@ export const CollapsedDisabled: Story = {
   render: () => (
     <Stage>
       <DrawToolbarView
+        {...commonDefaults}
         expanded={false}
-        canBeginEdit={false}
-        activeLayerName={null}
-        onBeginEdit={() => {}}
         active="static"
         allowedMode={null}
         targetName=""
@@ -121,7 +129,7 @@ export const WithSelection: Story = {
     <Stage>
       <DrawToolbarView
         expanded
-        {...collapsedDefaults}
+        {...commonDefaults}
         active="select"
         allowedMode="polygon"
         targetName="buildings"
@@ -145,7 +153,7 @@ export const Busy: Story = {
     <Stage>
       <DrawToolbarView
         expanded
-        {...collapsedDefaults}
+        {...commonDefaults}
         active="polygon"
         allowedMode="polygon"
         targetName="parcels"
@@ -169,7 +177,7 @@ export const Error: Story = {
     <Stage>
       <DrawToolbarView
         expanded
-        {...collapsedDefaults}
+        {...commonDefaults}
         active="line"
         allowedMode="line"
         targetName="roads"

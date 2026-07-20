@@ -32,6 +32,15 @@ export function DrawToolbar() {
     }
   };
 
+  // Advanced editing ops (T-045/046/048): run the store action, surfacing any
+  // error (merge SQL, paste family mismatch) into the toolbar's error slot.
+  const guard = (fn: () => void | Promise<void>) => () => {
+    setError(null);
+    Promise.resolve()
+      .then(fn)
+      .catch((e) => setError(errMsg(e)));
+  };
+
   // Collapsed: the active layer is the Edit button's target. Only catalog-table
   // layers that have finished loading can be edited in place (query-backed and
   // still-loading layers can't); `beginEdit` also enforces the row-count cap and
@@ -56,10 +65,19 @@ export function DrawToolbar() {
       isNew={editing.target?.kind === "new"}
       featureCount={editing.featureCount}
       selectedCount={editing.selectedCount}
+      snapEnabled={editing.snapEnabled}
+      canPaste={editing.canPaste}
       busy={busy}
       error={error}
       onSetMode={(mode) => editing.setMode(mode)}
       onDelete={() => editing.deleteSelected()}
+      onRotate={guard(() => editing.rotateSelected())}
+      onScale={guard(() => editing.scaleSelected())}
+      onMerge={guard(() => editing.mergeSelected())}
+      onDuplicate={guard(() => editing.duplicateSelected())}
+      onCopy={guard(() => editing.copySelected())}
+      onPaste={guard(() => editing.paste())}
+      onToggleSnap={() => editing.toggleSnapping()}
       onCommit={onCommit}
       onCancel={() => editing.finishEdit()}
     />
