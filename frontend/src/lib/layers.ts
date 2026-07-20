@@ -20,7 +20,7 @@
 // ---------------------------------------------------------------------------
 
 import { getMap } from "./mapBus";
-import { query, str } from "./duckdb";
+import { query, str, sqlLit } from "./duckdb";
 import {
   addDeckLayer,
   removeDeckLayer,
@@ -81,6 +81,10 @@ type Listener = () => void;
 
 const byId = new Map<string, ActiveLayer>();
 let order: string[] = []; // newest first — mirrors map draw order (last added on top)
+// The single "active layer" (QGIS's active/current layer): the row highlighted in
+// the Layers panel and the target of layer-scoped actions like the map's Edit
+// button (T-038). Null when nothing is selected or the active layer is removed.
+let activeId: string | null = null;
 let version = 0;
 const listeners = new Set<Listener>();
 
@@ -150,6 +154,47 @@ export const layers = {
   subscribe(l: Listener): () => void {
     listeners.add(l);
     return () => listeners.delete(l);
+  },
+
+  /** Look up a layer by id (used by the editing store, T-038). */
+  get(id: string): ActiveLayer | undefined {
+    return byId.get(id);
+  },
+
+  /** The active layer's id (QGIS's active layer), or null. */
+  get activeId(): string | null {
+    return activeId;
+  },
+  /** The active layer, or undefined when none is active. */
+  active(): ActiveLayer | undefined {
+    return activeId ? byId.get(activeId) : undefined;
+  },
+  /** Set (or clear) the active layer — the Layers-panel selection, and the target
+   *  of layer-scoped map controls like the Edit button (T-038). */
+  setActive(id: string | null): void {
+    if (id === activeId) return;
+    if (id !== null && !byId.has(id)) return;
+    activeId = id;
+    emit();
+  },
+
+  /**
+   * Re-render a catalog-table layer from its source (T-038) — after edit-in-place
+   * writes back to the table, the deck buffers are stale, so re-run `addDeckLayer`
+   * on the same source and refresh the layer's extent. No-op for query-backed
+   * layers (no single backing table to re-read). Keeps the existing style.
+   */
+  async refresh(id: string): Promise<void> {
+    const layer = byId.get(id);
+    if (!layer?.source) return;
+    const sql = `SELECT ${ident(layer.source.geomColumn)} AS geom FROM ${qualified(layer.source)}`;
+    patch(id, { status: "loading" });
+    try {
+      const { bounds, style, geometryKind } = await addDeckLayer(id, sql);
+      patch(id, { status: "ready", bounds, style, geometryKind });
+    } catch (e) {
+      patch(id, { status: "error", error: e instanceof Error ? e.message : String(e) });
+    }
   },
 
   /**
@@ -323,6 +368,7 @@ export const layers = {
     else removeDeckLayer(id);
     byId.delete(id);
     order = order.filter((x) => x !== id);
+    if (activeId === id) activeId = null; // active layer went away
     syncDeckOrder();
     emit();
   },
@@ -399,9 +445,4 @@ export async function loadLayerInfo(layer: ActiveLayer): Promise<LayerInfo> {
     featureCount: Number(stat.n ?? 0),
     geometryType: stat.gt == null ? null : str(stat.gt),
   };
-}
-
-/** Escape a single-quoted SQL string literal. */
-function sqlLit(v: string): string {
-  return v.replace(/'/g, "''");
 }

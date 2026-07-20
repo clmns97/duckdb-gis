@@ -1,5 +1,5 @@
 import maplibregl from "maplibre-gl";
-import { query } from "./duckdb";
+import { query, sqlLit } from "./duckdb";
 import { getMap } from "./mapBus";
 
 // ---------------------------------------------------------------------------
@@ -70,7 +70,7 @@ function ident(name: string): string {
 }
 
 function sqlStr(value: string): string {
-  return `'${value.replace(/'/g, "''")}'`;
+  return `'${sqlLit(value)}'`;
 }
 
 /** Simplify tolerance in 3857 units for a zoom: sub-pixel detail at every zoom. */

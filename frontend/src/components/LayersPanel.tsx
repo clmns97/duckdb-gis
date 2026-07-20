@@ -1,6 +1,8 @@
 import { useState, useSyncExternalStore } from "react";
 import { Eye, EyeOff, GripVertical, X, Map as MapIcon, EllipsisVertical } from "lucide-react";
 import { layers, type ActiveLayer } from "../lib/layers";
+import { editing } from "../lib/editing";
+import { errMsg } from "../lib/duckdb";
 import { openAttributes } from "../lib/dockBus";
 import { basemap, basemapMenuItems } from "../lib/basemaps";
 import { ContextMenu, type MenuItem, type MenuState } from "./ContextMenu";
@@ -20,16 +22,23 @@ export function LayersPanel() {
   void version; // read so the component re-renders on store changes
   // Re-render when the basemap changes so the pinned row reflects it.
   useSyncExternalStore(basemap.subscribe, basemap.getSnapshot);
+  // Re-render on editing changes so the "Toggle/Stop editing" menu label and the
+  // per-row editing badge stay in sync (T-038).
+  useSyncExternalStore(editing.subscribe, () => editing.version);
   const list = layers.list();
   const [menu, setMenu] = useState<MenuState | null>(null);
+  // Inline surface for a failed "Toggle editing" (e.g. layer too large / still
+  // loading) — the context menu has nowhere to show an error.
+  const [editErr, setEditErr] = useState<string | null>(null);
   const [propsId, setPropsId] = useState<string | null>(null);
   // Drag-to-reorder z-order (T-031). `dragId` is the row being dragged; `dropAt`
   // is the insertion point (0 = above the first row … list.length = below the
   // last), rendered as an accent bar. Native HTML5 drag — no dnd dependency.
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropAt, setDropAt] = useState<number | null>(null);
-  // Persistent selected-row highlight (matches the DuckDB tree selection).
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Persistent selected-row highlight = the store's active layer (QGIS's active
+  // layer), shared with layer-scoped map controls like the Edit button (T-038).
+  const selectedId = layers.activeId;
 
   const resetDrag = () => {
     setDragId(null);
@@ -59,7 +68,20 @@ export function LayersPanel() {
   // to NaN bounds; "Layer properties…" opens the Information/Symbology dialog.
   const openLayerMenu = (e: React.MouseEvent, layer: ActiveLayer) => {
     e.preventDefault();
+    // Feature editing (T-038): only catalog-table layers can be edited in place;
+    // while editing one layer, the item is disabled on the others.
+    const editingThis = editing.target?.kind === "existing" && editing.target.layerId === layer.id;
+    const editingElsewhere = editing.isEditing() && !editingThis;
     const items: MenuItem[] = [
+      {
+        label: editingThis ? "Stop editing" : "Toggle editing",
+        disabled: !layer.source || layer.status !== "ready" || editingElsewhere,
+        onSelect: () => {
+          setEditErr(null);
+          if (editingThis) editing.finishEdit();
+          else editing.beginEdit(layer).catch((err) => setEditErr(errMsg(err)));
+        },
+      },
       {
         label: layer.visible ? "Hide layer" : "Show layer",
         onSelect: () => layers.setVisible(layer.id, !layer.visible),
@@ -103,6 +125,16 @@ export function LayersPanel() {
 
   return (
     <>
+    {editErr && (
+      <button
+        type="button"
+        className="block w-full text-left mb-1.5 px-2 py-1 text-xs text-danger bg-red-50 border border-red-200 rounded-sm cursor-pointer"
+        title="Dismiss"
+        onClick={() => setEditErr(null)}
+      >
+        {editErr}
+      </button>
+    )}
     {list.length === 0 ? (
       <p className="mt-0.5 text-editor text-gray-500 italic">No layers yet</p>
     ) : (
@@ -128,7 +160,7 @@ export function LayersPanel() {
           onDragOver={(e) => overRow(e, index)}
           onDrop={drop}
           onDragEnd={resetDrag}
-          onClick={() => setSelectedId(layer.id)}
+          onClick={() => layers.setActive(layer.id)}
           onContextMenu={(e) => openLayerMenu(e, layer)}
         >
           {dropAt === index && (
@@ -163,6 +195,14 @@ export function LayersPanel() {
           >
             {layer.name}
           </span>
+          {editing.target?.kind === "existing" && editing.target.layerId === layer.id && (
+            <span
+              className="shrink-0 rounded bg-subtle border border-accent px-1 text-[10px] leading-tight text-accent uppercase tracking-wide"
+              title="Editing this layer — use the map toolbar to edit vertices, then Save"
+            >
+              editing
+            </span>
+          )}
           {layer.temporary && (
             <span
               className="shrink-0 rounded bg-subtle border border-gray-200 px-1 text-[10px] leading-tight text-gray-500 uppercase tracking-wide"

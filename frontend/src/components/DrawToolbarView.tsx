@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from "react";
-import type { EditMode } from "../lib/editing";
+import type { EditMode, DrawMode } from "../lib/editing";
 
 // Presentational digitizing toolbar (T-025 / T-040), QGIS-style: a segmented
 // icon toolbar (the QGIS "digitising" bar) rather than text-label buttons. Pick
@@ -105,6 +105,24 @@ function AlertIcon({ size = 14 }: IconProps) {
   );
 }
 
+function CloseIcon({ size = ICON }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" {...svgProps}>
+      <path d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  );
+}
+
+// Pencil — the collapsed Edit affordance (T-038).
+function EditIcon({ size = ICON }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" {...svgProps}>
+      <path d="M4 20h4L18.5 9.5a2 2 0 0 0-3-3L5 17l-1 3z" />
+      <path d="M13.5 7.5l3 3" />
+    </svg>
+  );
+}
+
 function Spinner({ size = ICON }: IconProps) {
   return (
     <svg
@@ -122,16 +140,13 @@ function Spinner({ size = ICON }: IconProps) {
 
 // --- Layout helpers ---------------------------------------------------------
 
-const MODES: Array<{
-  mode: Exclude<EditMode, "static">;
-  title: string;
-  Icon: (p: IconProps) => ReactElement;
-}> = [
-  { mode: "select", title: "Select & edit vertices (V)", Icon: SelectIcon },
-  { mode: "point", title: "Draw points (P)", Icon: PointIcon },
-  { mode: "line", title: "Draw lines (L)", Icon: LineIcon },
-  { mode: "polygon", title: "Draw polygons (G)", Icon: PolygonIcon },
-];
+// The single draw mode a target allows (its geometry family), with its glyph +
+// tooltip. Only this button appears alongside Select — one geometry per layer.
+const DRAW: Record<DrawMode, { title: string; Icon: (p: IconProps) => ReactElement }> = {
+  point: { title: "Draw points (P)", Icon: PointIcon },
+  line: { title: "Draw lines (L)", Icon: LineIcon },
+  polygon: { title: "Draw polygons (G)", Icon: PolygonIcon },
+};
 
 const MODE_LABEL: Record<EditMode, string> = {
   static: "READY",
@@ -174,7 +189,14 @@ const Divider = () => (
 );
 
 export function DrawToolbarView({
+  expanded,
+  canBeginEdit,
+  activeLayerName,
+  onBeginEdit,
   active,
+  allowedMode,
+  targetName,
+  isNew,
   featureCount,
   selectedCount,
   busy,
@@ -182,8 +204,25 @@ export function DrawToolbarView({
   onSetMode,
   onDelete,
   onCommit,
+  onCancel,
 }: {
+  /** True while an edit target is active — render the full digitising bar; false
+   *  renders the collapsed Edit button (T-038). */
+  expanded: boolean;
+  /** Whether the active layer can be edited in place (a ready catalog layer). */
+  canBeginEdit: boolean;
+  /** Name of the active layer, shown on the collapsed Edit button. */
+  activeLayerName: string | null;
+  /** Enter edit-in-place on the active layer. */
+  onBeginEdit: () => void;
   active: EditMode;
+  /** The one draw mode this layer's geometry family allows (T-038). Null only in
+   *  isolation (Storybook) where no target is bound; then no draw button shows. */
+  allowedMode: DrawMode | null;
+  /** Name of the layer being edited, shown so it's clear what's in scope. */
+  targetName: string;
+  /** True when editing a not-yet-created new layer (vs. an existing one). */
+  isNew: boolean;
   featureCount: number;
   selectedCount: number;
   busy: boolean;
@@ -191,39 +230,88 @@ export function DrawToolbarView({
   onSetMode: (mode: EditMode) => void;
   onDelete: () => void;
   onCommit: () => void;
+  onCancel: () => void;
 }) {
   const canDelete = selectedCount > 0;
   const canCommit = featureCount > 0 && !busy;
+  const drawGlyph = allowedMode ? DRAW[allowedMode] : null;
+
+  // Collapsed: a compact top-left map control. Clicking enters edit-in-place on
+  // the active layer; disabled (greyed) when no catalog-table layer is active.
+  if (!expanded) {
+    return (
+      <div className="flex flex-col items-start gap-1.5">
+        <button
+          type="button"
+          title={canBeginEdit ? `Edit ${activeLayerName}` : "Select a layer to edit"}
+          disabled={!canBeginEdit}
+          onClick={onBeginEdit}
+          className={
+            "flex items-center gap-1.5 h-[34px] px-2.5 bg-white border border-gray-200 rounded-lg text-editor " +
+            (canBeginEdit
+              ? "text-gray-600 cursor-pointer hover:bg-gray-100 hover:text-gray-900"
+              : "text-gray-300 cursor-not-allowed")
+          }
+        >
+          <EditIcon />
+          <span>
+            Edit
+            {canBeginEdit && activeLayerName ? (
+              <>
+                {" · "}
+                <span className="font-medium text-gray-900">{activeLayerName}</span>
+              </>
+            ) : null}
+          </span>
+        </button>
+
+        {error && (
+          <div
+            className="flex items-center gap-1.5 max-w-sm px-2.5 py-1 text-xs text-danger bg-red-50 border border-red-200 rounded-sm"
+            role="alert"
+          >
+            <AlertIcon />
+            <span>{error}</span>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
-    <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[2] flex flex-col items-center gap-1.5">
-      {/* Segmented digitising bar: [ Select ] | [ Point Line Polygon ] | [ Delete ] | [ Commit ] */}
+    <div className="flex flex-col items-start gap-1.5">
+      {/* Editing <layer> — scope indicator so it's clear this is feature editing. */}
+      <div className="flex items-center gap-1.5 px-2.5 py-1 bg-white border border-gray-200 rounded-md text-xs text-gray-600">
+        <span className="w-1.5 h-1.5 rounded-full bg-accent" aria-hidden="true" />
+        <span>
+          {isNew ? "New layer" : "Editing"}
+          {targetName ? " · " : ""}
+          <span className="font-medium text-gray-900">{targetName}</span>
+        </span>
+      </div>
+
+      {/* Segmented digitising bar: [ Select ] | [ <family> ] | [ Delete ] | [ Save ] | [ Cancel ] */}
       <div className="flex items-center gap-1.5 p-[5px] bg-white border border-gray-200 rounded-lg">
         <ToolButton
-          title={MODES[0].title}
+          title="Select & edit vertices (V)"
           on={active === "select"}
-          onClick={() => onSetMode(active === "select" ? "static" : "select")}
+          onClick={() => onSetMode("select")}
         >
           <SelectIcon />
         </ToolButton>
 
-        <Divider />
-
-        <div className="flex items-center gap-1.5">
-          {MODES.slice(1).map(({ mode, title, Icon }) => {
-            const on = active === mode;
-            return (
-              <ToolButton
-                key={mode}
-                title={title}
-                on={on}
-                onClick={() => onSetMode(on ? "static" : mode)}
-              >
-                <Icon />
-              </ToolButton>
-            );
-          })}
-        </div>
+        {drawGlyph && allowedMode && (
+          <>
+            <Divider />
+            <ToolButton
+              title={drawGlyph.title}
+              on={active === allowedMode}
+              onClick={() => onSetMode(active === allowedMode ? "select" : allowedMode)}
+            >
+              <drawGlyph.Icon />
+            </ToolButton>
+          </>
+        )}
 
         <Divider />
 
@@ -246,7 +334,7 @@ export function DrawToolbarView({
 
         <button
           type="button"
-          title="Write the drawn features into a DuckDB table"
+          title={isNew ? "Create the layer table and save the drawn features" : "Save edits back to the layer's table"}
           disabled={!canCommit}
           onClick={onCommit}
           className={
@@ -257,12 +345,25 @@ export function DrawToolbarView({
           }
         >
           {busy ? <Spinner /> : <CheckIcon />}
-          <span>{busy ? "Committing…" : "Commit"}</span>
+          <span>{busy ? "Saving…" : "Save"}</span>
           {featureCount > 0 && !busy && (
             <span className="px-1.5 leading-none rounded-full text-xs bg-white/[.22]">
               {featureCount}
             </span>
           )}
+        </button>
+
+        <button
+          type="button"
+          title="Stop editing (discard uncommitted changes)"
+          disabled={busy}
+          onClick={onCancel}
+          className={
+            "w-[34px] h-[34px] grid place-items-center rounded-sm " +
+            "text-gray-600 cursor-pointer hover:bg-gray-100 hover:text-danger disabled:cursor-default"
+          }
+        >
+          <CloseIcon />
         </button>
       </div>
 
