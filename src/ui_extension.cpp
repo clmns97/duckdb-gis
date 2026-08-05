@@ -136,8 +136,8 @@ static void LoadInternal(DatabaseInstance &instance) {
   // duckdb-gis launch verbs. No start_ui/*_ui aliases: this extension can be
   // LOADed alongside DuckDB core's own `ui` extension, so registering names it
   // already owns would collide (see T-052). That means `duckdb -ui`, which the
-  // shell hardcodes to `CALL start_ui()`, no longer launches this UI — see
-  // T-054 for the replacement launch story.
+  // shell hardcodes to `CALL start_ui()`, no longer launches this UI. Users can
+  // restore it with `.ui_command start_gis()` in their `~/.duckdbrc`.
   REGISTER_TF("start_gis", StartUIFunction);
   REGISTER_TF("start_gis_server", StartUIServerFunction);
   REGISTER_TF("stop_gis_server", StopUIServerFunction);

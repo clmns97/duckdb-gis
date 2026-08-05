@@ -1,5 +1,5 @@
 ---
-id: T-055
+id: T-054
 title: Prepare duckdb-gis for listing as a DuckDB community extension
 status: open
 priority: P2
@@ -51,7 +51,8 @@ Remaining work in this ticket:
 - Metadata: license (we inherit upstream's MIT — confirm attribution to
   `duckdb/duckdb-ui` is preserved and correct), description, maintainer handle.
 - README aimed at a stranger: install line, what it does, screenshot, and the
-  launch story from [T-054].
+  launch story (`CALL start_gis()`, plus the `.ui_command start_gis()` route to
+  reclaim `duckdb -ui`).
 - Check whether the fork needs a distinct default branch / whether GitHub Actions
   behave differently on forks for the release workflow.
 
