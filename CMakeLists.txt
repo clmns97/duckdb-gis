@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.5...3.31.5)
 
 # Set extension name here
-set(TARGET_NAME ui)
+set(TARGET_NAME gis)
 
 # DuckDB's extension distribution supports vcpkg. As such, dependencies can be
 # added in ./vcpkg.json and then used in cmake with find_package. Feel free to

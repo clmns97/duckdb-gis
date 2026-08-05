@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "description": "duckdb-gis map-centered frontend (React) — served by the extension via ui_remote_url.",
+  "description": "duckdb-gis map-centered frontend (React) — served by the extension via gis_remote_url.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

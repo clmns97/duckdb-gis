@@ -6,7 +6,7 @@
 #include "http_server.hpp"
 #include "settings.hpp"
 #include "state.hpp"
-#include "ui_extension.hpp"
+#include "gis_extension.hpp"
 #include "utils/env.hpp"
 #include "utils/helpers.hpp"
 #include "version.hpp"
@@ -104,7 +104,7 @@ static void LoadInternal(DatabaseInstance &instance) {
 
   auto &fs = FileSystem::GetFileSystem(instance);
   fs.CreateDirectory(fs.ExpandPath("~/.duckdb/extension_data"));
-  fs.CreateDirectory(fs.ExpandPath("~/.duckdb/extension_data/ui"));
+  fs.CreateDirectory(fs.ExpandPath("~/.duckdb/extension_data/gis"));
 
   auto &config = DBConfig::GetConfig(instance);
   {
@@ -133,62 +133,51 @@ static void LoadInternal(DatabaseInstance &instance) {
         LogicalType::UINTEGER, Value::UINTEGER(def));
   }
 
-  // duckdb-gis launch verbs (renamed from the DuckDB UI's start_ui family).
+  // duckdb-gis launch verbs. No start_ui/*_ui aliases: this extension can be
+  // LOADed alongside DuckDB core's own `ui` extension, so registering names it
+  // already owns would collide (see T-052). That means `duckdb -ui`, which the
+  // shell hardcodes to `CALL start_ui()`, no longer launches this UI — see
+  // T-054 for the replacement launch story.
   REGISTER_TF("start_gis", StartUIFunction);
   REGISTER_TF("start_gis_server", StartUIServerFunction);
   REGISTER_TF("stop_gis_server", StopUIServerFunction);
   REGISTER_TF("get_gis_url", GetUIURLFunction);
-
-  // Keep the original start_ui family registered as aliases. The DuckDB core
-  // shell hardcodes `CALL start_ui()` for the `-ui` launch flag
-  // (duckdb/tools/shell/include/shell_state.hpp), so dropping these names would
-  // break `duckdb -ui`. Register both so the flag keeps working while our own
-  // verbs read as `gis`.
-  REGISTER_TF("start_ui", StartUIFunction);
-  REGISTER_TF("start_ui_server", StartUIServerFunction);
-  REGISTER_TF("stop_ui_server", StopUIServerFunction);
-  REGISTER_TF("get_ui_url", GetUIURLFunction);
   {
     TableFunction gis_tf("gis_is_started", {}, IsUIStartedTableFunc,
                          internal::SingleBoolResultBind,
                          RunOnceTableFunctionState::Init);
-    TableFunction ui_tf("ui_is_started", {}, IsUIStartedTableFunc,
-                        internal::SingleBoolResultBind,
-                        RunOnceTableFunctionState::Init);
 #ifdef DUCKDB_CPP_EXTENSION_ENTRY
     loader.RegisterFunction(gis_tf);
-    loader.RegisterFunction(ui_tf);
 #else
     ExtensionUtil::RegisterFunction(instance, gis_tf);
-    ExtensionUtil::RegisterFunction(instance, ui_tf);
 #endif
   }
 }
 
 #ifdef DUCKDB_CPP_EXTENSION_ENTRY
-void UiExtension::Load(ExtensionLoader &loader) { LoadInternal(loader); }
+void GisExtension::Load(ExtensionLoader &loader) { LoadInternal(loader); }
 #else
-void UiExtension::Load(DuckDB &db) { LoadInternal(*db.instance); }
+void GisExtension::Load(DuckDB &db) { LoadInternal(*db.instance); }
 #endif
 
-std::string UiExtension::Name() { return "ui"; }
+std::string GisExtension::Name() { return "gis"; }
 
-std::string UiExtension::Version() const { return UI_EXTENSION_VERSION; }
+std::string GisExtension::Version() const { return UI_EXTENSION_VERSION; }
 
 } // namespace duckdb
 
 extern "C" {
 
 #ifdef DUCKDB_CPP_EXTENSION_ENTRY
-DUCKDB_CPP_EXTENSION_ENTRY(ui, loader) { duckdb::LoadInternal(loader); }
+DUCKDB_CPP_EXTENSION_ENTRY(gis, loader) { duckdb::LoadInternal(loader); }
 #else
-DUCKDB_EXTENSION_API void ui_init(duckdb::DatabaseInstance &db) {
+DUCKDB_EXTENSION_API void gis_init(duckdb::DatabaseInstance &db) {
   duckdb::DuckDB db_wrapper(db);
-  db_wrapper.LoadExtension<duckdb::UiExtension>();
+  db_wrapper.LoadExtension<duckdb::GisExtension>();
 }
 #endif
 
-DUCKDB_EXTENSION_API const char *ui_version() {
+DUCKDB_EXTENSION_API const char *gis_version() {
   return duckdb::DuckDB::LibraryVersion();
 }
 }

@@ -21,13 +21,13 @@ Our code:
 ## Build & run
 
 ```sh
-make                              # build (release); binaries land in build/release/
-./build/release/duckdb            # DuckDB shell with extension auto-loaded
-./build/release/duckdb -ui        # start the UI
-./build/release/test/unittest     # run tests
+make                                       # build (release); binaries land in build/release/
+./build/release/duckdb                     # DuckDB shell with extension auto-loaded
+./build/release/duckdb -cmd "CALL start_gis_server()"   # start the UI
+./build/release/test/unittest              # run tests
 ```
 
-`make` uses `extension-ci-tools/makefiles/duckdb_extension.Makefile`. Extension name is `ui` (`extension_config.cmake`).
+`make` uses `extension-ci-tools/makefiles/duckdb_extension.Makefile`. Extension name is `gis` (`extension_config.cmake`).
 
 ## Ticket workflow
 

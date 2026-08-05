@@ -5,7 +5,9 @@
 #include <duckdb/main/connection.hpp>
 
 namespace duckdb {
-const static std::string STORAGE_EXTENSION_KEY = "ui";
+// Distinct from core DuckDB's "ui" storage extension key so both can be
+// registered in the same DBConfig without one clobbering the other.
+const static std::string STORAGE_EXTENSION_KEY = "gis";
 
 class UIStorageExtensionInfo : public StorageExtensionInfo {
 public:
