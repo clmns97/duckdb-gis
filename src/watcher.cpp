@@ -3,7 +3,6 @@
 #include <duckdb/main/attached_database.hpp>
 
 #include "utils/helpers.hpp"
-#include "utils/md_helpers.hpp"
 #include "http_server.hpp"
 #include "settings.hpp"
 
@@ -62,7 +61,6 @@ bool WasCatalogUpdated(DatabaseInstance &db, Connection &connection,
 
 void Watcher::Watch() {
   CatalogState last_state;
-  bool is_md_connected = false;
   while (should_run) {
     auto db = server.LockDatabaseInstance();
     if (!db) {
@@ -84,11 +82,6 @@ void Watcher::Watch() {
     try {
       if (WasCatalogUpdated(*db, con, last_state)) {
         server.event_dispatcher->SendCatalogChangedEvent();
-      }
-
-      if (!is_md_connected && IsMDConnected(con)) {
-        is_md_connected = true;
-        server.event_dispatcher->SendConnectedEvent(GetMDToken(con));
       }
     } catch (std::exception &ex) {
       // Do not crash with uncaught exception, but quit.
