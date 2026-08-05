@@ -1,0 +1,59 @@
+name: Frontend
+on:
+  pull_request:
+    paths:
+      - "frontend/**"
+      - "ts/**"
+      - ".github/workflows/Frontend.yml"
+  push:
+    branches:
+      - "main"
+    paths:
+      - "frontend/**"
+      - "ts/**"
+      - ".github/workflows/Frontend.yml"
+  workflow_dispatch:
+
+jobs:
+  dist_is_fresh:
+    name: frontend/dist is up to date
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+
+      - name: Setup Node with pnpm cache
+        uses: actions/setup-node@v4
+        with:
+          cache: 'pnpm'
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install ts workspace dependencies
+        working-directory: ts
+        run: pnpm install
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install
+
+      - name: Type-check
+        working-directory: frontend
+        run: pnpm typecheck
+
+      # frontend/dist is committed and embedded into the extension binary
+      # (see CMakeLists.txt). Rebuild it and fail if the committed copy is
+      # stale -- the CMake build has no Node and can't regenerate it itself.
+      - name: Build and diff against committed frontend/dist
+        working-directory: frontend
+        run: |
+          pnpm build
+          if ! git diff --quiet -- dist; then
+            echo "::error::frontend/dist is stale. Run 'make frontend' and commit the result."
+            git diff --stat -- dist
+            exit 1
+          fi

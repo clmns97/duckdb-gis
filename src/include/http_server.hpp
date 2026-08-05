@@ -10,6 +10,7 @@
 #include <string>
 #include <thread>
 
+#include "embedded_assets.hpp"
 #include "event_dispatcher.hpp"
 #include "watcher.hpp"
 
@@ -54,6 +55,8 @@ private:
                             httplib::Response &res);
   void HandleGetLocalToken(const httplib::Request &req, httplib::Response &res);
   void HandleGet(const httplib::Request &req, httplib::Response &res);
+  void HandleGetEmbedded(const httplib::Request &req, httplib::Response &res);
+  static const EmbeddedAsset *FindEmbeddedAsset(const std::string &path);
   void HandleInterrupt(const httplib::Request &req, httplib::Response &res);
   void DoHandleRun(const httplib::Request &req, httplib::Response &res,
                    const httplib::ContentReader &content_reader);

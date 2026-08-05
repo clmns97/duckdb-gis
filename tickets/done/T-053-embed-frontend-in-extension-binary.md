@@ -1,11 +1,11 @@
 ---
 id: T-053
 title: Embed the built frontend in the extension binary (stop proxying to a remote host)
-status: open
+status: done
 priority: P1
 area: build
 depends_on: [T-052]
-branch:
+branch: t-053-embed-frontend-in-binary
 ---
 
 ## Goal
@@ -75,19 +75,53 @@ Gotchas:
 
 ## Acceptance criteria
 
-- [ ] With no settings set, `CALL start_gis()` then opening the URL loads the
-      full GIS frontend with networking disabled.
-- [ ] Assets are served with correct `Content-Type` and gzip `Content-Encoding`;
+- [x] With no settings set, `CALL start_gis()` then opening the URL loads the
+      full GIS frontend with networking disabled. (Verified via curl:
+      byte-identical decoded content vs. `frontend/dist`; no browser
+      automation tool was available in this session to visually confirm in a
+      real browser — recommend a manual spot-check.)
+- [x] Assets are served with correct `Content-Type` and gzip `Content-Encoding`;
       deep links / unknown paths fall back to `index.html`.
-- [ ] `SET gis_remote_url = 'http://localhost:5173'` still proxies to Vite with
-      HMR working.
-- [ ] Rebuilding after `pnpm --dir frontend build` picks up the new bundle
-      without a manual clean.
-- [ ] Resulting `gis.duckdb_extension` size recorded in the progress log.
-- [ ] `make` + `./build/release/test/unittest` pass; README documents both modes.
+- [x] `SET gis_remote_url = 'http://localhost:5173'` still proxies to Vite with
+      HMR working. Note: this requires starting the shell with
+      `duckdb -unsigned` -- `allow_unsigned_extensions` gates the override
+      (inherited from upstream) and can only be set at startup, not via `SET`
+      on a running database. Documented in README.
+- [x] Rebuilding after `pnpm --dir frontend build` picks up the new bundle
+      without a manual clean. Verified: touched `frontend/src/main.tsx`,
+      rebuilt, and confirmed the new asset hash was served and the old one
+      404'd, with no `rm -rf build`.
+- [x] Resulting `gis.duckdb_extension` size recorded in the progress log.
+- [x] `make` + `./build/release/test/unittest` pass; README documents both modes.
 
 ## Progress log
 
 - 2026-08-05: Filed. Decision to embed rather than host taken with the user; see
   Context for the rationale and the measured bundle sizes. Blocked on [T-052]
   for the `gis_remote_url` rename.
+- 2026-08-05: Implemented. `frontend/dist` un-gitignored and committed;
+  `scripts/generate_embedded_assets.py` gzip-compresses each file into a
+  generated `.cpp` (byte arrays, not string literals) wired via a CMake
+  `add_custom_command` with `CONFIGURE_DEPENDS` on `frontend/dist/*`.
+  `HttpServer::HandleGet` branches on `remote_url.empty()`: embedded serving
+  reuses cpp-httplib's own `find_content_type` for MIME types (no hand-rolled
+  map) and falls back to `index.html` for extension-less paths (SPA routes).
+  `UI_REMOTE_URL_SETTING_DEFAULT` flipped to `""`. Added `make frontend`
+  convenience target and `.github/workflows/Frontend.yml` (rebuilds and
+  diffs against the committed `dist/` to catch staleness). `.gitattributes`
+  marks `frontend/dist/**` as generated/no-diff.
+  Discovered along the way: `SET gis_remote_url=...` is silently ignored
+  unless the shell was started with `-unsigned` (the `allow_unsigned_extensions`
+  gate can't be changed at runtime) -- not new behavior, but previously
+  undocumented; added to README.
+  Verified end-to-end: `make` + `./build/release/test/unittest` pass (18
+  assertions); curl round-trip confirms byte-identical decoded content for
+  `/`, the JS/CSS assets, and the SPA fallback, correct `Content-Type` /
+  `Content-Encoding: gzip`, and 404 for unknown extensioned paths; confirmed
+  the dev-proxy override works against a live Vite server; confirmed
+  incremental rebuild after a `frontend/dist` change with no manual clean.
+  Final `gis.duckdb_extension`: 42,781,278 bytes, vs. 41,867,134 bytes for the
+  unmodified upstream `ui.duckdb_extension` baseline -- a ~914 KB delta,
+  matching the gzip size measured before implementation. Not independently
+  visually verified in a real browser (no browser automation tool available
+  in this session).

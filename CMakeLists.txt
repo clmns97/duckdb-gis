@@ -29,6 +29,28 @@ set(EXTENSION_SOURCES
     src/utils/serialization.cpp
     src/watcher.cpp)
 
+# Embed frontend/dist (committed build output; see `make frontend`) into the
+# extension as gzip-compressed byte arrays, keyed by request path. Regenerated
+# whenever frontend/dist changes so a stale UI can't silently ship (T-053).
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+
+set(EMBEDDED_ASSETS_SRC ${CMAKE_CURRENT_BINARY_DIR}/embedded_assets.generated.cpp)
+file(GLOB_RECURSE FRONTEND_DIST_FILES CONFIGURE_DEPENDS
+     ${PROJECT_SOURCE_DIR}/frontend/dist/*)
+
+add_custom_command(
+  OUTPUT ${EMBEDDED_ASSETS_SRC}
+  COMMAND ${Python3_EXECUTABLE}
+          ${PROJECT_SOURCE_DIR}/scripts/generate_embedded_assets.py
+          --dist-dir ${PROJECT_SOURCE_DIR}/frontend/dist
+          --output ${EMBEDDED_ASSETS_SRC}
+  DEPENDS ${FRONTEND_DIST_FILES}
+          ${PROJECT_SOURCE_DIR}/scripts/generate_embedded_assets.py
+  COMMENT "Generating embedded GIS frontend assets from frontend/dist"
+  VERBATIM)
+
+list(APPEND EXTENSION_SOURCES ${EMBEDDED_ASSETS_SRC})
+
 add_definitions(-DDUCKDB_MAJOR_VERSION=${DUCKDB_MAJOR_VERSION})
 add_definitions(-DDUCKDB_MINOR_VERSION=${DUCKDB_MINOR_VERSION})
 add_definitions(-DDUCKDB_PATCH_VERSION=${DUCKDB_PATCH_VERSION})

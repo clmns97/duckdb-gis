@@ -8,7 +8,9 @@
 // can both run at once without an explicit SET gis_local_port.
 #define UI_LOCAL_PORT_SETTING_DEFAULT 4214
 #define UI_REMOTE_URL_SETTING_NAME "gis_remote_url"
-#define UI_REMOTE_URL_SETTING_DEFAULT "https://ui.duckdb.org"
+// Empty default -> serve the embedded frontend (see HttpServer::HandleGet).
+// Set to e.g. "http://localhost:5173" to proxy to a Vite dev server instead.
+#define UI_REMOTE_URL_SETTING_DEFAULT ""
 #define UI_POLLING_INTERVAL_SETTING_NAME "gis_polling_interval"
 #define UI_POLLING_INTERVAL_SETTING_DEFAULT 284
 
