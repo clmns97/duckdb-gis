@@ -4,7 +4,7 @@
 
 namespace duckdb {
 
-class UiExtension : public Extension {
+class GisExtension : public Extension {
 public:
 #ifdef DUCKDB_CPP_EXTENSION_ENTRY
   void Load(ExtensionLoader &loader) override;

@@ -3,11 +3,11 @@
 #include <duckdb/common/exception.hpp>
 #include <duckdb/main/client_context.hpp>
 
-#define UI_LOCAL_PORT_SETTING_NAME "ui_local_port"
+#define UI_LOCAL_PORT_SETTING_NAME "gis_local_port"
 #define UI_LOCAL_PORT_SETTING_DEFAULT 4213
-#define UI_REMOTE_URL_SETTING_NAME "ui_remote_url"
+#define UI_REMOTE_URL_SETTING_NAME "gis_remote_url"
 #define UI_REMOTE_URL_SETTING_DEFAULT "https://ui.duckdb.org"
-#define UI_POLLING_INTERVAL_SETTING_NAME "ui_polling_interval"
+#define UI_POLLING_INTERVAL_SETTING_NAME "gis_polling_interval"
 #define UI_POLLING_INTERVAL_SETTING_DEFAULT 284
 
 namespace duckdb {

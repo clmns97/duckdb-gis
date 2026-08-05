@@ -31,7 +31,7 @@ jobs:
       ci_tools_version: main
       duckdb_version: main
       exclude_archs: ${{ github.repository == 'duckdb/duckdb-ui' && 'wasm_mvp;wasm_eh;wasm_threads' || 'linux_arm64;linux_amd64_musl;osx_amd64;windows_amd64_mingw;wasm_mvp;wasm_eh;wasm_threads' }}
-      extension_name: ui
+      extension_name: gis
 
   duckdb-next-patch-build:
     name: Build UI extension for next patch (v1.5-variegata)
@@ -40,7 +40,7 @@ jobs:
       ci_tools_version: v1.5-variegata
       duckdb_version: v1.5-variegata
       exclude_archs: ${{ github.repository == 'duckdb/duckdb-ui' && 'wasm_mvp;wasm_eh;wasm_threads' || 'linux_arm64;linux_amd64_musl;osx_amd64;windows_amd64_mingw;wasm_mvp;wasm_eh;wasm_threads' }}
-      extension_name: ui
+      extension_name: gis
 
   duckdb-stable-build:
     name: Build UI extension for DuckDB v1.5.4
@@ -49,7 +49,7 @@ jobs:
       ci_tools_version: v1.5-variegata
       duckdb_version: v1.5.4
       exclude_archs: ${{ github.repository == 'duckdb/duckdb-ui' && 'wasm_mvp;wasm_eh;wasm_threads' || 'linux_arm64;linux_amd64_musl;osx_amd64;windows_amd64_mingw;wasm_mvp;wasm_eh;wasm_threads' }}
-      extension_name: ui
+      extension_name: gis
 
   duckdb-stable-deploy:
     if: ${{ github.repository == 'duckdb/duckdb-ui' && ( startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' ) }}
@@ -58,7 +58,7 @@ jobs:
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_deploy.yml@v1.5-variegata
     secrets: inherit
     with:
-      extension_name: ui
+      extension_name: gis
       ci_tools_version: v1.5-variegata
       duckdb_version: v1.5.4
       exclude_archs: 'wasm_mvp;wasm_eh;wasm_threads'
@@ -71,7 +71,7 @@ jobs:
       ci_tools_version: v1.4-andium
       duckdb_version: v1.4-andium
       exclude_archs: ${{ github.repository == 'duckdb/duckdb-ui' && 'wasm_mvp;wasm_eh;wasm_threads' || 'linux_arm64;linux_amd64_musl;osx_amd64;windows_amd64_mingw;wasm_mvp;wasm_eh;wasm_threads' }}
-      extension_name: ui
+      extension_name: gis
       vcpkg_commit: '84bab45d415d22042bd0b9081aea57f362da3f35'
 
   duckdb-lts-build:
@@ -81,7 +81,7 @@ jobs:
       ci_tools_version: v1.4-andium
       duckdb_version: v1.4.5
       exclude_archs: ${{ github.repository == 'duckdb/duckdb-ui' && 'wasm_mvp;wasm_eh;wasm_threads' || 'linux_arm64;linux_amd64_musl;osx_amd64;windows_amd64_mingw;wasm_mvp;wasm_eh;wasm_threads' }}
-      extension_name: ui
+      extension_name: gis
       vcpkg_commit: '84bab45d415d22042bd0b9081aea57f362da3f35'
 
   duckdb-lts-deploy:
@@ -91,7 +91,7 @@ jobs:
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_deploy.yml@v1.4-andium
     secrets: inherit
     with:
-      extension_name: ui
+      extension_name: gis
       ci_tools_version: v1.4-andium
       duckdb_version: v1.4.5
       exclude_archs: 'wasm_mvp;wasm_eh;wasm_threads'
