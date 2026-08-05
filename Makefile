@@ -16,3 +16,10 @@ release debug: | install-build-prereqs
 
 install-build-prereqs:
 	@command -v yum >/dev/null 2>&1 && yum install -y perl-core || true
+
+# Rebuilds frontend/dist, which is committed and embedded into the extension
+# binary (see CMakeLists.txt / scripts/generate_embedded_assets.py). Not a
+# dependency of `release`/`debug`: the community-extensions CI has no Node,
+# so this must be run and the result committed deliberately.
+frontend:
+	cd frontend && pnpm install && pnpm build

@@ -46,6 +46,20 @@ extension name is `gis` (see `extension_config.cmake`) — distinct from
 DuckDB's own core `ui` extension, so `LOAD ui; LOAD gis;` both work in the same
 session.
 
+The built frontend (`frontend/dist/`) is committed and compiled into the
+extension binary as gzip-compressed byte arrays (see
+`scripts/generate_embedded_assets.py` and the custom command in
+`CMakeLists.txt`), so `make` alone never needs Node. If you change anything
+under `frontend/src`, refresh the committed bundle first:
+
+```sh
+make frontend   # pnpm install && pnpm build in frontend/
+make            # picks up the new frontend/dist automatically
+```
+
+CI (`.github/workflows/Frontend.yml`) fails the build if `frontend/dist` is
+stale relative to `frontend/src`.
+
 ## Run
 
 From SQL:
@@ -61,24 +75,36 @@ CALL stop_gis_server();    -- stop the server
 The DuckDB shell's `-ui` flag is hardcoded to call `start_ui()`, which this
 extension deliberately does not register (that name belongs to DuckDB core's
 `ui` extension — registering it too would collide). So `duckdb -ui` does not
-launch the GIS UI; use `CALL start_gis();` above, or see ticket T-054 for a
-one-word launch shim.
+launch the GIS UI; use `CALL start_gis();` above. To make `duckdb -ui` launch
+this UI, put `.ui_command start_gis()` in your `~/.duckdbrc`.
 
 ## Frontend development
 
-The production build is served by the extension server; during development the
-frontend runs under Vite with hot-module reload and proxies the SQL-over-HTTP
-API to the running extension. From `frontend/`:
+By default `CALL start_gis_server()` serves the frontend embedded in the
+extension binary — no network access, works fully offline. During
+development you'll want live reload instead: point the server at a Vite dev
+server with hot-module reload, which proxies the SQL-over-HTTP API back to
+the running extension. From `frontend/`:
 
 ```sh
 pnpm install
 pnpm dev        # Vite dev server on http://127.0.0.1:5173
 ```
 
-Start the extension server in parallel (`./build/release/duckdb` then
-`CALL start_gis_server();`, which binds `localhost:4214`); Vite proxies
-`/ddb`, `/info`, `/localEvents`, and
-`/localToken` to it, rewriting `Origin`/`Referer` so the extension's
+Then start the extension shell **with `-unsigned`** — `gis_remote_url` is
+gated behind `allow_unsigned_extensions`, which can only be set at startup,
+not via `SET` once the database is running:
+
+```sh
+./build/release/duckdb -unsigned
+```
+```sql
+SET gis_remote_url = 'http://localhost:5173';
+CALL start_gis_server();   -- binds localhost:4214
+```
+
+Vite proxies `/ddb`, `/info`, `/localEvents`, and `/localToken` to the
+extension server, rewriting `Origin`/`Referer` so the extension's
 same-origin gate is satisfied (see `frontend/vite.config.ts` and
 `src/http_server.cpp`). Other scripts: `pnpm build`, `pnpm typecheck`.
 
@@ -90,9 +116,11 @@ receive events (e.g. catalog updates) are exposed as HTTP endpoints — see
 `HttpServer::Run` in [http_server.cpp](src/http_server.cpp).
 
 Which assets the server serves is controlled by the `gis_remote_url` setting
-(the DuckDB-UI mechanism we inherited). Rather than proxying the hosted
-`ui.duckdb.org` interface, we point it at our own MapLibre frontend — in
-development that is the Vite dev server above.
+(the DuckDB-UI mechanism we inherited). It defaults to empty, in which case
+the server serves the frontend embedded in the binary — see
+`HttpServer::HandleGetEmbedded` in `http_server.cpp`. Setting it to a URL
+(e.g. the Vite dev server above) restores the original DuckDB-UI behavior of
+proxying every GET to that origin.
 
 The frontend talks to the server through the TypeScript
 [duckdb-ui-client](ts/pkgs/duckdb-ui-client/package.json) package, which decodes

@@ -282,6 +282,14 @@ void HttpServer::InitClientFromParams(httplib::Client &client) {
 
 void HttpServer::HandleGet(const httplib::Request &req,
                            httplib::Response &res) {
+  // Empty remote_url (the default) -> serve the frontend embedded in this
+  // binary. A non-empty remote_url (e.g. set for local Vite dev) proxies, as
+  // below.
+  if (remote_url.empty()) {
+    HandleGetEmbedded(req, res);
+    return;
+  }
+
   // Create HTTP client to remote URL
   // TODO: Can this be created once and shared?
   httplib::Client client(remote_url);
@@ -321,6 +329,47 @@ void HttpServer::HandleGet(const httplib::Request &req,
 
   // httplib will set Content-Length, remove it so it is not duplicated.
   res.headers.erase("Content-Length");
+}
+
+const EmbeddedAsset *HttpServer::FindEmbeddedAsset(const std::string &path) {
+  for (size_t i = 0; i < EMBEDDED_ASSETS_COUNT; ++i) {
+    if (path == EMBEDDED_ASSETS[i].path) {
+      return &EMBEDDED_ASSETS[i];
+    }
+  }
+  return nullptr;
+}
+
+void HttpServer::HandleGetEmbedded(const httplib::Request &req,
+                                   httplib::Response &res) {
+  auto lookup = req.path == "/" ? "/index.html" : req.path;
+  const EmbeddedAsset *asset = FindEmbeddedAsset(lookup);
+
+  if (!asset) {
+    // SPA fallback: a path with no file extension in its last segment is a
+    // client-side route (e.g. deep link), not a missing asset.
+    auto last_slash = lookup.find_last_of('/');
+    auto last_segment = lookup.substr(last_slash + 1);
+    if (last_segment.find('.') == std::string::npos) {
+      asset = FindEmbeddedAsset("/index.html");
+    }
+  }
+
+  if (!asset) {
+    res.status = 404;
+    res.set_content("Not found: " + req.path, "text/plain");
+    return;
+  }
+
+  // Assets are stored pre-gzipped; httplib is built here without
+  // CPPHTTPLIB_ZLIB_SUPPORT (see CPPHTTPLIB_OPENSSL_SUPPORT above), so there's
+  // no on-the-fly (de)compression to conflict with -- we just hand the
+  // browser the compressed bytes and say so.
+  auto content_type = httplib::detail::find_content_type(
+      asset->path, {}, "application/octet-stream");
+  res.set_header("Content-Encoding", "gzip");
+  res.set_content(reinterpret_cast<const char *>(asset->gzip_data),
+                  asset->gzip_size, content_type);
 }
 
 void HttpServer::HandleInterrupt(const httplib::Request &req,
