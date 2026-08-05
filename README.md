@@ -76,7 +76,7 @@ pnpm dev        # Vite dev server on http://127.0.0.1:5173
 ```
 
 Start the extension server in parallel (`./build/release/duckdb` then
-`CALL start_gis_server();`, which binds `localhost:4213`); Vite proxies
+`CALL start_gis_server();`, which binds `localhost:4214`); Vite proxies
 `/ddb`, `/info`, `/localEvents`, and
 `/localToken` to it, rewriting `Origin`/`Referer` so the extension's
 same-origin gate is satisfied (see `frontend/vite.config.ts` and

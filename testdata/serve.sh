@@ -6,13 +6,13 @@
 # to it (e.g. tile-check.mjs creating pts_tiles) never dirty the committed
 # fixture. Kill with:  pkill -9 -f release/duckdb
 #
-# Usage:  testdata/serve.sh [port]     (default port 4213)
+# Usage:  testdata/serve.sh [port]     (default port 4214)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DUCKDB="$ROOT/build/release/duckdb"
-EXT="$ROOT/build/release/extension/ui/ui.duckdb_extension"
-PORT="${1:-4213}"
+EXT="$ROOT/build/release/extension/gis/gis.duckdb_extension"
+PORT="${1:-4214}"
 
 if [[ ! -x "$DUCKDB" ]]; then
   echo "fork build not found at $DUCKDB — run 'make release' first" >&2
@@ -36,7 +36,7 @@ echo "Serving $WORK on port $PORT (Ctrl-C to stop)"
 {
   printf "LOAD '%s';\n"          "$EXT"
   printf "INSTALL spatial; LOAD spatial;\n"
-  printf "SET ui_local_port=%s;\n" "$PORT"
+  printf "SET gis_local_port=%s;\n" "$PORT"
   printf "CALL start_gis();\n"
   tail -f /dev/null
 } | "$DUCKDB" -unsigned "$WORK"

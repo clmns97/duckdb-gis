@@ -56,7 +56,7 @@ Shape:
   [T-052] — land that first.
 - Dev loop: `SET gis_remote_url = 'http://localhost:5173'` restores today's
   behavior. Document it in README; `frontend/vite.config.ts` already proxies the
-  API routes back to :4213 and rewrites Origin for the same-origin gate.
+  API routes back to :4214 and rewrites Origin for the same-origin gate.
 
 Gotchas:
 - The CMake generator must run when `frontend/dist` changes (proper `DEPENDS`),

@@ -26,8 +26,8 @@ Launches `start_gis` against a throwaway copy (the committed fixture stays
 pristine even when a test writes, e.g. `tile-check.mjs` creating `pts_tiles`):
 
 ```bash
-testdata/serve.sh            # port 4213 (default)
-# ... in another shell: cd frontend && pnpm dev   (vite proxies /ddb -> :4213)
+testdata/serve.sh            # port 4214 (default)
+# ... in another shell: cd frontend && pnpm dev   (vite proxies /ddb -> :4214)
 # stop:  pkill -9 -f release/duckdb
 ```
 

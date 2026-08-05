@@ -4,7 +4,7 @@ import tailwindcss from "@tailwindcss/vite";
 
 // The duckdb-gis extension server (started via `CALL start_gis()`) binds
 // "localhost", which resolves to IPv6 [::1] here.
-const EXT = "http://[::1]:4213";
+const EXT = "http://[::1]:4214";
 
 // In dev we serve the app from Vite (with HMR) and proxy the extension's
 // SQL-over-HTTP API to it, rewriting Origin/Referer so the extension's
@@ -12,7 +12,7 @@ const EXT = "http://[::1]:4213";
 const withOrigin = (extra: Record<string, string> = {}) => ({
   target: EXT,
   changeOrigin: true,
-  headers: { Origin: "http://localhost:4213", ...extra },
+  headers: { Origin: "http://localhost:4214", ...extra },
 });
 
 export default defineConfig({
@@ -24,7 +24,7 @@ export default defineConfig({
       "/ddb": withOrigin(),
       "/info": withOrigin(),
       "/localEvents": withOrigin(),
-      "/localToken": withOrigin({ Referer: "http://localhost:4213/" }),
+      "/localToken": withOrigin({ Referer: "http://localhost:4214/" }),
     },
   },
   build: { target: "es2022" },

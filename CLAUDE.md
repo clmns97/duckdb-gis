@@ -55,4 +55,4 @@ implement the geo operations as native DuckDB spatial SQL.
 
 ## Project context
 
-Fork of `duckdb/duckdb-ui` serving our own MapLibre frontend; supersedes the earlier Quacklas prototype. Frontend dev uses Vite + pnpm (`pnpm dev`, port 5173), proxying the SQL-over-HTTP API to the extension server on `localhost:4213` (see `frontend/vite.config.ts`).
+Fork of `duckdb/duckdb-ui` serving our own MapLibre frontend; supersedes the earlier Quacklas prototype. Frontend dev uses Vite + pnpm (`pnpm dev`, port 5173), proxying the SQL-over-HTTP API to the extension server on `localhost:4214` (see `frontend/vite.config.ts`).
