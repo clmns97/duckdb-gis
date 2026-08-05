@@ -8,7 +8,7 @@ description: Spin up the duckdb-gis UI (extension server + Vite dev server) and 
 Launches the app so the user can browse it on another device:
 
 ```
-phone --Tailscale--> Vite :5173 (0.0.0.0) --proxy--> extension :4213 (loopback)
+phone --Tailscale--> Vite :5173 (0.0.0.0) --proxy--> extension :4214 (loopback)
 ```
 
 Vite serves the frontend from `frontend/src` (unbuilt, with HMR) and proxies

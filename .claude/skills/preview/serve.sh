@@ -3,7 +3,7 @@
 #
 # Spins up the GIS UI so it can be viewed from another device over Tailscale:
 #
-#   phone --Tailscale--> Vite :5173 (0.0.0.0) --proxy--> extension :4213 (loopback)
+#   phone --Tailscale--> Vite :5173 (0.0.0.0) --proxy--> extension :4214 (loopback)
 #
 # The extension server stays loopback-only; only Vite is exposed. Both
 # processes are launched detached (setsid) so they outlive the shell/chat.
@@ -15,7 +15,7 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 RUN_DIR="${TMPDIR:-/tmp}/duckdb-gis-preview"
 EXT_PID="$RUN_DIR/ext.pid"; EXT_LOG="$RUN_DIR/ext.log"
 VITE_PID="$RUN_DIR/vite.pid"; VITE_LOG="$RUN_DIR/vite.log"
-PORT_VITE=5173; PORT_EXT=4213
+PORT_VITE=5173; PORT_EXT=4214
 DUCKDB="$REPO/build/release/duckdb"
 DEMO="$REPO/testdata/demo.duckdb"; WORK_DB="$RUN_DIR/demo.duckdb"
 mkdir -p "$RUN_DIR"

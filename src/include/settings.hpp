@@ -4,7 +4,9 @@
 #include <duckdb/main/client_context.hpp>
 
 #define UI_LOCAL_PORT_SETTING_NAME "gis_local_port"
-#define UI_LOCAL_PORT_SETTING_DEFAULT 4213
+// Distinct from core DuckDB ui's default (4213) so `start_ui()`/`start_gis()`
+// can both run at once without an explicit SET gis_local_port.
+#define UI_LOCAL_PORT_SETTING_DEFAULT 4214
 #define UI_REMOTE_URL_SETTING_NAME "gis_remote_url"
 #define UI_REMOTE_URL_SETTING_DEFAULT "https://ui.duckdb.org"
 #define UI_POLLING_INTERVAL_SETTING_NAME "gis_polling_interval"
