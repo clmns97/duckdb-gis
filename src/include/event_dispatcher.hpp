@@ -15,7 +15,6 @@ namespace ui {
 
 class EventDispatcher {
 public:
-  void SendConnectedEvent(const std::string &token);
   void SendCatalogChangedEvent();
 
   bool WaitEvent(duckdb_httplib_openssl::DataSink *sink);

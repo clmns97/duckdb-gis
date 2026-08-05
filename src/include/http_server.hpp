@@ -53,7 +53,6 @@ private:
   void HandleGetInfo(const httplib::Request &req, httplib::Response &res);
   void HandleGetLocalEvents(const httplib::Request &req,
                             httplib::Response &res);
-  void HandleGetLocalToken(const httplib::Request &req, httplib::Response &res);
   void HandleGet(const httplib::Request &req, httplib::Response &res);
   void HandleGetEmbedded(const httplib::Request &req, httplib::Response &res);
   static const EmbeddedAsset *FindEmbeddedAsset(const std::string &path);
