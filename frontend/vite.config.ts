@@ -24,7 +24,6 @@ export default defineConfig({
       "/ddb": withOrigin(),
       "/info": withOrigin(),
       "/localEvents": withOrigin(),
-      "/localToken": withOrigin({ Referer: "http://localhost:4214/" }),
     },
   },
   build: { target: "es2022" },
