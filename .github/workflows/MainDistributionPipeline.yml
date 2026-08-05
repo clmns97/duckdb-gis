@@ -1,5 +1,15 @@
 #
-# This workflow calls the main distribution pipeline from DuckDB to build, test and (optionally) release the extension
+# Builds and tests the `gis` extension against the DuckDB versions we support.
+#
+# There are deliberately no deploy jobs here. Distribution is handled by
+# duckdb/community-extensions: that repo builds, signs and publishes the
+# extension from the ref pinned in its extensions/gis/description.yml. Upstream
+# duckdb-ui deployed to DuckDB Labs' own extension repository, which we have
+# neither credentials nor cause to write to.
+#
+# wasm is excluded everywhere: the extension runs a threaded HTTP server, which
+# has no wasm equivalent. Keep this in sync with `excluded_platforms` in the
+# community-extensions description.yml.
 #
 name: Main Extension Distribution Pipeline
 on:
@@ -25,74 +35,48 @@ concurrency:
 
 jobs:
   duckdb-main-build:
-    name: Build UI extension for main branch
+    name: Build GIS extension for main branch
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@main
     with:
       ci_tools_version: main
       duckdb_version: main
-      exclude_archs: ${{ github.repository == 'duckdb/duckdb-ui' && 'wasm_mvp;wasm_eh;wasm_threads' || 'linux_arm64;linux_amd64_musl;osx_amd64;windows_amd64_mingw;wasm_mvp;wasm_eh;wasm_threads' }}
+      exclude_archs: 'wasm_mvp;wasm_eh;wasm_threads'
       extension_name: gis
 
   duckdb-next-patch-build:
-    name: Build UI extension for next patch (v1.5-variegata)
+    name: Build GIS extension for next patch (v1.5-variegata)
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v1.5-variegata
     with:
       ci_tools_version: v1.5-variegata
       duckdb_version: v1.5-variegata
-      exclude_archs: ${{ github.repository == 'duckdb/duckdb-ui' && 'wasm_mvp;wasm_eh;wasm_threads' || 'linux_arm64;linux_amd64_musl;osx_amd64;windows_amd64_mingw;wasm_mvp;wasm_eh;wasm_threads' }}
+      exclude_archs: 'wasm_mvp;wasm_eh;wasm_threads'
       extension_name: gis
 
   duckdb-stable-build:
-    name: Build UI extension for DuckDB v1.5.4
+    name: Build GIS extension for DuckDB v1.5.4
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v1.5-variegata
     with:
       ci_tools_version: v1.5-variegata
       duckdb_version: v1.5.4
-      exclude_archs: ${{ github.repository == 'duckdb/duckdb-ui' && 'wasm_mvp;wasm_eh;wasm_threads' || 'linux_arm64;linux_amd64_musl;osx_amd64;windows_amd64_mingw;wasm_mvp;wasm_eh;wasm_threads' }}
-      extension_name: gis
-
-  duckdb-stable-deploy:
-    if: ${{ github.repository == 'duckdb/duckdb-ui' && ( startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' ) }}
-    name: Deploy UI extension for DuckDB v1.5.4
-    needs: duckdb-stable-build
-    uses: duckdb/extension-ci-tools/.github/workflows/_extension_deploy.yml@v1.5-variegata
-    secrets: inherit
-    with:
-      extension_name: gis
-      ci_tools_version: v1.5-variegata
-      duckdb_version: v1.5.4
       exclude_archs: 'wasm_mvp;wasm_eh;wasm_threads'
-      deploy_latest: ${{ startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' }}
+      extension_name: gis
 
   duckdb-lts-next-patch-build:
-    name: Build UI extension binaries for next LTS patch (v1.4-andium)
+    name: Build GIS extension binaries for next LTS patch (v1.4-andium)
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v1.4-andium
     with:
       ci_tools_version: v1.4-andium
       duckdb_version: v1.4-andium
-      exclude_archs: ${{ github.repository == 'duckdb/duckdb-ui' && 'wasm_mvp;wasm_eh;wasm_threads' || 'linux_arm64;linux_amd64_musl;osx_amd64;windows_amd64_mingw;wasm_mvp;wasm_eh;wasm_threads' }}
+      exclude_archs: 'wasm_mvp;wasm_eh;wasm_threads'
       extension_name: gis
       vcpkg_commit: '84bab45d415d22042bd0b9081aea57f362da3f35'
 
   duckdb-lts-build:
-    name: Build UI extension for DuckDB v1.4.5 (LTS)
+    name: Build GIS extension for DuckDB v1.4.5 (LTS)
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v1.4-andium
     with:
       ci_tools_version: v1.4-andium
       duckdb_version: v1.4.5
-      exclude_archs: ${{ github.repository == 'duckdb/duckdb-ui' && 'wasm_mvp;wasm_eh;wasm_threads' || 'linux_arm64;linux_amd64_musl;osx_amd64;windows_amd64_mingw;wasm_mvp;wasm_eh;wasm_threads' }}
+      exclude_archs: 'wasm_mvp;wasm_eh;wasm_threads'
       extension_name: gis
       vcpkg_commit: '84bab45d415d22042bd0b9081aea57f362da3f35'
-
-  duckdb-lts-deploy:
-    if: ${{ github.repository == 'duckdb/duckdb-ui' && ( startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' ) }}
-    name: Deploy UI extension for DuckDB v1.4.5 (LTS)
-    needs: duckdb-lts-build
-    uses: duckdb/extension-ci-tools/.github/workflows/_extension_deploy.yml@v1.4-andium
-    secrets: inherit
-    with:
-      extension_name: gis
-      ci_tools_version: v1.4-andium
-      duckdb_version: v1.4.5
-      exclude_archs: 'wasm_mvp;wasm_eh;wasm_threads'
-      deploy_latest: ${{ startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' }}
