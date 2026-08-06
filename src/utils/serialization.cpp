@@ -4,7 +4,7 @@
 #include "duckdb/common/serializer/serializer.hpp"
 
 namespace duckdb {
-namespace ui {
+namespace gis {
 
 void EmptyResult::Serialize(Serializer &) const {}
 
@@ -48,5 +48,5 @@ void ErrorResult::Serialize(Serializer &serializer) const {
   serializer.WriteProperty(101, "error", error);
 }
 
-} // namespace ui
+} // namespace gis
 } // namespace duckdb

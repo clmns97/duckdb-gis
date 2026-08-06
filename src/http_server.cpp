@@ -23,7 +23,7 @@
 #include <duckdb/parser/parser.hpp>
 
 namespace duckdb {
-namespace ui {
+namespace gis {
 
 unique_ptr<HttpServer> HttpServer::server_instance;
 
@@ -123,7 +123,7 @@ void HttpServer::DoStart(const uint16_t _local_port,
   http_params = std::move(_http_params);
   user_agent =
       StringUtil::Format("duckdb-ui/%s-%s(%s)", DuckDB::LibraryVersion(),
-                         UI_EXTENSION_VERSION, DuckDB::Platform());
+                         GIS_EXTENSION_VERSION, DuckDB::Platform());
   event_dispatcher = make_uniq<EventDispatcher>();
   main_thread = make_uniq<std::thread>(&HttpServer::Run, this);
   watcher = make_uniq<Watcher>(*this);
@@ -206,7 +206,7 @@ void HttpServer::HandleGetInfo(const httplib::Request &req,
   res.set_header("Access-Control-Allow-Origin", "*");
   res.set_header("X-DuckDB-Version", DuckDB::LibraryVersion());
   res.set_header("X-DuckDB-Platform", DuckDB::Platform());
-  res.set_header("X-DuckDB-UI-Extension-Version", UI_EXTENSION_VERSION);
+  res.set_header("X-DuckDB-UI-Extension-Version", GIS_EXTENSION_VERSION);
   res.set_content("", "text/plain");
 }
 
@@ -260,7 +260,7 @@ void HttpServer::HandleGet(const httplib::Request &req,
   httplib::Client client(remote_url);
   InitClientFromParams(client);
 
-  if (IsEnvEnabled("ui_disable_server_certificate_verification")) {
+  if (IsEnvEnabled("gis_disable_server_certificate_verification")) {
     client.enable_server_certificate_verification(false);
   }
 
@@ -289,7 +289,7 @@ void HttpServer::HandleGet(const httplib::Request &req,
     res.set_header("X-DuckDB-Platform", DuckDB::Platform());
     // The UI looks for this to select the appropriate DuckDB mode (HTTP or
     // Wasm).
-    res.set_header("X-DuckDB-UI-Extension-Version", UI_EXTENSION_VERSION);
+    res.set_header("X-DuckDB-UI-Extension-Version", GIS_EXTENSION_VERSION);
   }
 
   // httplib will set Content-Length, remove it so it is not duplicated.
@@ -356,7 +356,7 @@ void HttpServer::HandleInterrupt(const httplib::Request &req,
   }
 
   auto connection =
-      UIStorageExtensionInfo::GetState(*db).FindConnection(connection_name);
+      GisStorageExtensionInfo::GetState(*db).FindConnection(connection_name);
   if (!connection) {
     res.status = 404;
     return;
@@ -444,7 +444,7 @@ void HttpServer::DoHandleRun(const httplib::Request &req,
   }
 
   auto connection =
-      UIStorageExtensionInfo::GetState(*db).FindOrCreateConnection(
+      GisStorageExtensionInfo::GetState(*db).FindOrCreateConnection(
           *db, connection_name);
   auto &context = *connection->context;
   // Set errors_as_json
@@ -752,5 +752,5 @@ void HttpServer::CopyAndSlice(duckdb::DataChunk &source,
   target.Slice(0, row_count);
 }
 
-} // namespace ui
+} // namespace gis
 } // namespace duckdb

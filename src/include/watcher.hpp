@@ -7,7 +7,7 @@
 #include <thread>
 
 namespace duckdb {
-namespace ui {
+namespace gis {
 struct CatalogState {
   std::map<idx_t, optional_idx> db_to_catalog_version;
 };
@@ -28,5 +28,5 @@ private:
   HttpServer &server;
   DatabaseInstance *watched_database;
 };
-} // namespace ui
+} // namespace gis
 } // namespace duckdb

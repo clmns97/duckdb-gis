@@ -22,13 +22,13 @@
 
 namespace duckdb {
 
-std::string StartUIFunction(ClientContext &context) {
-  if (!ui::HttpServer::Started() &&
-      ui::HttpServer::IsRunningOnMachine(context)) {
+std::string StartGisFunction(ClientContext &context) {
+  if (!gis::HttpServer::Started() &&
+      gis::HttpServer::IsRunningOnMachine(context)) {
     return "duckdb-gis already running in a different DuckDB instance";
   }
 
-  const auto &server = ui::HttpServer::Start(context);
+  const auto &server = gis::HttpServer::Start(context);
   const auto local_url = server.LocalUrl();
 
   const auto command = StringUtil::Format("%s %s", OPEN_COMMAND, local_url);
@@ -38,41 +38,41 @@ std::string StartUIFunction(ClientContext &context) {
              : StringUtil::Format("duckdb-gis started at %s", local_url);
 }
 
-std::string StartUIServerFunction(ClientContext &context) {
-  if (!ui::HttpServer::Started() &&
-      ui::HttpServer::IsRunningOnMachine(context)) {
+std::string StartGisServerFunction(ClientContext &context) {
+  if (!gis::HttpServer::Started() &&
+      gis::HttpServer::IsRunningOnMachine(context)) {
     return "duckdb-gis already running in a different DuckDB instance";
   }
 
   bool was_started = false;
-  const auto &server = ui::HttpServer::Start(context, &was_started);
+  const auto &server = gis::HttpServer::Start(context, &was_started);
   const char *already = was_started ? "already " : "";
   return StringUtil::Format("duckdb-gis server %sstarted at %s", already,
                             server.LocalUrl());
 }
 
-std::string StopUIServerFunction(ClientContext &context) {
-  return ui::HttpServer::Stop() ? "duckdb-gis server stopped"
+std::string StopGisServerFunction(ClientContext &context) {
+  return gis::HttpServer::Stop() ? "duckdb-gis server stopped"
                                 : "duckdb-gis server already stopped";
 }
 
-std::string GetUIURLFunction(ClientContext &context) {
-  if (!ui::HttpServer::Started()) {
+std::string GetGisUrlFunction(ClientContext &context) {
+  if (!gis::HttpServer::Started()) {
     throw ExecutorException("duckdb-gis server not started");
   }
 
-  auto server = ui::HttpServer::GetInstance(context);
+  auto server = gis::HttpServer::GetInstance(context);
   return server->LocalUrl();
 }
 
-void IsUIStartedTableFunc(ClientContext &context, TableFunctionInput &input,
+void IsGisStartedTableFunc(ClientContext &context, TableFunctionInput &input,
                           DataChunk &output) {
   if (!internal::ShouldRun(input)) {
     return;
   }
 
   output.SetCardinality(1);
-  output.SetValue(0, 0, ui::HttpServer::Started());
+  output.SetValue(0, 0, gis::HttpServer::Started());
 }
 
 void InitStorageExtension(duckdb::DatabaseInstance &db) {
@@ -80,11 +80,11 @@ void InitStorageExtension(duckdb::DatabaseInstance &db) {
 
 #if DUCKDB_VERSION_AT_LEAST(1, 5, 0)
   auto ext = duckdb::make_shared_ptr<duckdb::StorageExtension>();
-  ext->storage_info = duckdb::make_uniq<UIStorageExtensionInfo>();
+  ext->storage_info = duckdb::make_uniq<GisStorageExtensionInfo>();
   StorageExtension::Register(config, STORAGE_EXTENSION_KEY, ext);
 #else
   auto ext = duckdb::make_uniq<duckdb::StorageExtension>();
-  ext->storage_info = duckdb::make_uniq<UIStorageExtensionInfo>();
+  ext->storage_info = duckdb::make_uniq<GisStorageExtensionInfo>();
   config.storage_extensions[STORAGE_EXTENSION_KEY] = std::move(ext);
 #endif
 }
@@ -100,7 +100,7 @@ static void LoadInternal(DatabaseInstance &instance) {
   // If the server is already running we need to update the database instance
   // since the previous one was invalidated (eg. in the shell when we '.open'
   // a new database)
-  ui::HttpServer::UpdateDatabaseInstanceIfRunning(instance.shared_from_this());
+  gis::HttpServer::UpdateDatabaseInstanceIfRunning(instance.shared_from_this());
 
   auto &fs = FileSystem::GetFileSystem(instance);
   // CreateDirectory is a single-level mkdir; ~/.duckdb won't exist yet on a
@@ -121,27 +121,27 @@ static void LoadInternal(DatabaseInstance &instance) {
 
   auto &config = DBConfig::GetConfig(instance);
   {
-    auto default_port = GetEnvOrDefaultInt(UI_LOCAL_PORT_SETTING_NAME,
-                                           UI_LOCAL_PORT_SETTING_DEFAULT);
+    auto default_port = GetEnvOrDefaultInt(GIS_LOCAL_PORT_SETTING_NAME,
+                                           GIS_LOCAL_PORT_SETTING_DEFAULT);
     config.AddExtensionOption(
-        UI_LOCAL_PORT_SETTING_NAME, "Local port on which the UI server listens",
+        GIS_LOCAL_PORT_SETTING_NAME, "Local port on which the UI server listens",
         LogicalType::USMALLINT, Value::USMALLINT(default_port));
   }
 
   {
-    auto def = GetEnvOrDefault(UI_REMOTE_URL_SETTING_NAME,
-                               UI_REMOTE_URL_SETTING_DEFAULT);
+    auto def = GetEnvOrDefault(GIS_REMOTE_URL_SETTING_NAME,
+                               GIS_REMOTE_URL_SETTING_DEFAULT);
     config.AddExtensionOption(
-        UI_REMOTE_URL_SETTING_NAME,
+        GIS_REMOTE_URL_SETTING_NAME,
         "Remote URL to which the UI server forwards GET requests",
         LogicalType::VARCHAR, Value(def));
   }
 
   {
-    auto def = GetEnvOrDefaultInt(UI_POLLING_INTERVAL_SETTING_NAME,
-                                  UI_POLLING_INTERVAL_SETTING_DEFAULT);
+    auto def = GetEnvOrDefaultInt(GIS_POLLING_INTERVAL_SETTING_NAME,
+                                  GIS_POLLING_INTERVAL_SETTING_DEFAULT);
     config.AddExtensionOption(
-        UI_POLLING_INTERVAL_SETTING_NAME,
+        GIS_POLLING_INTERVAL_SETTING_NAME,
         "Period of time between UI polling requests (in ms)",
         LogicalType::UINTEGER, Value::UINTEGER(def));
   }
@@ -151,12 +151,12 @@ static void LoadInternal(DatabaseInstance &instance) {
   // already owns would collide (see T-052). That means `duckdb -ui`, which the
   // shell hardcodes to `CALL start_ui()`, no longer launches this UI. Users can
   // restore it with `.ui_command start_gis()` in their `~/.duckdbrc`.
-  REGISTER_TF("start_gis", StartUIFunction);
-  REGISTER_TF("start_gis_server", StartUIServerFunction);
-  REGISTER_TF("stop_gis_server", StopUIServerFunction);
-  REGISTER_TF("get_gis_url", GetUIURLFunction);
+  REGISTER_TF("start_gis", StartGisFunction);
+  REGISTER_TF("start_gis_server", StartGisServerFunction);
+  REGISTER_TF("stop_gis_server", StopGisServerFunction);
+  REGISTER_TF("get_gis_url", GetGisUrlFunction);
   {
-    TableFunction gis_tf("gis_is_started", {}, IsUIStartedTableFunc,
+    TableFunction gis_tf("gis_is_started", {}, IsGisStartedTableFunc,
                          internal::SingleBoolResultBind,
                          RunOnceTableFunctionState::Init);
 #ifdef DUCKDB_CPP_EXTENSION_ENTRY
@@ -175,7 +175,7 @@ void GisExtension::Load(DuckDB &db) { LoadInternal(*db.instance); }
 
 std::string GisExtension::Name() { return "gis"; }
 
-std::string GisExtension::Version() const { return UI_EXTENSION_VERSION; }
+std::string GisExtension::Version() const { return GIS_EXTENSION_VERSION; }
 
 } // namespace duckdb
 

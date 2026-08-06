@@ -13,7 +13,7 @@ namespace httplib = duckdb_httplib_openssl;
 #define MAX_EVENT_WAIT_COUNT 3
 
 namespace duckdb {
-namespace ui {
+namespace gis {
 // An empty Server-Sent Events message. See
 // https://html.spec.whatwg.org/multipage/server-sent-events.html#authoring-notes
 constexpr const char *EMPTY_SSE_MESSAGE = ":\r\r";
@@ -69,5 +69,5 @@ void EventDispatcher::Close() {
   closed = true;
   cv.notify_all();
 }
-} // namespace ui
+} // namespace gis
 } // namespace duckdb

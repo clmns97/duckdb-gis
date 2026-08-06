@@ -6,26 +6,26 @@
 
 namespace duckdb {
 
-UIStorageExtensionInfo &
-UIStorageExtensionInfo::GetState(const DatabaseInstance &instance) {
+GisStorageExtensionInfo &
+GisStorageExtensionInfo::GetState(const DatabaseInstance &instance) {
   auto &config = instance.config;
 #if DUCKDB_VERSION_AT_LEAST(1, 5, 0)
   auto ext = StorageExtension::Find(config, STORAGE_EXTENSION_KEY);
   if (!ext) {
     throw std::runtime_error("Fatal error: couldn't find the extension state.");
   }
-  return *static_cast<UIStorageExtensionInfo *>(ext->storage_info.get());
+  return *static_cast<GisStorageExtensionInfo *>(ext->storage_info.get());
 #else
   auto it = config.storage_extensions.find(STORAGE_EXTENSION_KEY);
   if (it == config.storage_extensions.end()) {
     throw std::runtime_error("Fatal error: couldn't find the extension state.");
   }
-  return *static_cast<UIStorageExtensionInfo *>(it->second->storage_info.get());
+  return *static_cast<GisStorageExtensionInfo *>(it->second->storage_info.get());
 #endif
 }
 
 shared_ptr<Connection>
-UIStorageExtensionInfo::FindConnection(const std::string &connection_name) {
+GisStorageExtensionInfo::FindConnection(const std::string &connection_name) {
   if (connection_name.empty()) {
     return nullptr;
   }
@@ -42,7 +42,7 @@ UIStorageExtensionInfo::FindConnection(const std::string &connection_name) {
   return nullptr;
 }
 
-shared_ptr<Connection> UIStorageExtensionInfo::FindOrCreateConnection(
+shared_ptr<Connection> GisStorageExtensionInfo::FindOrCreateConnection(
     DatabaseInstance &db, const std::string &connection_name) {
   if (connection_name.empty()) {
     // If no connection name was provided, create and return a new connection

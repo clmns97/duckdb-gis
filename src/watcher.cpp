@@ -7,7 +7,7 @@
 #include "settings.hpp"
 
 namespace duckdb {
-namespace ui {
+namespace gis {
 
 Watcher::Watcher(HttpServer &_server)
     : should_run(false), server(_server), watched_database(nullptr) {}
@@ -122,5 +122,5 @@ void Watcher::Stop() {
   thread.reset();
 }
 
-} // namespace ui
+} // namespace gis
 } // namespace duckdb

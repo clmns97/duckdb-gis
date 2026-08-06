@@ -11,7 +11,7 @@ class DataSink;
 
 namespace duckdb {
 
-namespace ui {
+namespace gis {
 
 class EventDispatcher {
 public:
@@ -30,5 +30,5 @@ private:
   std::string message;
   std::atomic_bool closed{false};
 };
-} // namespace ui
+} // namespace gis
 } // namespace duckdb

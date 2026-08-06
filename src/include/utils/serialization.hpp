@@ -5,7 +5,7 @@
 #include <string>
 
 namespace duckdb {
-namespace ui {
+namespace gis {
 
 struct EmptyResult {
   void Serialize(duckdb::Serializer &serializer) const;
@@ -45,5 +45,5 @@ struct ErrorResult {
   void Serialize(duckdb::Serializer &serializer) const;
 };
 
-} // namespace ui
+} // namespace gis
 } // namespace duckdb

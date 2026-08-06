@@ -21,7 +21,7 @@ set(EXTENSION_SOURCES
     src/http_server.cpp
     src/settings.cpp
     src/state.cpp
-    src/ui_extension.cpp
+    src/gis_extension.cpp
     src/utils/encoding.cpp
     src/utils/env.cpp
     src/utils/helpers.cpp
@@ -62,20 +62,20 @@ endif()
 execute_process(
   COMMAND ${GIT_EXECUTABLE} rev-list --count HEAD
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-  OUTPUT_VARIABLE UI_EXTENSION_SEQ_NUM
+  OUTPUT_VARIABLE GIS_EXTENSION_SEQ_NUM
   OUTPUT_STRIP_TRAILING_WHITESPACE)
 
-message(STATUS "UI_EXTENSION_SEQ_NUM=${UI_EXTENSION_SEQ_NUM}")
-add_definitions(-DUI_EXTENSION_SEQ_NUM="${UI_EXTENSION_SEQ_NUM}")
+message(STATUS "GIS_EXTENSION_SEQ_NUM=${GIS_EXTENSION_SEQ_NUM}")
+add_definitions(-DGIS_EXTENSION_SEQ_NUM="${GIS_EXTENSION_SEQ_NUM}")
 
 execute_process(
   COMMAND ${GIT_EXECUTABLE} rev-parse --short=10 HEAD
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-  OUTPUT_VARIABLE UI_EXTENSION_GIT_SHA
+  OUTPUT_VARIABLE GIS_EXTENSION_GIT_SHA
   OUTPUT_STRIP_TRAILING_WHITESPACE)
 
-message(STATUS "UI_EXTENSION_GIT_SHA=${UI_EXTENSION_GIT_SHA}")
-add_definitions(-DUI_EXTENSION_GIT_SHA="${UI_EXTENSION_GIT_SHA}")
+message(STATUS "GIS_EXTENSION_GIT_SHA=${GIS_EXTENSION_GIT_SHA}")
+add_definitions(-DGIS_EXTENSION_GIT_SHA="${GIS_EXTENSION_GIT_SHA}")
 
 build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})
 build_loadable_extension(${TARGET_NAME} " " ${EXTENSION_SOURCES})

@@ -3,7 +3,7 @@
 #include <cstddef>
 
 namespace duckdb {
-namespace ui {
+namespace gis {
 
 // One entry per file under frontend/dist, generated at build time by
 // scripts/generate_embedded_assets.py from the committed frontend/dist tree.
@@ -17,5 +17,5 @@ struct EmbeddedAsset {
 extern const EmbeddedAsset EMBEDDED_ASSETS[];
 extern const size_t EMBEDDED_ASSETS_COUNT;
 
-} // namespace ui
+} // namespace gis
 } // namespace duckdb

@@ -9,9 +9,9 @@ namespace duckdb {
 // registered in the same DBConfig without one clobbering the other.
 const static std::string STORAGE_EXTENSION_KEY = "gis";
 
-class UIStorageExtensionInfo : public StorageExtensionInfo {
+class GisStorageExtensionInfo : public StorageExtensionInfo {
 public:
-  static UIStorageExtensionInfo &GetState(const DatabaseInstance &instance);
+  static GisStorageExtensionInfo &GetState(const DatabaseInstance &instance);
 
   shared_ptr<Connection> FindConnection(const std::string &connection_name);
   shared_ptr<Connection>

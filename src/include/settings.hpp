@@ -3,16 +3,16 @@
 #include <duckdb/common/exception.hpp>
 #include <duckdb/main/client_context.hpp>
 
-#define UI_LOCAL_PORT_SETTING_NAME "gis_local_port"
+#define GIS_LOCAL_PORT_SETTING_NAME "gis_local_port"
 // Distinct from core DuckDB ui's default (4213) so `start_ui()`/`start_gis()`
 // can both run at once without an explicit SET gis_local_port.
-#define UI_LOCAL_PORT_SETTING_DEFAULT 4214
-#define UI_REMOTE_URL_SETTING_NAME "gis_remote_url"
+#define GIS_LOCAL_PORT_SETTING_DEFAULT 4214
+#define GIS_REMOTE_URL_SETTING_NAME "gis_remote_url"
 // Empty default -> serve the embedded frontend (see HttpServer::HandleGet).
 // Set to e.g. "http://localhost:5173" to proxy to a Vite dev server instead.
-#define UI_REMOTE_URL_SETTING_DEFAULT ""
-#define UI_POLLING_INTERVAL_SETTING_NAME "gis_polling_interval"
-#define UI_POLLING_INTERVAL_SETTING_DEFAULT 284
+#define GIS_REMOTE_URL_SETTING_DEFAULT ""
+#define GIS_POLLING_INTERVAL_SETTING_NAME "gis_polling_interval"
+#define GIS_POLLING_INTERVAL_SETTING_DEFAULT 284
 
 namespace duckdb {
 

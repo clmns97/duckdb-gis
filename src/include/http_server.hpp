@@ -20,7 +20,7 @@ namespace duckdb {
 struct HTTPParams;
 class MemoryStream;
 
-namespace ui {
+namespace gis {
 
 class HttpServer {
 
@@ -92,5 +92,5 @@ private:
 };
 ;
 
-} // namespace ui
+} // namespace gis
 } // namespace duckdb
