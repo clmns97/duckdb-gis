@@ -4,7 +4,7 @@ title: Prepare duckdb-gis for listing as a DuckDB community extension
 status: in-progress
 priority: P2
 area: build
-depends_on: [T-052, T-053]
+depends_on: [T-052, T-053, T-057]
 branch: t-054-community-extension-submission
 ---
 
@@ -203,8 +203,14 @@ Measure the built artifact from [T-053] first.
     during same-session iteration) rather than run to a real result; needs
     a clean run once amd64 is sorted.
 
-  **Next:** this needs its own focused pass -- probably worth splitting into
-  a follow-up ticket rather than folding more into T-054, since it's cross-
-  cutting CI/build work rather than submission-prep proper. Do not tag or
-  open the community-extensions PR until the matrix is actually green (or
-  failures are consciously pushed to `excluded_platforms`).
+  **Split out to [T-057]** (`main-distribution-pipeline-not-green`), which
+  T-054 now depends on -- cross-cutting CI/build work, not submission-prep
+  proper. Root cause for 4 of the 5 failing build jobs turned out to be a
+  single shared bug, and a real one, not just a CI artifact: `ui_extension.cpp`
+  unconditionally calls the non-recursive `fs.CreateDirectory` on
+  `~/.duckdb/extension_data` assuming `~/.duckdb` already exists -- true on
+  any machine that has ever run `INSTALL`/`LOAD`, false on the pristine CI
+  containers *and* on a genuinely first-time install, which is exactly this
+  ticket's target scenario. Do not tag or open the community-extensions PR
+  until [T-057] is resolved and the matrix is actually green (or failures
+  are consciously pushed to `excluded_platforms`).
