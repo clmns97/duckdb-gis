@@ -238,3 +238,20 @@ one-time fix.
   [T-054] in the sense that matters for submission -- it's worth fixing for
   our own CI hygiene, but not a hard gate the way the `extension_data` bug
   was.
+
+- 2026-08-06: Decided to stop here for now rather than chase the
+  `main`-branch fix. Checked how big it actually is: upstream `duckdb-ui`'s
+  own fix for this exact class of break (#62, 2026-06-18) was small and
+  mechanical -- a feature-detected `AsCatalogIdentifier()` helper wrapping
+  `std::string` in DuckDB's new `Identifier` type, applied at 4 call sites in
+  `http_server.cpp` (`git show upstream/main:0dfdf34` has the full diff, easy
+  to port). But `main` has moved on in the ~7 weeks since: our current build
+  also fails on `watcher.cpp:21` (`incomplete type 'DatabaseManager'`) and
+  `ui_extension.cpp:147`/`helpers.hpp:112` (`table_function_bind_t` now wants
+  `vector<Identifier>&`, not `vector<string>&`) -- neither covered by
+  upstream's commit, so porting it isn't sufficient on its own. Given this
+  job tracks a genuinely moving target (will likely break again regardless)
+  and doesn't gate the actual community-extensions submission, leaving it
+  red and revisiting opportunistically rather than investing more now.
+  T-057 stays open for exactly this one item; everything else in its
+  acceptance criteria is done.
