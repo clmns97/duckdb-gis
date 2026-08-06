@@ -103,8 +103,10 @@ static void LoadInternal(DatabaseInstance &instance) {
   ui::HttpServer::UpdateDatabaseInstanceIfRunning(instance.shared_from_this());
 
   auto &fs = FileSystem::GetFileSystem(instance);
-  fs.CreateDirectory(fs.ExpandPath("~/.duckdb/extension_data"));
-  fs.CreateDirectory(fs.ExpandPath("~/.duckdb/extension_data/gis"));
+  // CreateDirectory is a single-level mkdir; ~/.duckdb won't exist yet on a
+  // genuinely fresh home directory (a pristine CI container, or a real
+  // first-time install), so it must be created recursively.
+  fs.CreateDirectoriesRecursive(fs.ExpandPath("~/.duckdb/extension_data/gis"));
 
   auto &config = DBConfig::GetConfig(instance);
   {
