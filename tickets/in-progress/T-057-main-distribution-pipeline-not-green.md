@@ -196,3 +196,23 @@ one-time fix.
     concatenating a literal `/` onto an expanded native path. Verified on
     Linux (repeat of the earlier scratch-`HOME` check, still green) but
     **not yet verified on Windows CI** -- that's the next push.
+
+- 2026-08-06: Pushed the Windows fix, got a full uncancelled run (31092584303).
+  **Introduced a real regression in that same fix**: used
+  `fs.JoinPath(a, b, c, d)`, the variadic N-arg template overload, which
+  doesn't exist on the older `FileSystem` header this extension still
+  supports -- `v1.4.5` LTS / `linux_arm64` failed to *compile*:
+  `error: no matching function for call to 'duckdb::FileSystem::JoinPath(
+  std::string, const char [8], const char [15], const char [4])'`
+  (confirmed `v1.4-andium`/`linux_arm64` hit the identical error via
+  fail-fast matrix cancellation of its sibling amd64/musl jobs before they
+  could even run). The 2-arg `JoinPath(a, b)` base overload is old/stable
+  across every supported version; switched to three chained 2-arg calls
+  instead of the variadic one. `CreateDirectoriesRecursive` itself was not
+  implicated (no separate error for it in the same build log) so that part
+  of the fix stands. Re-verified locally (same scratch-`HOME` check, still
+  green) and re-pushed. `main`-branch/`linux_arm64` still fails on the
+  already-known `Identifier` API churn (unrelated, not yet fixed) --
+  everything else in the last run was fail-fast cancellations of that same
+  arm64 breakage's sibling jobs, not new information. Next push should
+  finally show a real, complete picture of what (if anything) is left.
