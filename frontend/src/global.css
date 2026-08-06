@@ -1,4 +1,11 @@
-@import "tailwindcss";
+/* source(none): Tailwind's automatic content detection walks up to the repo
+   root and scans everything not gitignored -- in this monorepo that pulls in
+   unrelated workspaces (ts/, design-system/, the duckdb/ submodule) and local
+   build output, making the generated CSS depend on whatever else happens to
+   be on disk (observed: two builds of identical source producing different
+   byte counts). Scope it explicitly to this project instead. */
+@import "tailwindcss" source(none);
+@source "../";
 @import "./lib/tokens.css";
 
 /* App-level base. Preflight already resets margins/box-sizing; here we set the
