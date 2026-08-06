@@ -26,5 +26,20 @@ export default defineConfig({
       "/localEvents": withOrigin(),
     },
   },
-  build: { target: "es2022" },
+  build: {
+    target: "es2022",
+    // dist/ is committed and embedded into the extension binary (T-053), not
+    // served over a network with browser caching -- so content-hashed
+    // filenames buy nothing and only make the build non-reproducible (Vite's
+    // hash isn't a pure content hash: identical output has been observed to
+    // get a different hash across consecutive builds), which breaks the
+    // Frontend.yml staleness check.
+    rollupOptions: {
+      output: {
+        entryFileNames: "assets/[name].js",
+        chunkFileNames: "assets/[name].js",
+        assetFileNames: "assets/[name].[ext]",
+      },
+    },
+  },
 });
