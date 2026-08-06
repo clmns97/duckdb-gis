@@ -3,9 +3,14 @@
    unrelated workspaces (ts/, design-system/, the duckdb/ submodule) and local
    build output, making the generated CSS depend on whatever else happens to
    be on disk (observed: two builds of identical source producing different
-   byte counts). Scope it explicitly to this project instead. */
+   byte counts). `@source "../"` alone isn't enough: it's a sibling of
+   frontend/node_modules, and explicit @source paths scan node_modules too
+   (unlike automatic detection, which excludes it) -- confirmed by diffing a
+   local build against a CI build of the same commit: CI's freshly-resolved
+   node_modules surfaced classes like `.grow`/`.shadow`/`.ring`/`.transition`
+   that appear nowhere in our own source. Scope to src/ only. */
 @import "tailwindcss" source(none);
-@source "../";
+@source "./";
 @import "./lib/tokens.css";
 
 /* App-level base. Preflight already resets margins/box-sizing; here we set the
