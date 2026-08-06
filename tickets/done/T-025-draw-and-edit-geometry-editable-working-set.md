@@ -1,7 +1,7 @@
 ---
 id: T-025
 title: Draw and edit geometry via an editable GeoJSON working set
-status: open           # open | in-progress | blocked | done
+status: done
 priority: P2           # P0 (now) | P1 | P2 | P3
 area: frontend         # frontend | src (C++) | ts | build | docs
 depends_on: [T-003]    # selection set is the on-ramp for edit-in-place

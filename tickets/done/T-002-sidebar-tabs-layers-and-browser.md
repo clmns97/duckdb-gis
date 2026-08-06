@@ -1,7 +1,7 @@
 ---
 id: T-002
 title: Split the sidebar into two switchable tabs — Layers and Browser
-status: in-progress
+status: done
 priority: P2
 area: frontend
 depends_on: []

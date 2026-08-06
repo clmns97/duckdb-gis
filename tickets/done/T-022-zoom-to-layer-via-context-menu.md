@@ -1,7 +1,7 @@
 ---
 id: T-022
 title: Zoom to a layer's extent via a right-click context menu
-status: open
+status: done
 priority: P2
 area: frontend
 depends_on: [T-021]

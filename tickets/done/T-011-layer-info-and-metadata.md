@@ -1,7 +1,7 @@
 ---
 id: T-011
 title: Layer information & metadata panel
-status: open
+status: done
 priority: P3
 area: frontend
 depends_on: [T-001]

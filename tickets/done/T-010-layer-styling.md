@@ -1,7 +1,7 @@
 ---
 id: T-010
 title: Layer styling / symbology
-status: open
+status: done
 priority: P2
 area: frontend
 depends_on: [T-001]

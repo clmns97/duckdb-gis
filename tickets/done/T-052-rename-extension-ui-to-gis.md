@@ -1,7 +1,7 @@
 ---
 id: T-052
 title: Rename the extension from `ui` to `gis` (drop start_ui aliases, gis_ settings)
-status: open
+status: done
 priority: P1
 area: build
 depends_on: []

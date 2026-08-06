@@ -1,7 +1,7 @@
 ---
 id: T-044
 title: Consolidate duplicated frontend helpers (modal INPUT, sqlLit)
-status: open
+status: done
 priority: P3
 area: frontend
 depends_on: []

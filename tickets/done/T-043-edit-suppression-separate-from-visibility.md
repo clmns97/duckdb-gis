@@ -1,7 +1,7 @@
 ---
 id: T-043
 title: Edit-time deck suppression shouldn't ride the user visibility flag
-status: open
+status: done
 priority: P1
 area: frontend
 depends_on: [T-038]

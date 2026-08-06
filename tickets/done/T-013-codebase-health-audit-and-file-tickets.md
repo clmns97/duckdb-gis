@@ -1,7 +1,7 @@
 ---
 id: T-013
 title: Audit codebase health / tech debt and file tickets for findings (audit-only)
-status: open
+status: done
 priority: P1
 area: docs
 depends_on: []

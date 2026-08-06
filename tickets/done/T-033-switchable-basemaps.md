@@ -1,7 +1,7 @@
 ---
 id: T-033
 title: Switchable basemaps (OSM / CARTO / ESRI)
-status: done           # open | in-progress | blocked | done
+status: done
 priority: P2           # P0 (now) | P1 | P2 | P3
 area: frontend         # frontend | src (C++) | ts | build | docs
 depends_on: []         # other ticket ids, e.g. [T-001]

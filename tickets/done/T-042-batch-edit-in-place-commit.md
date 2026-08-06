@@ -1,7 +1,7 @@
 ---
 id: T-042
 title: Batch (and dirty-track) the edit-in-place commit writes
-status: open
+status: done
 priority: P2
 area: frontend
 depends_on: [T-038]
