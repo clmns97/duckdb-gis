@@ -165,3 +165,34 @@ one-time fix.
 
   Not yet done: the `main`-branch DuckDB API-churn fix, and a clean full CI
   matrix run to see what (if anything) is still red after this.
+
+- 2026-08-06: Merged to `main`, pushed, and got a full uncancelled matrix run
+  (31086136702) for the first time this session -- earlier runs had all been
+  superseded/cancelled mid-flight while iterating on `Frontend.yml`. Result:
+  the primary fix is confirmed -- **all four** previously-failing
+  `linux_amd64`/`linux_amd64_musl` test jobs (v1.5-variegata, v1.5.4,
+  v1.4-andium, v1.4.5 LTS) are now green. New failures surfaced now that the
+  matrix actually ran to completion (never seen before this run):
+  - `main`-branch / `linux_arm64`: the already-known-and-expected DuckDB
+    `Identifier` API churn (build failure, not test). Not yet fixed.
+  - `v1.5.4` / `MacOS osx_arm64`: `curl: (7) Failed to connect to github.com
+    port 443` during checkout -- a plain network flake, not our code. Expect
+    this to pass on rerun; not investigating further unless it recurs.
+  - `v1.4-andium` **and** `v1.4.5` LTS / `Windows windows_amd64`: **the exact
+    same** `extension_data` `IO Error` as the Linux bug, still happening
+    *after* the `CreateDirectoriesRecursive` fix:
+    `Failed to create directory "C:\Users\runneradmin/.duckdb/extension_data/gis"`.
+    Root cause: that path mixes backslash (from `ExpandPath("~")`, which
+    returns a native Windows path) and forward slash (hardcoded in our
+    `"~/.duckdb/extension_data/gis"` string literal). `Path::FromString`
+    picks its separator from the *first* slash character it finds in the raw
+    string and rebuilds every segment with that one separator on `ToString()`
+    -- with a leading `C:\`, first-slash detection and drive-prefix handling
+    interact badly with the later forward slashes. Rather than fully
+    tracing DuckDB's `Path`/`Path::FromString` internals (no Windows box
+    here to test against directly), switched to the pattern already used
+    elsewhere in DuckDB: expand `~` alone (native path, single separator
+    style) and `JoinPath` the remaining segments on top, instead of
+    concatenating a literal `/` onto an expanded native path. Verified on
+    Linux (repeat of the earlier scratch-`HOME` check, still green) but
+    **not yet verified on Windows CI** -- that's the next push.

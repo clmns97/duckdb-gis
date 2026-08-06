@@ -105,8 +105,14 @@ static void LoadInternal(DatabaseInstance &instance) {
   auto &fs = FileSystem::GetFileSystem(instance);
   // CreateDirectory is a single-level mkdir; ~/.duckdb won't exist yet on a
   // genuinely fresh home directory (a pristine CI container, or a real
-  // first-time install), so it must be created recursively.
-  fs.CreateDirectoriesRecursive(fs.ExpandPath("~/.duckdb/extension_data/gis"));
+  // first-time install), so it must be created recursively. Expand "~" on
+  // its own and JoinPath the rest, rather than embedding "/" in a string
+  // with "~" -- ExpandPath produces a native (backslash) path on Windows, so
+  // concatenating "~/.duckdb/..." mixes separators, which broke path parsing
+  // there (observed: CreateDirectoriesRecursive still failed on Windows CI
+  // with a mixed "C:\Users\foo/.duckdb/..." path).
+  fs.CreateDirectoriesRecursive(
+      fs.JoinPath(fs.ExpandPath("~"), ".duckdb", "extension_data", "gis"));
 
   auto &config = DBConfig::GetConfig(instance);
   {
