@@ -8,7 +8,7 @@ import {
   type OvertureRequest,
 } from "../lib/overture";
 import { selection } from "../lib/selection";
-import { Modal, Button, ModalNote } from "./Modal";
+import { Modal, Button, ModalNote, INPUT } from "./Modal";
 import { OvertureLogo } from "./OvertureLogo";
 
 // Overture quick-load form (T-012), QuickOSM-style: pick theme(s), a release
@@ -99,7 +99,7 @@ export function OvertureModal({
       <label className={FIELD}>
         <span className={LEGEND}>Release</span>
         <select
-          className="text-editor text-gray-900 px-2 py-1.5 bg-white border border-gray-200 rounded-sm"
+          className={INPUT}
           value={release}
           onChange={(e) => setRelease(e.target.value)}
         >

@@ -29,8 +29,13 @@ export function MapPanel(props: IDockviewPanelProps) {
   return (
     <div className="map-wrap relative w-full h-full min-h-0">
       <MapView />
-      <DrawToolbar />
-      <SelectionChip />
+      {/* Top-left map controls, stacked: the Edit button / digitising bar
+          (T-038) over the selection chip. Selection is cleared on entering edit,
+          so the chip only coexists with the collapsed Edit button. */}
+      <div className="absolute top-3 left-3 z-[2] flex flex-col items-start gap-1.5">
+        <DrawToolbar />
+        <SelectionChip />
+      </div>
     </div>
   );
 }

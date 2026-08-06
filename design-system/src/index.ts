@@ -21,4 +21,4 @@ export { DrawToolbarView } from "../../frontend/src/components/DrawToolbarView";
 // All type-only — no runtime graph is pulled from the coupled lib modules.
 export type { TypeKind } from "../../frontend/src/lib/columnTypes";
 export type { GeometryKind, LayerStyle } from "../../frontend/src/lib/layers";
-export type { EditMode } from "../../frontend/src/lib/editing";
+export type { EditMode, DrawMode } from "../../frontend/src/lib/editing";
