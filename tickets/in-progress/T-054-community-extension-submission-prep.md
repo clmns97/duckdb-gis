@@ -147,3 +147,64 @@ Measure the built artifact from [T-053] first.
   notice, which is what makes the fork read as homage rather than implied
   officialdom. The `@duckdb/*` npm scope in `ts/pkgs/` stays: it is unmodified
   upstream code (no commits by us), consumed via `link:`, never published.
+
+- 2026-08-06: Merged `t-054-community-extension-submission` (and, separately,
+  `t-038-digitizing-toolbar-edit-mode-only`) to local `main` and pushed to
+  `origin/main` for the first time in weeks -- CI had **never** run on this
+  fork (`gh api .../actions/runs` returned 0 runs; Actions were enabled but
+  nothing had ever pushed to trigger them). Explicitly did not tag or touch
+  `description.yml`'s `repo.ref` -- no submission PR filed, per instruction
+  not to publish yet.
+
+  **`Frontend.yml` (dist-freshness check): now green**, after finding and
+  fixing two real bugs neither of which had ever been exercised before (this
+  workflow's first-ever run):
+  1. `pnpm/action-setup` reads the pnpm version from `frontend/package.json`,
+     which had no `packageManager` field (only `ts/package.json` did) ->
+     "No pnpm version is specified." Added the field.
+  2. The staleness check (`pnpm build`, diff against committed `dist/`) kept
+     failing on rebuilds with *identical* source. Root-caused via a throwaway
+     `debug/frontend-dist-diff` branch + `workflow_dispatch` (no artifact
+     upload exists, so this was the only way to see CI's actual output) to
+     two independent Tailwind v4 non-determinism issues, both now fixed:
+     - Vite/Rollup's content-hashed asset filenames are not a pure content
+       hash here (byte-identical JS got different hashes across consecutive
+       builds) -- pinned fixed filenames via `rollupOptions.output`.
+     - Tailwind's automatic content detection walks up to the repo root and
+       scans everything not gitignored (pulls in `ts/`, `design-system/`,
+       the `duckdb/` submodule); explicit `@source` opt-out needs the path
+       scoped past `frontend/node_modules` too (a sibling of `src/`), unlike
+       automatic detection which excludes `node_modules` on its own. Fixed
+       with `@import "tailwindcss" source(none)` + `@source "./"` in
+       `global.css`, scoped to `frontend/src` only (frontend imports nothing
+       from the other workspaces, confirmed by grep).
+
+  **`MainDistributionPipeline.yml`: running, not yet green** -- exactly the
+  "expect a first-run failure" outcome anticipated above. Distinct failures
+  seen across the matrix, not yet fixed (out of scope for this session):
+  - `main`-branch DuckDB job (linux_arm64 build): fails on upstream API
+    churn (`BaseQueryResult::names`/`types` -> `Identifier`-typed,
+    `MetaTransaction` now incomplete in the header) -- the same class of
+    break upstream `duckdb/duckdb-ui` fixed in its "Fix main build against
+    DuckDB Identifier API" (#62, 2026-06-18). Tracking DuckDB's `main` is
+    inherently best-effort; not our merge's fault.
+  - `v1.5-variegata` and `v1.5.4` jobs (linux_amd64): build succeeds, but
+    `test_release` fails at `require gis` in `test/sql/gis.test`:
+    `Failed to create directory "/root/.duckdb/extension_data": No such
+    file or directory`. Not reproduced locally (make + unittest green on
+    every rebuild this session) -- looks specific to the community
+    `extension-ci-tools` Docker test harness (root user, HOME handling).
+    Needs investigation.
+  - `v1.4-andium` (next LTS patch) and `v1.4.5` LTS `linux_amd64_musl`:
+    also failed; not yet root-caused. `v1.4-andium` is exactly the
+    perl-core-hack job flagged as highest-risk above -- still open whether
+    that's the cause here or something else.
+  - linux_arm64 jobs mostly got cancelled (superseded by later pushes
+    during same-session iteration) rather than run to a real result; needs
+    a clean run once amd64 is sorted.
+
+  **Next:** this needs its own focused pass -- probably worth splitting into
+  a follow-up ticket rather than folding more into T-054, since it's cross-
+  cutting CI/build work rather than submission-prep proper. Do not tag or
+  open the community-extensions PR until the matrix is actually green (or
+  failures are consciously pushed to `excluded_platforms`).
