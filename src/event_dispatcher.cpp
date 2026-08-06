@@ -55,10 +55,6 @@ void EventDispatcher::SendEvent(const std::string &_message) {
   cv.notify_all();
 }
 
-void EventDispatcher::SendConnectedEvent(const std::string &token) {
-  SendEvent(StringUtil::Format("event: ConnectedEvent\ndata: %s\n\n", token));
-}
-
 void EventDispatcher::SendCatalogChangedEvent() {
   SendEvent("event: CatalogChangeEvent\ndata:\n\n");
 }

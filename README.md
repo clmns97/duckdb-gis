@@ -10,9 +10,46 @@ panel, geoprocessing tools, feature selection) while keeping all compute
 **native and local**: the extension runs the SQL and spatial work in-process,
 in the same DuckDB instance — there is no remote backend.
 
+![duckdb-gis: a table added from the Browser panel and rendered as a map layer](docs/screenshot.png)
+
 This repository is a fork of [`duckdb/duckdb-ui`](https://github.com/duckdb/duckdb-ui).
 It reuses that project's SQL-over-HTTP transport and TypeScript client, but
 replaces the hosted UI with our own MapLibre frontend under `frontend/`.
+
+## Install
+
+> **Not yet listed.** The submission to
+> [`duckdb/community-extensions`](https://github.com/duckdb/community-extensions)
+> is still in progress, so the command below does not work yet. Until it lands,
+> [build from source](#build-from-source).
+
+```sql
+INSTALL gis FROM community;
+LOAD gis;
+CALL start_gis();
+```
+
+`start_gis()` starts a local HTTP server and opens your browser. Everything it
+serves — the frontend included — is compiled into the extension binary, so it
+works offline and makes no outbound network requests.
+
+The extension is named `gis`, which is distinct from DuckDB's own core `ui`
+extension: `LOAD ui; LOAD gis;` can coexist in one session.
+
+## What you get
+
+- **Layers panel** — add any table or query with a geometry column as a map
+  layer; reorder, toggle, style and zoom to it.
+- **Browser panel** — walk the DuckDB catalog and add geometry-bearing tables
+  to the map from a right-click menu.
+- **SQL editor** — run spatial SQL and render the result set as a temporary
+  layer.
+- **Select features** — click features on the map to select the underlying rows.
+- **Draw and edit** — digitize geometry into a working set, then commit it back
+  into a native DuckDB table.
+
+Spatial work uses DuckDB's `spatial` extension and runs in-process. There is no
+remote backend and no data leaves your machine.
 
 ## Repository layout
 
@@ -25,7 +62,7 @@ replaces the hosted UI with our own MapLibre frontend under `frontend/`.
 - `test/sql/` — SQL-level extension tests.
 - `tickets/` — the work board (see `tickets/README.md`).
 
-## Build
+## Build from source
 
 The build is based on the [DuckDB extension template](https://github.com/duckdb/extension-template):
 
@@ -103,10 +140,10 @@ SET gis_remote_url = 'http://localhost:5173';
 CALL start_gis_server();   -- binds localhost:4214
 ```
 
-Vite proxies `/ddb`, `/info`, `/localEvents`, and `/localToken` to the
-extension server, rewriting `Origin`/`Referer` so the extension's
-same-origin gate is satisfied (see `frontend/vite.config.ts` and
-`src/http_server.cpp`). Other scripts: `pnpm build`, `pnpm typecheck`.
+Vite proxies `/ddb`, `/info`, and `/localEvents` to the extension server,
+rewriting `Origin` so the extension's same-origin gate is satisfied (see
+`frontend/vite.config.ts` and `src/http_server.cpp`). Other scripts:
+`pnpm build`, `pnpm typecheck`.
 
 ## Architecture
 
@@ -127,3 +164,26 @@ The frontend talks to the server through the TypeScript
 the binary result format. Spatial work is done with DuckDB's `spatial` extension
 and rendered via GeoArrow deck.gl layers (`frontend/src/lib/deckRender.ts`);
 tiled rendering uses `ST_AsMVT` (`frontend/src/lib/tiles.ts`).
+
+## Versioning
+
+Releases are tagged `vMAJOR.MINOR.PATCH` and versioned independently of DuckDB —
+a release supports whichever DuckDB versions its CI matrix builds against (see
+`.github/workflows/MainDistributionPipeline.yml`), rather than mirroring a
+DuckDB version number.
+
+Note that tags `v1.4.x` and `v1.5.x` in this repository predate the fork: they
+are upstream `duckdb/duckdb-ui` releases, whose scheme tracked DuckDB versions.
+Our own releases start at `v0.1.0`.
+
+## License and attribution
+
+MIT — see [LICENSE](LICENSE). The copyright notice is retained from upstream
+`duckdb/duckdb-ui` (Stichting DuckDB Foundation), which this project is a fork
+of and from which it inherits the extension scaffolding, the SQL-over-HTTP
+transport, and the TypeScript client packages under `ts/`.
+
+DuckDB is a trademark of the DuckDB Foundation. This project is an independent
+fork and is not affiliated with, maintained by, or endorsed by the DuckDB
+Foundation or DuckDB Labs. "duckdb-gis" is a descriptive name for a GIS
+extension for DuckDB; it does not indicate official status.
