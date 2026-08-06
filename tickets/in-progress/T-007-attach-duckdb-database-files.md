@@ -1,7 +1,7 @@
 ---
 id: T-007
 title: Attach additional DuckDB database files to the catalog
-status: open
+status: in-progress
 priority: P1
 area: frontend
 depends_on: []
