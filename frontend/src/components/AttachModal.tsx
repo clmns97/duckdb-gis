@@ -1,15 +1,12 @@
 import { useState } from "react";
 import { attach, aliasFromPath } from "../lib/attach";
-import { Modal, Button, FieldLabel, ModalNote } from "./Modal";
+import { Modal, Button, FieldLabel, ModalNote, INPUT } from "./Modal";
 
 // Attach a DuckDB database file to the catalog (T-007). A form over
 // `attach.run`: a server-side file path, an optional alias (defaults to the
 // filename stem), and a read-only toggle (default on). Owns the async attach so
 // it can show inline errors and stay open on failure; on success it refreshes
 // the catalog via `onAttached` and closes.
-
-const INPUT =
-  "text-editor text-gray-900 px-2 py-1.5 bg-white border border-gray-200 rounded-sm focus:outline-none focus:border-primary";
 
 export function AttachModal({
   onClose,

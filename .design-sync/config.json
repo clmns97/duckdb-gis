@@ -14,6 +14,7 @@
   "overrides": {
     "Modal": { "cardMode": "single", "primaryStory": "Default", "viewport": "820x600" },
     "ContextMenu": { "cardMode": "single", "primaryStory": "Default", "viewport": "440x340" },
-    "SelectionChipView": { "cardMode": "column" }
+    "SelectionChipView": { "cardMode": "column" },
+    "DrawToolbarView": { "cardMode": "column" }
   }
 }

@@ -30,3 +30,8 @@ export function str(value: unknown): string {
 export function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
+
+/** Escape a value for use inside a single-quoted SQL string literal. */
+export function sqlLit(v: string): string {
+  return v.replace(/'/g, "''");
+}

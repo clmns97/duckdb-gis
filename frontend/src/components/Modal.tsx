@@ -72,6 +72,11 @@ export function Modal({
   );
 }
 
+// Shared className for a modal text input / select, so every dialog's field
+// looks the same (one source of truth — T-044).
+export const INPUT =
+  "text-editor text-gray-900 px-2 py-1.5 bg-white border border-gray-200 rounded-sm focus:outline-none focus:border-primary";
+
 // Small text primitives reused by dialogs and the sidebar tree/panels.
 export function FieldLabel({ children }: { children: ReactNode }) {
   return (

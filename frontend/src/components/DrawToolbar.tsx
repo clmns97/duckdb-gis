@@ -1,22 +1,24 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { editing } from "../lib/editing";
+import { layers } from "../lib/layers";
+import { errMsg } from "../lib/duckdb";
 import { DrawToolbarView } from "./DrawToolbarView";
 
-// Store-connected on-canvas digitizing toolbar (T-025). Mounts over the map,
-// drives the Terra Draw editing store, and renders the presentational
-// `DrawToolbarView`. Reads the store via `useSyncExternalStore` (same pattern as
-// SelectionChip / LayersPanel).
+// Store-connected on-canvas digitizing control (T-025 / T-038). A top-left map
+// control (like the zoom/selection chrome): when idle it's a compact **Edit**
+// button bound to the active layer; clicking it enters edit-in-place and it
+// expands into the full digitising bar. Reads the `editing` and `layers` stores
+// via `useSyncExternalStore` (same pattern as SelectionChip). Terra Draw is
+// brought up by the `begin*` entry points, not here.
 export function DrawToolbar() {
-  const version = useSyncExternalStore(editing.subscribe, () => editing.version);
-  void version; // read so the component re-renders on store changes
+  const editingVersion = useSyncExternalStore(editing.subscribe, () => editing.version);
+  const layersVersion = useSyncExternalStore(layers.subscribe, () => layers.version);
+  void editingVersion; // read so the component re-renders on store changes
+  void layersVersion;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Bring Terra Draw up once the map exists (idempotent). Runs on mount and if
-  // the map arrives later (the store no-ops until getMap() is non-null).
-  useEffect(() => {
-    editing.init();
-  }, [version]);
+  const isEditing = editing.isEditing();
 
   const onCommit = async () => {
     setBusy(true);
@@ -24,22 +26,60 @@ export function DrawToolbar() {
     try {
       await editing.commit();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errMsg(e));
     } finally {
       setBusy(false);
     }
   };
 
+  // Advanced editing ops (T-045/046/048): run the store action, surfacing any
+  // error (merge SQL, paste family mismatch) into the toolbar's error slot.
+  const guard = (fn: () => void | Promise<void>) => () => {
+    setError(null);
+    Promise.resolve()
+      .then(fn)
+      .catch((e) => setError(errMsg(e)));
+  };
+
+  // Collapsed: the active layer is the Edit button's target. Only catalog-table
+  // layers that have finished loading can be edited in place (query-backed and
+  // still-loading layers can't); `beginEdit` also enforces the row-count cap and
+  // surfaces its own errors into the same `error` slot.
+  const active = layers.active();
+  const canBeginEdit = Boolean(active?.source && active.status === "ready");
+  const onBeginEdit = () => {
+    if (!active) return;
+    setError(null);
+    editing.beginEdit(active).catch((e) => setError(errMsg(e)));
+  };
+
   return (
     <DrawToolbarView
+      expanded={isEditing}
+      canBeginEdit={canBeginEdit}
+      activeLayerName={active?.name ?? null}
+      onBeginEdit={onBeginEdit}
       active={editing.mode}
+      allowedMode={editing.allowedDrawMode}
+      targetName={editing.target?.name ?? ""}
+      isNew={editing.target?.kind === "new"}
       featureCount={editing.featureCount}
       selectedCount={editing.selectedCount}
+      snapEnabled={editing.snapEnabled}
+      canPaste={editing.canPaste}
       busy={busy}
       error={error}
       onSetMode={(mode) => editing.setMode(mode)}
       onDelete={() => editing.deleteSelected()}
+      onRotate={guard(() => editing.rotateSelected())}
+      onScale={guard(() => editing.scaleSelected())}
+      onMerge={guard(() => editing.mergeSelected())}
+      onDuplicate={guard(() => editing.duplicateSelected())}
+      onCopy={guard(() => editing.copySelected())}
+      onPaste={guard(() => editing.paste())}
+      onToggleSnap={() => editing.toggleSnapping()}
       onCommit={onCommit}
+      onCancel={() => editing.finishEdit()}
     />
   );
 }
