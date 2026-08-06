@@ -25,7 +25,6 @@ set(EXTENSION_SOURCES
     src/utils/encoding.cpp
     src/utils/env.cpp
     src/utils/helpers.cpp
-    src/utils/md_helpers.cpp
     src/utils/serialization.cpp
     src/watcher.cpp)
 

@@ -6,7 +6,6 @@
 #include "utils/encoding.hpp"
 #include "utils/env.hpp"
 #include "utils/helpers.hpp"
-#include "utils/md_helpers.hpp"
 #include "utils/serialization.hpp"
 #include "version.hpp"
 #include "watcher.hpp"
@@ -182,10 +181,6 @@ void HttpServer::Run() {
              [&](const httplib::Request &req, httplib::Response &res) {
                HandleGetLocalEvents(req, res);
              });
-  server.Get("/localToken",
-             [&](const httplib::Request &req, httplib::Response &res) {
-               HandleGetLocalToken(req, res);
-             });
   server.Get("/.*", [&](const httplib::Request &req, httplib::Response &res) {
     HandleGet(req, res);
   });
@@ -226,36 +221,6 @@ void HttpServer::HandleGetLocalEvents(const httplib::Request &req,
         sink.done();
         return false;
       });
-}
-
-void HttpServer::HandleGetLocalToken(const httplib::Request &req,
-                                     httplib::Response &res) {
-  // GET requests don't include Origin, so use Referer instead.
-  // Referer includes the path, so only compare the start.
-  auto referer = req.get_header_value("Referer");
-  if (referer.compare(0, local_url.size(), local_url) != 0) {
-    res.status = 401;
-    return;
-  }
-
-  auto db = ddb_instance.lock();
-  if (!db) {
-    res.status = 500;
-    res.set_content("Database was invalidated, UI needs to be restarted",
-                    "text/plain");
-    return;
-  }
-
-  Connection connection{*db};
-  try {
-    auto token = GetMDToken(connection);
-    res.status = 200;
-    res.set_content(token, "text/plain");
-  } catch (std::exception &ex) {
-    res.status = 500;
-    res.set_content("Could not get token: " + std::string(ex.what()),
-                    "text/plain");
-  }
 }
 
 // Adapted from

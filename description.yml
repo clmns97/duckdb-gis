@@ -1,0 +1,82 @@
+# Submission descriptor for duckdb/community-extensions.
+#
+# This file is not read by anything in this repository. To publish a release:
+#   1. Tag this repo (see "Versioning" in README.md) and push the tag.
+#   2. Set `repo.ref` below to that tag's commit SHA -- the community build
+#      pins an immutable ref, not a branch.
+#   3. Copy this file to extensions/gis/description.yml in a fork of
+#      duckdb/community-extensions and open a PR.
+#
+# Keep `excluded_platforms` in sync with `exclude_archs` in
+# .github/workflows/MainDistributionPipeline.yml.
+
+extension:
+  name: gis
+  description: Browser-based GIS - explore your data and run spatial SQL on a map
+  version: 0.1.0
+  language: C++
+  build: cmake
+  license: MIT
+  # The extension runs a threaded HTTP server, which has no wasm equivalent.
+  excluded_platforms: wasm_mvp;wasm_eh;wasm_threads
+  maintainers:
+    - clmns97
+
+repo:
+  github: clmns97/duckdb-gis
+  # TODO: replace with the tagged release SHA before opening the PR.
+  # Keep it quoted: an all-digit SHA would otherwise parse as a number.
+  ref: "REPLACE_WITH_RELEASE_SHA"
+
+docs:
+  hello_world: |
+    -- Start the GIS UI. This serves a map frontend compiled into the
+    -- extension binary and opens it in your browser; nothing is fetched
+    -- from the network and no data leaves your machine.
+    CALL start_gis();
+
+    -- Any table with a GEOMETRY column can be added to the map from the
+    -- Browser panel (right-click a table -> "Add to map"), or from the
+    -- built-in SQL editor. For something to look at:
+    INSTALL spatial;
+    LOAD spatial;
+
+    CREATE TABLE cities AS
+      SELECT name, ST_Point(lon, lat) AS geom
+      FROM (VALUES
+        ('Berlin',    13.4050, 52.5200),
+        ('Hamburg',    9.9937, 53.5511),
+        ('Munich',    11.5820, 48.1351),
+        ('Cologne',    6.9603, 50.9375),
+        ('Frankfurt',  8.6821, 50.1109)
+      ) t(name, lon, lat);
+
+    -- Other entry points:
+    FROM gis_is_started();     -- is the server running?
+    SELECT get_gis_url();      -- the local URL
+    CALL start_gis_server();   -- start without opening a browser
+    CALL stop_gis_server();    -- stop the server
+  extended_description: |
+    `gis` turns a local DuckDB instance into a browser-based GIS: a map view
+    with a Layers panel, a catalog Browser, a SQL editor, feature selection and
+    geometry digitizing — reaching for [QGIS](https://qgis.org)'s concepts and
+    vocabulary, but with DuckDB as the engine.
+
+    All compute is native and local. The extension starts an HTTP server bound
+    to localhost and runs the SQL and spatial work in-process in the same DuckDB
+    instance; there is no remote backend. Spatial operations use DuckDB's
+    `spatial` extension, and rendering uses MapLibre and deck.gl with GeoArrow.
+    The frontend is compiled into the extension binary, so it works offline.
+
+    The UI is reached at `http://localhost:4214` by default; change it with
+    `SET gis_local_port`.
+
+    This project is a fork of
+    [`duckdb/duckdb-ui`](https://github.com/duckdb/duckdb-ui), whose
+    SQL-over-HTTP transport and TypeScript client it reuses, with the hosted UI
+    replaced by a MapLibre map frontend. It registers `start_gis()` rather than
+    `start_ui()`, so it can be loaded alongside DuckDB's core `ui` extension.
+
+    DuckDB is a trademark of the DuckDB Foundation. This is an independent fork
+    and is not affiliated with, maintained by, or endorsed by the DuckDB
+    Foundation or DuckDB Labs.
