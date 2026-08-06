@@ -1,11 +1,11 @@
 ---
 id: T-057
 title: Get MainDistributionPipeline.yml green across the build matrix
-status: open
+status: in-progress
 priority: P1
 area: build
 depends_on: []
-branch:
+branch: t-057-main-distribution-pipeline-not-green
 ---
 
 ## Goal
@@ -121,7 +121,7 @@ one-time fix.
 
 ## Acceptance criteria
 
-- [ ] `~/.duckdb/extension_data/gis` creation in `ui_extension.cpp` survives
+- [x] `~/.duckdb/extension_data/gis` creation in `ui_extension.cpp` survives
       a fresh (no pre-existing `~/.duckdb`) home directory, verified locally
       against a scratch `HOME`.
 - [ ] `main`-branch DuckDB job builds again (adapted to the `Identifier` API,
@@ -141,3 +141,27 @@ one-time fix.
   jobs identically; root-caused the `main`-branch build break to DuckDB's
   `Identifier` API change, matching a fix upstream `duckdb-ui` already made.
   Split out of [T-054], which is blocked on this.
+
+- 2026-08-06: Fixed the primary blocker. `DuckDB::FileSystem` already has a
+  `CreateDirectoriesRecursive` helper (`duckdb/src/common/file_system.cpp:504`,
+  declared in `file_system.hpp:189`) built for exactly this ("Helper function
+  that uses DirectoryExists and CreateDirectory to ensure all directories in
+  path are created") -- swapped the two single-level `CreateDirectory` calls
+  for one `CreateDirectoriesRecursive` call. Also confirmed
+  `~/.duckdb/extension_data/gis` is currently unused elsewhere in our code
+  (`grep -rn extension_data src/` only matched this one spot) -- it's pure
+  scaffolding, presumably inherited from upstream for future use, so there
+  was no other behavior to preserve.
+
+  Verified the repro and the fix directly rather than round-tripping through
+  CI: built with the old code, ran `HOME=/tmp/scratch_home ./build/release/duckdb
+  -c "LOAD '.../gis.duckdb_extension'"` against an empty scratch home and hit
+  the exact same `IO Error: Failed to create directory
+  "/tmp/scratch_home/.duckdb/extension_data": No such file or directory` CI
+  produced. Rebuilt with the fix: loads clean, `extension_data/gis` gets
+  created. `./build/release/test/unittest` passes both with a normal `$HOME`
+  and with `HOME` pointed at a fresh scratch directory (18 assertions either
+  way).
+
+  Not yet done: the `main`-branch DuckDB API-churn fix, and a clean full CI
+  matrix run to see what (if anything) is still red after this.
