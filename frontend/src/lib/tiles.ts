@@ -1,6 +1,7 @@
 import maplibregl from "maplibre-gl";
 import { query, sqlLit } from "./duckdb";
 import { getMap } from "./mapBus";
+import { addFamilyLayers, removeFamilyLayers } from "./vectorStyle";
 
 // ---------------------------------------------------------------------------
 // ST_AsMVT tile renderer (spec §4, for large persistent layers you pan/zoom).
@@ -144,19 +145,6 @@ export function installTileProtocol(): void {
 
 // --- Map layer management --------------------------------------------------
 
-const DEFAULT_FILL = {
-  "fill-color": "#6366f1",
-  "fill-opacity": 0.35,
-  "fill-outline-color": "#494ab9",
-};
-const DEFAULT_LINE = { "line-color": "#494ab9", "line-width": 2 };
-const DEFAULT_CIRCLE = {
-  "circle-color": "#6366f1",
-  "circle-radius": 4,
-  "circle-stroke-color": "#ffffff",
-  "circle-stroke-width": 1.2,
-};
-
 function addSourceAndLayers(map: maplibregl.Map, spec: TileLayerSpec): void {
   const src = sourceId(spec.id);
   if (!map.getSource(src)) {
@@ -168,35 +156,13 @@ function addSourceAndLayers(map: maplibregl.Map, spec: TileLayerSpec): void {
     });
   }
   // One style layer per geometry family, all reading the same MVT source-layer;
-  // a tile may mix geometry types, so each layer filters on $type.
-  const common = { source: src, "source-layer": spec.id } as const;
-  if (!map.getLayer(`${spec.id}-fill`)) {
-    map.addLayer({
-      id: `${spec.id}-fill`,
-      type: "fill",
-      ...common,
-      filter: ["==", "$type", "Polygon"],
-      paint: { ...DEFAULT_FILL, ...spec.paint?.fill },
-    });
-  }
-  if (!map.getLayer(`${spec.id}-line`)) {
-    map.addLayer({
-      id: `${spec.id}-line`,
-      type: "line",
-      ...common,
-      filter: ["==", "$type", "LineString"],
-      paint: { ...DEFAULT_LINE, ...spec.paint?.line },
-    });
-  }
-  if (!map.getLayer(`${spec.id}-circle`)) {
-    map.addLayer({
-      id: `${spec.id}-circle`,
-      type: "circle",
-      ...common,
-      filter: ["==", "$type", "Point"],
-      paint: { ...DEFAULT_CIRCLE, ...spec.paint?.circle },
-    });
-  }
+  // a tile may mix geometry types, so each layer filters on $type (vectorStyle).
+  addFamilyLayers(map, {
+    source: src,
+    sourceLayer: spec.id,
+    idBase: spec.id,
+    paint: spec.paint,
+  });
 }
 
 function sourceId(id: string): string {
@@ -223,10 +189,7 @@ export function addTileLayer(spec: TileLayerSpec): void {
 }
 
 function removeMapLayer(map: maplibregl.Map, id: string): void {
-  for (const suffix of ["fill", "line", "circle"]) {
-    const layerId = `${id}-${suffix}`;
-    if (map.getLayer(layerId)) map.removeLayer(layerId);
-  }
+  removeFamilyLayers(map, id);
   const src = sourceId(id);
   if (map.getSource(src)) map.removeSource(src);
 }

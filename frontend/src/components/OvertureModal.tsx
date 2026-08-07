@@ -1,21 +1,18 @@
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 import {
   OVERTURE_THEMES,
   OVERTURE_RELEASES,
-  isLargeExtent,
-  viewportBbox,
-  type ExtentMode,
+  listOvertureReleases,
   type OvertureRequest,
 } from "../lib/overture";
-import { selection } from "../lib/selection";
 import { Modal, Button, ModalNote, INPUT } from "./Modal";
 import { OvertureLogo } from "./OvertureLogo";
 
-// Overture quick-load form (T-012), QuickOSM-style: pick theme(s), a release
-// (latest preselected), and an extent, then Load. Purely a form — it collects
-// an OvertureRequest and hands it to `onLoad`; App resolves the extent bbox,
-// builds the query and routes the result through the layers store. Extent
-// resolution + the S3 query itself are the T-008 data path (see lib/overture).
+// Overture quick-load form (T-012, rebuilt on PMTiles in T-058), QuickOSM-style:
+// pick theme(s) + a release, then Load. Each theme is added as a native MapLibre
+// vector-tile layer sourced from Overture's hosted PMTiles — the whole planet is
+// available by panning, so there is no extent to choose (the T-012 extent control
+// is gone). Editing happens via select-features → "Create Layer from Selection".
 
 const FIELD = "flex flex-col gap-2 m-0 p-0 border-0";
 const LEGEND = "p-0 text-sm font-medium text-gray-500";
@@ -28,19 +25,22 @@ export function OvertureModal({
   onLoad: (request: OvertureRequest) => void;
 }) {
   const [themes, setThemes] = useState<Set<string>>(new Set());
+  const [releases, setReleases] = useState<string[]>(OVERTURE_RELEASES);
   const [release, setRelease] = useState(OVERTURE_RELEASES[0]);
-  const [extent, setExtent] = useState<ExtentMode>("viewport");
 
-  // Warn when the viewport extent is large enough that the direct-read path
-  // globs the whole-planet fileset and takes minutes (T-029). Captured on open
-  // (the map is behind the modal and not being panned); advisory, not blocking.
-  const [vpBbox] = useState(viewportBbox);
-  const viewportTooLarge = extent === "viewport" && vpBbox != null && isLargeExtent(vpBbox);
-
-  // Enable the "selected feature" extent only when something is selected (T-003).
-  const selVersion = useSyncExternalStore(selection.subscribe, () => selection.version);
-  void selVersion;
-  const selCount = selection.size;
+  // Live-list the releases available in *both* the tiles and GeoParquet buckets
+  // (T-058); fall back to the pinned default if listing fails.
+  useEffect(() => {
+    let alive = true;
+    void listOvertureReleases().then((list) => {
+      if (!alive || list.length === 0) return;
+      setReleases(list);
+      setRelease((cur) => (list.includes(cur) ? cur : list[0]));
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const toggleTheme = (id: string) => {
     setThemes((prev) => {
@@ -51,11 +51,11 @@ export function OvertureModal({
     });
   };
 
-  const canLoad = themes.size > 0 && !(extent === "selected" && selCount === 0);
+  const canLoad = themes.size > 0;
 
   const submit = () => {
     if (!canLoad) return;
-    onLoad({ themes: [...themes], release, extent });
+    onLoad({ themes: [...themes], release });
     onClose();
   };
 
@@ -103,7 +103,7 @@ export function OvertureModal({
           value={release}
           onChange={(e) => setRelease(e.target.value)}
         >
-          {OVERTURE_RELEASES.map((r, i) => (
+          {releases.map((r, i) => (
             <option key={r} value={r}>
               {r}
               {i === 0 ? " (latest)" : ""}
@@ -112,53 +112,10 @@ export function OvertureModal({
         </select>
       </label>
 
-      <fieldset className={FIELD}>
-        <legend className={LEGEND}>Extent</legend>
-        <label className="flex items-center gap-2 text-editor cursor-pointer">
-          <input
-            type="radio"
-            name="extent"
-            className="accent-primary"
-            checked={extent === "viewport"}
-            onChange={() => setExtent("viewport")}
-          />
-          <span>Current viewport</span>
-        </label>
-        <label
-          className={`flex items-center gap-2 text-editor ${
-            selCount === 0 ? "text-gray-500 cursor-default" : "cursor-pointer"
-          }`}
-        >
-          <input
-            type="radio"
-            name="extent"
-            className="accent-primary"
-            checked={extent === "selected"}
-            disabled={selCount === 0}
-            onChange={() => setExtent("selected")}
-          />
-          <span>
-            Selected feature{selCount === 0 ? "" : ` extent (${selCount})`}
-          </span>
-        </label>
-        <label className="flex items-center gap-2 text-editor text-gray-500 cursor-default">
-          <input type="radio" name="extent" className="accent-primary" disabled />
-          <span>Named place — coming soon</span>
-        </label>
-      </fieldset>
-
-      {viewportTooLarge && (
-        <p className="m-0 text-xs text-amber-600">
-          This extent is large — the load reads Overture's whole-planet files and
-          may take minutes (or stall on heavy themes like Buildings). Zoom in to a
-          city before loading for a fast result.
-        </p>
-      )}
-
       <ModalNote>
-        Data is fetched from Overture GeoParquet on S3, clipped to the chosen
-        extent. Large extents or heavy themes (Buildings, Transportation) can
-        take minutes; zoom in to narrow the extent.
+        Themes render from Overture's hosted, pre-tiled data — the whole planet is
+        available, just pan and zoom. To edit features, select them on the map and
+        use “Create Layer from Selection”.
       </ModalNote>
     </Modal>
   );

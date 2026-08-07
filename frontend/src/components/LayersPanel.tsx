@@ -2,6 +2,8 @@ import { useState, useSyncExternalStore } from "react";
 import { Eye, EyeOff, GripVertical, X, Map as MapIcon, EllipsisVertical } from "lucide-react";
 import { layers, type ActiveLayer } from "../lib/layers";
 import { editing } from "../lib/editing";
+import { createLayerFromSelection, isLargePmSelection } from "../lib/overture";
+import { pmSelection } from "../lib/pmtilesSelection";
 import { errMsg } from "../lib/duckdb";
 import { openAttributes } from "../lib/dockBus";
 import { basemap, basemapMenuItems } from "../lib/basemaps";
@@ -25,6 +27,9 @@ export function LayersPanel() {
   // Re-render on editing changes so the "Toggle/Stop editing" menu label and the
   // per-row editing badge stay in sync (T-038).
   useSyncExternalStore(editing.subscribe, () => editing.version);
+  // Re-render on PMTiles selection changes so a layer's "Create Layer from
+  // Selection" count/enablement stays current (T-058).
+  useSyncExternalStore(pmSelection.subscribe, () => pmSelection.version);
   const list = layers.list();
   const [menu, setMenu] = useState<MenuState | null>(null);
   // Inline surface for a failed "Toggle editing" (e.g. layer too large / still
@@ -91,6 +96,35 @@ export function LayersPanel() {
         disabled: layer.status !== "ready" || layer.bounds == null,
         onSelect: () => layers.zoomTo(layer.id),
       },
+      // Overture PMTiles layers are display+selection only: materialise the
+      // selected features into a normal, editable layer (T-058). Enabled when
+      // this layer owns the current PMTiles selection.
+      ...(layer.pmtiles
+        ? [
+            {
+              label: `Create Layer from Selection${
+                pmSelection.layerId === layer.id && pmSelection.size
+                  ? ` (${pmSelection.size})`
+                  : ""
+              }`,
+              disabled: pmSelection.layerId !== layer.id || pmSelection.size === 0,
+              onSelect: () => {
+                const pm = layer.pmtiles!;
+                if (
+                  isLargePmSelection() &&
+                  !window.confirm(
+                    "This is a large selection and may be slow to materialise. Continue?",
+                  )
+                )
+                  return;
+                setEditErr(null);
+                createLayerFromSelection(pm.theme, pm.release).catch((err) =>
+                  setEditErr(errMsg(err)),
+                );
+              },
+            } as MenuItem,
+          ]
+        : []),
       {
         label: "Open attribute table",
         // Query-backed layers (Overture / SQL result) have no catalog source to

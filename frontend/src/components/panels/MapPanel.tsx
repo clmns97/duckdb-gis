@@ -3,6 +3,7 @@ import type { IDockviewPanelProps } from "dockview";
 import { MapView } from "../MapView";
 import { SelectionChip } from "../SelectionChip";
 import { DrawToolbar } from "../DrawToolbar";
+import { SelectFeaturesToggle } from "../SelectFeaturesToggle";
 import { getMap } from "../../lib/mapBus";
 import { editing } from "../../lib/editing";
 
@@ -34,6 +35,7 @@ export function MapPanel(props: IDockviewPanelProps) {
           so the chip only coexists with the collapsed Edit button. */}
       <div className="absolute top-3 left-3 z-[2] flex flex-col items-start gap-1.5">
         <DrawToolbar />
+        <SelectFeaturesToggle />
         <SelectionChip />
       </div>
     </div>

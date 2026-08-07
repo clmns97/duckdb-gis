@@ -32,6 +32,12 @@ import {
   type LayerStyle,
   type GeometryKind,
 } from "./deckRender";
+import {
+  addOvertureTileLayer,
+  removeOvertureTileLayer,
+  setOvertureTileVisible,
+} from "./overtureTiles";
+import type { OvertureTheme } from "./overture";
 
 export type { LayerStyle, GeometryKind };
 
@@ -71,6 +77,10 @@ export interface ActiveLayer {
   temporary?: boolean;
   /** The query behind a temporary layer, kept for re-inspection / future re-run. */
   sql?: string;
+  /** Present for an Overture PMTiles layer (T-058): a native MapLibre vector-tile
+   *  layer, not a deck layer, so visibility/removal route to `overtureTiles`.
+   *  Carries the theme + release needed by "Create Layer from Selection". */
+  pmtiles?: { theme: OvertureTheme; release: string };
 }
 
 /** Fixed id of the single SQL-editor Run-result temp layer (T-027). Re-Running
@@ -265,6 +275,38 @@ export const layers = {
   },
 
   /**
+   * Add an Overture theme as a native MapLibre PMTiles vector-tile layer (T-058).
+   * Not a deck layer — display + selection only, rendered from Overture's hosted,
+   * pre-simplified tiles (no client-side triangulation). Dedupes per (theme,
+   * release). Editing happens on a copy via `createLayerFromSelection`.
+   */
+  async addPmtiles(theme: OvertureTheme, release: string): Promise<void> {
+    const id = `L_ovt_${release}_${theme.id}`.replace(/[^A-Za-z0-9]/g, "_");
+    if (byId.has(id)) return;
+
+    byId.set(id, {
+      id,
+      name: `Overture ${theme.label}`,
+      visible: true,
+      status: "loading",
+      pmtiles: { theme, release },
+    });
+    order = [id, ...order];
+    emit();
+
+    try {
+      // PMTiles cover the whole planet — the archive's bounds are global, so
+      // don't reframe the camera on add (that would zoom out to the world and
+      // hide zoom-gated themes like Buildings). Keep the user's viewport; leave
+      // `bounds` null so "Zoom to layer" is disabled for a planet-wide layer.
+      await addOvertureTileLayer(id, theme, release);
+      patch(id, { status: "ready", bounds: null });
+    } catch (e) {
+      patch(id, { status: "error", error: e instanceof Error ? e.message : String(e) });
+    }
+  },
+
+  /**
    * Update a layer's symbology (T-010): merge `changes` into its style, push it
    * to the render layer live, and notify subscribers so the Symbology UI stays
    * in sync. No-op if the layer is unknown or not yet styled (still loading).
@@ -333,7 +375,8 @@ export const layers = {
   setVisible(id: string, visible: boolean): void {
     const layer = byId.get(id);
     if (!layer || layer.visible === visible) return;
-    if (layer.temporary) setPreviewVisible(visible);
+    if (layer.pmtiles) setOvertureTileVisible(id, visible);
+    else if (layer.temporary) setPreviewVisible(visible);
     else setDeckLayerVisible(id, visible);
     patch(id, { visible });
   },
@@ -364,7 +407,8 @@ export const layers = {
   remove(id: string): void {
     const layer = byId.get(id);
     if (!layer) return;
-    if (layer.temporary) clearDeck();
+    if (layer.pmtiles) removeOvertureTileLayer(id);
+    else if (layer.temporary) clearDeck();
     else removeDeckLayer(id);
     byId.delete(id);
     order = order.filter((x) => x !== id);

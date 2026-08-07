@@ -34,7 +34,9 @@ import { editing } from "./lib/editing";
 import { attach } from "./lib/attach";
 import { basemap, basemapMenuItems } from "./lib/basemaps";
 import { toolMenuItems } from "./lib/geoprocessing";
-import { addOvertureLayers, type OvertureRequest } from "./lib/overture";
+import { addOvertureLayers, createLayerFromSelection, type OvertureRequest } from "./lib/overture";
+import { pmSelection } from "./lib/pmtilesSelection";
+import { boxSelect } from "./lib/overtureTiles";
 
 export function App() {
   const [databases, setDatabases] = useState<CatalogDatabase[] | null>(null);
@@ -161,12 +163,11 @@ export function App() {
     setMenu({ x: e.clientX, y: e.clientY, items });
   };
 
-  // Overture quick-load (T-012 / T-029): bring the Layers panel forward, then
-  // hand the request to the data layer (`addOvertureLayers` owns the bbox
-  // resolution, temp-table materialise, and per-theme layer adds).
+  // Overture quick-load (T-012 / T-029 / T-058): bring the Layers panel forward,
+  // then add one native PMTiles vector-tile layer per selected theme.
   const loadOverture = (req: OvertureRequest) => {
     setTab("layers");
-    void addOvertureLayers(req);
+    addOvertureLayers(req);
   };
 
   useEffect(() => {
@@ -200,6 +201,9 @@ export function App() {
       gisSelection: selection,
       gisEditing: editing,
       gisQuery: query,
+      gisOverture: { addOvertureLayers, createLayerFromSelection, boxSelect },
+      gisLayers: layers,
+      gisPmSelection: pmSelection,
     });
   }, []);
 

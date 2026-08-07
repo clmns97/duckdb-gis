@@ -18,11 +18,13 @@
 // file glob must be listed/pruned — acceptable for now, revisit for large extents.
 // ---------------------------------------------------------------------------
 
-import { query } from "./duckdb";
+import { query, sqlLit, str } from "./duckdb";
 import { getMap } from "./mapBus";
 import { selection, fidTaggedRelation, FID } from "./selection";
-import { layers } from "./layers";
+import { layers, ident } from "./layers";
 import { OVERTURE_BUCKET, ensureOvertureAccess } from "./remote";
+import { OVERTURE_TILES_BASE } from "./overtureTiles";
+import { pmSelection } from "./pmtilesSelection";
 
 /** One selectable Overture theme. `type` is the representative type partition
  *  loaded for the shell; per-type refinement is a later sub-ticket. */
@@ -41,18 +43,58 @@ export const OVERTURE_THEMES: OvertureTheme[] = [
   { id: "divisions", label: "Divisions", type: "division_area" },
 ];
 
-// Available releases, latest first (verified present in the bucket 2026-07-10).
-// The bucket retains only the most recent releases; live-listing them (and
-// auto-preselecting the latest) is a T-012 follow-up.
-export const OVERTURE_RELEASES = ["2026-06-17.0", "2026-05-20.0"];
-
-export type ExtentMode = "viewport" | "selected" | "place";
+// Fallback releases (latest first) if live-listing fails. `2026-06-17.0` is the
+// one release currently present in *both* the hosted-tiles bucket (used for
+// display, T-058) and the GeoParquet bucket (used to materialise selections), so
+// it is the safe default. `listOvertureReleases` normally supersedes this.
+export const OVERTURE_RELEASES = ["2026-06-17.0"];
 
 export interface OvertureRequest {
-  /** Selected theme ids (one map layer each). */
+  /** Selected theme ids (one PMTiles map layer each). */
   themes: string[];
   release: string;
-  extent: ExtentMode;
+}
+
+/**
+ * Live-list Overture releases that can be *both* displayed and materialised:
+ * the intersection of the hosted-tiles bucket (browser-listed over CORS) and the
+ * GeoParquet bucket (globbed via DuckDB/httpfs). Sorted newest-first. Falls back
+ * to {@link OVERTURE_RELEASES} on any failure so the modal always has options.
+ */
+export async function listOvertureReleases(): Promise<string[]> {
+  try {
+    const origin = new URL(OVERTURE_TILES_BASE).origin;
+    const [tileReleases, parquetReleases] = await Promise.all([
+      listTileReleases(origin),
+      listParquetReleases(),
+    ]);
+    const both = tileReleases.filter((r) => parquetReleases.has(r));
+    both.sort((a, b) => (a < b ? 1 : a > b ? -1 : 0)); // newest first
+    return both.length ? both : OVERTURE_RELEASES;
+  } catch {
+    return OVERTURE_RELEASES;
+  }
+}
+
+/** Release ids under the hosted-tiles bucket's `tiles/` prefix (S3 ListBucket). */
+async function listTileReleases(origin: string): Promise<string[]> {
+  const res = await fetch(`${origin}/?list-type=2&prefix=tiles/&delimiter=/`);
+  const xml = await res.text();
+  const out: string[] = [];
+  for (const m of xml.matchAll(/<Prefix>tiles\/([^/<]+)\/<\/Prefix>/g)) out.push(m[1]);
+  return out;
+}
+
+/** Release ids present in the Overture GeoParquet bucket (via DuckDB glob). */
+async function listParquetReleases(): Promise<Set<string>> {
+  await ensureOvertureAccess();
+  const rows = await query(`SELECT file FROM glob('${OVERTURE_BUCKET}/release/*')`);
+  const set = new Set<string>();
+  for (const r of rows) {
+    const m = /\/release\/([^/]+)\/?$/.exec(String(r.file));
+    if (m) set.add(m[1]);
+  }
+  return set;
 }
 
 export interface Bbox {
@@ -123,33 +165,73 @@ export function buildOvertureQuery(theme: OvertureTheme, release: string, bbox: 
 }
 
 /**
- * Resolve the request's extent to a bbox, then add one query-backed layer per
- * selected theme (T-012 / T-029). Each theme's remote S3 read is materialised
- * into a local temp table *once* (a single S3 scan) inside `addQuery`'s
- * `prepare` before the layer renders from it — the render path otherwise scans
- * the source twice (probe + Arrow), which over the network doubles the wall
- * time. httpfs/S3 setup + the materialise run inside `prepare`, so any access or
- * read failure surfaces on the layer row instead of being swallowed. Mirrors the
- * geoprocessing tools' pattern (build SQL + call `layers.addQuery` in the data
- * layer; the view only routes the request here).
+ * Materialise the *selected* features of an Overture theme from GeoParquet — the
+ * "Create Layer from Selection" path (T-058). Globs every `type` partition of the
+ * theme (a source-layer's features can live in more than one, so `union_by_name`
+ * reconciles the differing schemas), prunes row-groups with the selection's bbox,
+ * and filters to the picked GERS `id`s — real, full-resolution geometry, not the
+ * simplified tile geometry the user selected on. See `buildOvertureQuery` for the
+ * `::GEOMETRY` cast rationale.
  */
-export async function addOvertureLayers(req: OvertureRequest): Promise<void> {
-  const bbox = req.extent === "selected" ? await selectionBbox() : viewportBbox();
-  if (!bbox) return; // no map / empty selection — nothing to clip to
+export function buildOvertureSelectionQuery(
+  theme: OvertureTheme,
+  release: string,
+  bbox: Bbox,
+  ids: string[],
+): string {
+  const path = `${OVERTURE_BUCKET}/release/${release}/theme=${theme.id}/type=*/*`;
+  const idList = ids.map((id) => `'${sqlLit(id)}'`).join(",");
+  return (
+    `SELECT geometry::GEOMETRY AS geom, * EXCLUDE (geometry) ` +
+    `FROM read_parquet('${path}', hive_partitioning=1, union_by_name=1) ` +
+    `WHERE bbox.xmin <= ${bbox.xmax} AND bbox.xmax >= ${bbox.xmin} ` +
+    `AND bbox.ymin <= ${bbox.ymax} AND bbox.ymax >= ${bbox.ymin} ` +
+    `AND id IN (${idList})`
+  );
+}
+
+/**
+ * Add one native-vector PMTiles layer per selected theme (T-058). All six themes
+ * go through one code path — Overture's hosted, pre-simplified tiles render on the
+ * GPU with no client-side triangulation (the T-029 freeze), and stay responsive
+ * while panning. The layer is display + selection only; editing happens on a copy
+ * made by `createLayerFromSelection`.
+ */
+export function addOvertureLayers(req: OvertureRequest): void {
   for (const themeId of req.themes) {
     const theme = OVERTURE_THEMES.find((t) => t.id === themeId);
     if (!theme) continue;
-    const id = `L_ov_${req.release}_${theme.id}`.replace(/[^A-Za-z0-9]/g, "_");
-    void layers.addQuery({
-      id,
-      name: `Overture ${theme.label}`,
-      sql: `SELECT geom FROM ${id}`,
-      prepare: async () => {
-        await ensureOvertureAccess();
-        await query(
-          `CREATE OR REPLACE TEMP TABLE ${id} AS ${buildOvertureQuery(theme, req.release, bbox)}`,
-        );
-      },
-    });
+    void layers.addPmtiles(theme, req.release);
   }
+}
+
+/** A selection large enough to risk reintroducing T-029's freeze when
+ *  materialised (mirrors {@link isLargeExtent} on the union bbox). */
+export function isLargePmSelection(): boolean {
+  const b = pmSelection.bounds();
+  return b != null && isLargeExtent(b);
+}
+
+/**
+ * Materialise the current PMTiles selection into a normal, **editable** layer —
+ * QGIS's "save layer from selected features". Creates a real catalog table in
+ * `main` from a fresh GeoParquet query, then registers it via `layers.add` (the
+ * catalog-table path, so Edit/Symbology work exactly as for any other table —
+ * mirrors `editing.ts`'s "commit new layer"). No-op when nothing is selected.
+ * The caller (Layers panel) owns the large-selection warning
+ * ({@link isLargePmSelection}).
+ */
+export async function createLayerFromSelection(theme: OvertureTheme, release: string): Promise<void> {
+  const ids = pmSelection.ids();
+  const bbox = pmSelection.bounds();
+  if (ids.length === 0 || !bbox) return;
+  await ensureOvertureAccess();
+  const stamp = Date.now().toString(36);
+  const table = `${theme.label.replace(/[^A-Za-z0-9]/g, "_")}_selection_${stamp}`;
+  await query(
+    `CREATE TABLE main.${ident(table)} AS ${buildOvertureSelectionQuery(theme, release, bbox, ids)}`,
+  );
+  const dbRows = await query(`SELECT current_database() AS db`);
+  const db = str(dbRows[0]?.db ?? "memory");
+  await layers.add({ db, schema: "main", table, geomColumn: "geom" });
 }
