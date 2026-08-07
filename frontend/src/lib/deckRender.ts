@@ -458,6 +458,18 @@ const SPECS: Record<string, GeomSpec> = {
   MULTIPOLYGON: { fn: "st_asgeoarrowmultipolygon", layer: POLYGON, staticLayer: POLYGON_STATIC },
 };
 
+// A result set can freely mix a family's simple and multi variants (e.g.
+// Overture buildings: mostly POLYGON with some MULTIPOLYGON) — real data isn't
+// guaranteed homogeneous just because `probeGeometry` samples one row's type.
+// Always encode through the family's multi spec over `ST_Multi(geom)` (a no-op
+// on already-multi rows), so a single query never depends on every row sharing
+// the exact type `any_value` happened to sample.
+const FAMILY_SPECS: Record<GeometryKind, GeomSpec> = {
+  point: SPECS.MULTIPOINT,
+  line: SPECS.MULTILINESTRING,
+  polygon: SPECS.MULTIPOLYGON,
+};
+
 /**
  * Run a user query and render its geometry through the matching GeoArrow layer.
  * Dispatches on the result's geometry type (point → Scatterplot, line → Path,
@@ -468,7 +480,7 @@ export async function renderGeoArrow(userSql: string): Promise<DeckOutcome> {
 
   const t0 = performance.now();
   const probe = await probeGeometry(inner);
-  const spec = SPECS[probe.type];
+  const spec = FAMILY_SPECS[geometryKindOf(probe.type)];
   if (!spec) {
     throw new Error(`unsupported geometry type for rendering: ${probe.type}`);
   }
@@ -487,9 +499,12 @@ export async function renderGeoArrow(userSql: string): Promise<DeckOutcome> {
 
   // Carry a deterministic `__fid` alongside the encoded geometry so picked
   // features resolve back to source rows (see selection.ts). `fidTaggedRelation`
-  // is the single source of truth for how fids are assigned.
+  // is the single source of truth for how fids are assigned. `ST_Multi` folds
+  // a family's simple rows onto its multi variant (a no-op on already-multi
+  // ones) so a single query can freely mix POLYGON/MULTIPOLYGON etc. — see
+  // `FAMILY_SPECS`.
   const encoded =
-    `SELECT ${FID}, ${spec.fn}(geom) AS geom FROM (${fidTaggedRelation(inner)}) _t`;
+    `SELECT ${FID}, ${spec.fn}(ST_Multi(geom)) AS geom FROM (${fidTaggedRelation(inner)}) _t`;
   const { table, bytes } = await fetchArrow(encoded);
   const t1 = performance.now();
 
@@ -620,14 +635,15 @@ export interface AddedLayerOutcome {
 export async function addDeckLayer(id: string, sourceSql: string): Promise<AddedLayerOutcome> {
   const inner = clean(sourceSql);
   const probe = await probeGeometry(inner);
-  const spec = SPECS[probe.type];
+  const spec = FAMILY_SPECS[geometryKindOf(probe.type)];
   if (!spec) throw new Error(`unsupported geometry type for rendering: ${probe.type}`);
 
   // Carry a deterministic `__fid` alongside the geometry (same tagging the Run
   // preview uses) so features picked on this layer resolve back to source rows
   // for downstream tools (T-041). `fidTaggedRelation` also applies the
-  // `geom IS NOT NULL` filter, so no extra WHERE is needed here.
-  const encoded = `SELECT ${FID}, ${spec.fn}(geom) AS geom FROM (${fidTaggedRelation(inner)}) _t`;
+  // `geom IS NOT NULL` filter, so no extra WHERE is needed here. `ST_Multi`
+  // folds simple rows onto the family's multi variant — see `FAMILY_SPECS`.
+  const encoded = `SELECT ${FID}, ${spec.fn}(ST_Multi(geom)) AS geom FROM (${fidTaggedRelation(inner)}) _t`;
   const { table } = await fetchArrow(encoded);
   // Keep an existing layer's style on replace so its symbology stays stable.
   const style = added.get(id)?.style ?? nextStyle(probe.type);
