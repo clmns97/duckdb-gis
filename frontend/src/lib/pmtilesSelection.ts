@@ -10,18 +10,13 @@
 // time (its `layerId`); picking on a different layer switches scope.
 // ---------------------------------------------------------------------------
 
-export interface PmBbox {
-  xmin: number;
-  ymin: number;
-  xmax: number;
-  ymax: number;
-}
+import type { Bbox } from "./overture";
 
 type Listener = () => void;
 
 // id -> the feature's tile-geometry bbox (used to prune the materialise query's
 // row-groups and to size the "large selection" warning; never for geometry).
-const selected = new Map<string, PmBbox>();
+const selected = new Map<string, Bbox>();
 let layerId: string | null = null;
 let version = 0;
 const listeners = new Set<Listener>();
@@ -32,7 +27,7 @@ function emit(): void {
 }
 
 /** Union bbox of every selected feature, or null when nothing is selected. */
-export function selectionBounds(): PmBbox | null {
+export function selectionBounds(): Bbox | null {
   if (selected.size === 0) return null;
   let xmin = Infinity,
     ymin = Infinity,
@@ -49,7 +44,7 @@ export function selectionBounds(): PmBbox | null {
 
 export interface PmPick {
   id: string;
-  bbox: PmBbox;
+  bbox: Bbox;
 }
 
 export const pmSelection = {
@@ -64,7 +59,6 @@ export const pmSelection = {
   get size(): number {
     return selected.size;
   },
-  has: (id: string): boolean => selected.has(id),
   ids: (): string[] => [...selected.keys()],
   bounds: selectionBounds,
 
@@ -99,5 +93,3 @@ export const pmSelection = {
     return () => listeners.delete(l);
   },
 };
-
-export type PmSelection = typeof pmSelection;

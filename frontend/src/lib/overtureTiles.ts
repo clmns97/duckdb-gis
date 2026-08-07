@@ -20,8 +20,8 @@ import maplibregl from "maplibre-gl";
 import { Protocol, PMTiles } from "pmtiles";
 import { getMap } from "./mapBus";
 import { addFamilyLayers, removeFamilyLayers } from "./vectorStyle";
-import { pmSelection, type PmBbox, type PmPick } from "./pmtilesSelection";
-import type { OvertureTheme } from "./overture";
+import { pmSelection, type PmPick } from "./pmtilesSelection";
+import type { OvertureTheme, Bbox } from "./overture";
 
 export const OVERTURE_TILES_BASE =
   "https://overturemaps-extras-us-west-2.s3.us-west-2.amazonaws.com/tiles";
@@ -32,10 +32,14 @@ export function tileArchiveUrl(themeId: string, release: string): string {
 }
 
 interface TileLayerEntry {
+  /** The PMTiles archive URL — the key `protocol.tiles` caches it under. */
+  url: string;
   sourceId: string;
+  /** One id per source-layer (`${layerId}__${sourceLayer}`); each expands to a
+   *  fill/line/circle triple (see vectorStyle.addFamilyLayers/removeFamilyLayers). */
+  idBases: string[];
   /** All fill/line/circle style-layer ids across every source-layer. */
   styleLayerIds: string[];
-  bounds: [number, number, number, number] | null;
   visible: boolean;
 }
 
@@ -85,29 +89,26 @@ interface VectorLayerMeta {
 /**
  * Add a theme's hosted PMTiles as a native MapLibre vector-tile layer. Reads the
  * archive's `vector_layers` metadata and draws each with the shared family split.
- * Returns the full extent (from the archive header) and the ids of every style
- * layer added, for the store to track visibility/removal against.
+ * The layer's bounds are deliberately not surfaced here: a PMTiles archive
+ * covers the whole planet, so there is nothing meaningful to frame the camera
+ * on (the store leaves "Zoom to layer" disabled for this layer kind instead).
  */
 export async function addOvertureTileLayer(
   layerId: string,
   theme: OvertureTheme,
   release: string,
-): Promise<{ bounds: [number, number, number, number] | null; styleLayerIds: string[] }> {
+): Promise<void> {
   const proto = ensureProtocol();
   const url = tileArchiveUrl(theme.id, release);
   const pm = new PMTiles(url);
   proto.add(pm);
 
-  const [header, metadata] = await Promise.all([pm.getHeader(), pm.getMetadata()]);
+  const metadata = await pm.getMetadata();
   const vectorLayers = ((metadata as { vector_layers?: VectorLayerMeta[] })?.vector_layers ??
     []) as VectorLayerMeta[];
 
-  const bounds: [number, number, number, number] | null =
-    header?.minLon != null
-      ? [header.minLon, header.minLat, header.maxLon, header.maxLat]
-      : null;
-
   const sourceId = sourceIdFor(layerId);
+  const idBases: string[] = [];
   const styleLayerIds: string[] = [];
 
   const apply = (map: maplibregl.Map) => {
@@ -117,6 +118,7 @@ export async function addOvertureTileLayer(
     }
     for (const vl of vectorLayers) {
       const idBase = `${layerId}__${vl.id}`;
+      idBases.push(idBase);
       const ids = addFamilyLayers(map, {
         source: sourceId,
         sourceLayer: vl.id,
@@ -127,26 +129,24 @@ export async function addOvertureTileLayer(
         styleLayerToLayer.set(id, layerId);
       }
     }
-    registry.set(layerId, { sourceId, styleLayerIds, bounds, visible: true });
+    registry.set(layerId, { url, sourceId, idBases, styleLayerIds, visible: true });
   };
 
   const map = getMap();
   if (map) await whenStyleReady(map, () => apply(map));
-
-  return { bounds, styleLayerIds };
 }
 
 export function removeOvertureTileLayer(layerId: string): void {
   const entry = registry.get(layerId);
   const map = getMap();
   if (entry && map) {
-    // Style-layer ids are `${layerId}__${sourceLayer}-${family}`; strip the
-    // family suffix to get each source-layer's base for removeFamilyLayers.
-    const bases = new Set(entry.styleLayerIds.map((id) => id.replace(/-(fill|line|circle)$/, "")));
-    for (const base of bases) removeFamilyLayers(map, base);
+    for (const base of entry.idBases) removeFamilyLayers(map, base);
     if (map.getSource(entry.sourceId)) map.removeSource(entry.sourceId);
   }
   entry?.styleLayerIds.forEach((id) => styleLayerToLayer.delete(id));
+  // Drop the archive's decoded directory/header cache too — otherwise it
+  // outlives the layer for the rest of the app's lifetime.
+  if (entry) protocol?.tiles.delete(entry.url);
   registry.delete(layerId);
   pmSelection.clear(layerId);
 }
@@ -161,10 +161,6 @@ export function setOvertureTileVisible(layerId: string, visible: boolean): void 
   }
 }
 
-export function overtureTileBounds(layerId: string): [number, number, number, number] | null {
-  return registry.get(layerId)?.bounds ?? null;
-}
-
 /** Style-layer ids across all *visible* PMTiles layers (for queryRenderedFeatures). */
 function visibleStyleLayerIds(): string[] {
   const ids: string[] = [];
@@ -176,7 +172,7 @@ function visibleStyleLayerIds(): string[] {
 
 // --- Selection -------------------------------------------------------------
 
-function bboxOfGeometry(geom: GeoJSON.Geometry): PmBbox {
+function bboxOfGeometry(geom: GeoJSON.Geometry): Bbox {
   let xmin = Infinity,
     ymin = Infinity,
     xmax = -Infinity,

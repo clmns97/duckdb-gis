@@ -19,9 +19,7 @@
 // ---------------------------------------------------------------------------
 
 import { query, sqlLit, str } from "./duckdb";
-import { getMap } from "./mapBus";
-import { selection, fidTaggedRelation, FID } from "./selection";
-import { layers, ident } from "./layers";
+import { layers, ident, sanitizeIdent } from "./layers";
 import { OVERTURE_BUCKET, ensureOvertureAccess } from "./remote";
 import { OVERTURE_TILES_BASE } from "./overtureTiles";
 import { pmSelection } from "./pmtilesSelection";
@@ -55,25 +53,34 @@ export interface OvertureRequest {
   release: string;
 }
 
+// Memoised like `ensureOvertureAccess` (remote.ts): the release set is
+// effectively static for the session (new Overture releases ship monthly), so
+// the modal reopening shouldn't re-hit S3 + re-glob GeoParquet every time.
+let releasesPromise: Promise<string[]> | null = null;
+
 /**
  * Live-list Overture releases that can be *both* displayed and materialised:
  * the intersection of the hosted-tiles bucket (browser-listed over CORS) and the
  * GeoParquet bucket (globbed via DuckDB/httpfs). Sorted newest-first. Falls back
  * to {@link OVERTURE_RELEASES} on any failure so the modal always has options.
  */
-export async function listOvertureReleases(): Promise<string[]> {
-  try {
-    const origin = new URL(OVERTURE_TILES_BASE).origin;
-    const [tileReleases, parquetReleases] = await Promise.all([
-      listTileReleases(origin),
-      listParquetReleases(),
-    ]);
-    const both = tileReleases.filter((r) => parquetReleases.has(r));
-    both.sort((a, b) => (a < b ? 1 : a > b ? -1 : 0)); // newest first
-    return both.length ? both : OVERTURE_RELEASES;
-  } catch {
-    return OVERTURE_RELEASES;
+export function listOvertureReleases(): Promise<string[]> {
+  if (!releasesPromise) {
+    releasesPromise = (async () => {
+      const origin = new URL(OVERTURE_TILES_BASE).origin;
+      const [tileReleases, parquetReleases] = await Promise.all([
+        listTileReleases(origin),
+        listParquetReleases(),
+      ]);
+      const both = tileReleases.filter((r) => parquetReleases.has(r));
+      both.sort((a, b) => (a < b ? 1 : a > b ? -1 : 0)); // newest first
+      return both.length ? both : OVERTURE_RELEASES;
+    })().catch(() => {
+      releasesPromise = null; // let a later attempt retry
+      return OVERTURE_RELEASES;
+    });
   }
+  return releasesPromise;
 }
 
 /** Release ids under the hosted-tiles bucket's `tiles/` prefix (S3 ListBucket). */
@@ -115,36 +122,21 @@ export function isLargeExtent(b: Bbox): boolean {
   return b.xmax - b.xmin > LARGE_EXTENT_DEGREES || b.ymax - b.ymin > LARGE_EXTENT_DEGREES;
 }
 
-/** Bbox of the current MapLibre viewport (lon/lat), or null if no map yet. */
-export function viewportBbox(): Bbox | null {
-  const map = getMap();
-  if (!map) return null;
-  const b = map.getBounds();
-  return { xmin: b.getWest(), ymin: b.getSouth(), xmax: b.getEast(), ymax: b.getNorth() };
-}
-
-/** Bbox enclosing the current selection set (T-003), or null if nothing is
- *  selected. Local query (not S3), so this works in the shell. */
-export async function selectionBbox(): Promise<Bbox | null> {
-  const sel = selection.query();
-  if (!sel) return null;
-  const rel = fidTaggedRelation(sel.sql);
-  const rows = await query(
-    `SELECT min(ST_XMin(geom)) AS x0, min(ST_YMin(geom)) AS y0,
-            max(ST_XMax(geom)) AS x1, max(ST_YMax(geom)) AS y1
-     FROM (${rel}) _s WHERE ${FID} IN (${sel.fids.join(",")})`,
+/** Standard bbox-overlap predicate against a partition's `bbox` struct column
+ *  (the `bbox` columns carry parquet statistics, so this prunes row groups
+ *  server-side). Shared by both query builders below. */
+function bboxOverlapClause(bbox: Bbox): string {
+  return (
+    `bbox.xmin <= ${bbox.xmax} AND bbox.xmax >= ${bbox.xmin} ` +
+    `AND bbox.ymin <= ${bbox.ymax} AND bbox.ymax >= ${bbox.ymin}`
   );
-  const r = rows[0];
-  if (!r || r.x0 == null) return null;
-  return { xmin: Number(r.x0), ymin: Number(r.y0), xmax: Number(r.x1), ymax: Number(r.y1) };
 }
 
 /**
  * Build the geometry query for one theme, clipped to `bbox`. Reads Overture's
  * public GeoParquet on S3 (caller must have run `ensureOvertureAccess` first),
  * projecting `geometry` → `geom` for the render path and filtering on the
- * partition's `bbox` struct with a standard bbox-overlap predicate. The `bbox`
- * columns carry parquet statistics, so this prunes row groups server-side.
+ * partition's `bbox` struct with a standard bbox-overlap predicate.
  *
  * The `::GEOMETRY` cast strips the CRS annotation that `read_parquet` attaches
  * to GeoParquet geometry (`GEOMETRY('OGC:CRS84')`): spatial's aggregate
@@ -155,12 +147,10 @@ export async function selectionBbox(): Promise<Bbox | null> {
  */
 export function buildOvertureQuery(theme: OvertureTheme, release: string, bbox: Bbox): string {
   const path = `${OVERTURE_BUCKET}/release/${release}/theme=${theme.id}/type=${theme.type}/*`;
-  // Standard bbox-overlap: feature bbox intersects the requested extent.
   return (
     `SELECT geometry::GEOMETRY AS geom ` +
     `FROM read_parquet('${path}', hive_partitioning=1) ` +
-    `WHERE bbox.xmin <= ${bbox.xmax} AND bbox.xmax >= ${bbox.xmin} ` +
-    `AND bbox.ymin <= ${bbox.ymax} AND bbox.ymax >= ${bbox.ymin}`
+    `WHERE ${bboxOverlapClause(bbox)}`
   );
 }
 
@@ -184,9 +174,7 @@ export function buildOvertureSelectionQuery(
   return (
     `SELECT geometry::GEOMETRY AS geom, * EXCLUDE (geometry) ` +
     `FROM read_parquet('${path}', hive_partitioning=1, union_by_name=1) ` +
-    `WHERE bbox.xmin <= ${bbox.xmax} AND bbox.xmax >= ${bbox.xmin} ` +
-    `AND bbox.ymin <= ${bbox.ymax} AND bbox.ymax >= ${bbox.ymin} ` +
-    `AND id IN (${idList})`
+    `WHERE ${bboxOverlapClause(bbox)} AND id IN (${idList})`
   );
 }
 
@@ -227,7 +215,7 @@ export async function createLayerFromSelection(theme: OvertureTheme, release: st
   if (ids.length === 0 || !bbox) return;
   await ensureOvertureAccess();
   const stamp = Date.now().toString(36);
-  const table = `${theme.label.replace(/[^A-Za-z0-9]/g, "_")}_selection_${stamp}`;
+  const table = `${sanitizeIdent(theme.label)}_selection_${stamp}`;
   await query(
     `CREATE TABLE main.${ident(table)} AS ${buildOvertureSelectionQuery(theme, release, bbox, ids)}`,
   );

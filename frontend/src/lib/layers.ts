@@ -115,6 +115,12 @@ export function ident(name: string): string {
   return `"${name.replace(/"/g, '""')}"`;
 }
 
+/** Word-char-only id derived from `s` — safe as a MapLibre layer/source id, an
+ *  unquoted table name fragment, or a URL path segment. */
+export function sanitizeIdent(s: string): string {
+  return s.replace(/[^A-Za-z0-9]/g, "_");
+}
+
 /** Fully-qualified `"db"."schema"."table"` for a layer source. */
 export function qualified(s: LayerSource): string {
   return `${ident(s.db)}.${ident(s.schema)}.${ident(s.table)}`;
@@ -124,7 +130,7 @@ export function qualified(s: LayerSource): string {
 // same (table, column) always yields the same id, which is also how we dedupe.
 // Word-char-only so it is safe as a MapLibre layer id and an unquoted table name.
 function layerId(s: LayerSource): string {
-  return `L_${[s.db, s.schema, s.table, s.geomColumn].join("__").replace(/[^A-Za-z0-9]/g, "_")}`;
+  return `L_${sanitizeIdent([s.db, s.schema, s.table, s.geomColumn].join("__"))}`;
 }
 
 function snapshot(): ActiveLayer[] {
@@ -281,7 +287,7 @@ export const layers = {
    * release). Editing happens on a copy via `createLayerFromSelection`.
    */
   async addPmtiles(theme: OvertureTheme, release: string): Promise<void> {
-    const id = `L_ovt_${release}_${theme.id}`.replace(/[^A-Za-z0-9]/g, "_");
+    const id = sanitizeIdent(`L_ovt_${release}_${theme.id}`);
     if (byId.has(id)) return;
 
     byId.set(id, {
