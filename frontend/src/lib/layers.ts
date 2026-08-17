@@ -49,9 +49,24 @@ export interface LayerSource {
   geomColumn: string;
 }
 
+/**
+ * Which render backend draws a layer — the discriminant that routes
+ * visibility/removal to the right subsystem (T-058 cleanup). Previously inferred
+ * from which optional field was set (`source`/`temporary`/`pmtiles`); a real tag
+ * lets the store dispatch through an exhaustive `switch` the compiler checks.
+ *   • `table`   — a catalog table, drawn as a stacked deck layer.
+ *   • `query`   — an arbitrary geometry query (Overture quick-load, SQL editor),
+ *                 also a deck layer.
+ *   • `preview` — the single replaceable SQL-editor Run result (deck preview slot).
+ *   • `pmtiles` — a native MapLibre vector-tile layer (Overture hosted PMTiles).
+ */
+export type LayerKind = "table" | "query" | "preview" | "pmtiles";
+
 export interface ActiveLayer {
   /** Stable id: also the MVT layer/source id and the dedupe key. */
   id: string;
+  /** The render backend that draws this layer — the dispatch discriminant. */
+  kind: LayerKind;
   /** Display name shown in the Layers panel. */
   name: string;
   /** The catalog source, when the layer is a catalog table. Absent for a
@@ -71,11 +86,7 @@ export interface ActiveLayer {
   /** Geometry family (T-039), resolved once at add time, so the Layers panel can
    *  draw a symbology glyph tinted from `style`. Absent while still loading. */
   geometryKind?: GeometryKind;
-  /** True for the SQL-editor Run result (T-027): a single, replaceable layer
-   *  that mirrors the pickable preview slot rather than a persistent `added`
-   *  layer. Marked in the panel so the user knows it isn't persisted. */
-  temporary?: boolean;
-  /** The query behind a temporary layer, kept for re-inspection / future re-run. */
+  /** The query behind a `preview` layer, kept for re-inspection / future re-run. */
   sql?: string;
   /** Present for an Overture PMTiles layer (T-058): a native MapLibre vector-tile
    *  layer, not a deck layer, so visibility/removal route to `overtureTiles`.
@@ -108,6 +119,13 @@ function emit(): void {
 // last-in-array on top, so the bottom→top draw order is `order` reversed.
 function syncDeckOrder(): void {
   setDeckLayerOrder([...order].reverse());
+}
+
+/** Exhaustiveness check for a `switch` over a union — a branch reaching this
+ *  is a compile error (an unhandled `LayerKind`, say) caught before it can
+ *  silently no-op at runtime. */
+function assertNever(x: never): never {
+  throw new Error(`unreachable: ${JSON.stringify(x)}`);
 }
 
 /** Quote a DuckDB identifier (double-quote, doubling embedded quotes). */
@@ -225,7 +243,14 @@ export const layers = {
     const id = layerId(source);
     if (byId.has(id)) return; // dedupe: this exact table+column is already a layer
 
-    byId.set(id, { id, name: source.table, source, visible: true, status: "loading" });
+    byId.set(id, {
+      id,
+      kind: "table",
+      name: source.table,
+      source,
+      visible: true,
+      status: "loading",
+    });
     order = [id, ...order];
     syncDeckOrder();
     emit();
@@ -265,7 +290,7 @@ export const layers = {
     if (existing && existing.status !== "error") return;
     if (existing) removeDeckLayer(id);
 
-    byId.set(id, { id, name, visible: true, status: "loading" });
+    byId.set(id, { id, kind: "query", name, visible: true, status: "loading" });
     if (!existing) order = [id, ...order]; // keep position on retry
     syncDeckOrder();
     emit();
@@ -292,6 +317,7 @@ export const layers = {
 
     byId.set(id, {
       id,
+      kind: "pmtiles",
       name: `Overture ${theme.label}`,
       visible: true,
       status: "loading",
@@ -351,8 +377,8 @@ export const layers = {
     const existing = byId.get(PREVIEW_ID);
     byId.set(PREVIEW_ID, {
       id: PREVIEW_ID,
+      kind: "preview",
       name: "SQL result",
-      temporary: true,
       sql,
       visible: true,
       status: "loading",
@@ -381,9 +407,20 @@ export const layers = {
   setVisible(id: string, visible: boolean): void {
     const layer = byId.get(id);
     if (!layer || layer.visible === visible) return;
-    if (layer.pmtiles) setOvertureTileVisible(id, visible);
-    else if (layer.temporary) setPreviewVisible(visible);
-    else setDeckLayerVisible(id, visible);
+    switch (layer.kind) {
+      case "pmtiles":
+        setOvertureTileVisible(id, visible);
+        break;
+      case "preview":
+        setPreviewVisible(visible);
+        break;
+      case "table":
+      case "query":
+        setDeckLayerVisible(id, visible);
+        break;
+      default:
+        assertNever(layer.kind);
+    }
     patch(id, { visible });
   },
 
@@ -413,9 +450,20 @@ export const layers = {
   remove(id: string): void {
     const layer = byId.get(id);
     if (!layer) return;
-    if (layer.pmtiles) removeOvertureTileLayer(id);
-    else if (layer.temporary) clearDeck();
-    else removeDeckLayer(id);
+    switch (layer.kind) {
+      case "pmtiles":
+        removeOvertureTileLayer(id);
+        break;
+      case "preview":
+        clearDeck();
+        break;
+      case "table":
+      case "query":
+        removeDeckLayer(id);
+        break;
+      default:
+        assertNever(layer.kind);
+    }
     byId.delete(id);
     order = order.filter((x) => x !== id);
     if (activeId === id) activeId = null; // active layer went away

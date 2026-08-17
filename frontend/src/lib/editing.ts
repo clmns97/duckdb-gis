@@ -52,6 +52,7 @@ import {
   type LayerSource,
 } from "./layers";
 import { selection } from "./selection";
+import { boxSelect } from "./overtureTiles";
 
 // UI-facing modes. `static` = drawing off (Terra Draw's built-in render-only
 // mode); the rest map to Terra Draw mode names (`line` → `linestring`).
@@ -354,6 +355,13 @@ export const editing = {
 
     // Inject the edit gate + z-order provider into the read-only render path.
     setDrawHooks({ isEditing: this.isEditing, beforeId: bottomLayerId });
+
+    // Box-select (Overture PMTiles) and digitizing are mutually exclusive — both
+    // fight over map clicks/dragPan. Turning box-select on cancels any in-progress
+    // edit; `begin*` below turns box-select off when an edit starts.
+    boxSelect.subscribe(() => {
+      if (boxSelect.active && editing.isEditing()) editing.finishEdit();
+    });
   },
 
   /**
@@ -363,6 +371,7 @@ export const editing = {
   beginNewLayer(opts: { name: string; geometryKind: GeometryKind }): void {
     this.init();
     if (!draw) return;
+    boxSelect.set(false); // digitizing and box-select are mutually exclusive
     selection.clear(); // processing selection is meaningless while digitizing
     draw.clear();
     loadedRids.clear();
@@ -388,6 +397,7 @@ export const editing = {
     }
     this.init();
     if (!draw) throw new Error("The map is not ready yet.");
+    boxSelect.set(false); // digitizing and box-select are mutually exclusive
 
     const kind = layer.geometryKind;
     const q = qualified(layer.source);

@@ -99,7 +99,7 @@ export function LayersPanel() {
       // Overture PMTiles layers are display+selection only: materialise the
       // selected features into a normal, editable layer (T-058). Enabled when
       // this layer owns the current PMTiles selection.
-      ...(layer.pmtiles
+      ...(layer.kind === "pmtiles"
         ? [
             {
               label: `Create Layer from Selection${
@@ -237,7 +237,7 @@ export function LayersPanel() {
               editing
             </span>
           )}
-          {layer.temporary && (
+          {layer.kind === "preview" && (
             <span
               className="shrink-0 rounded bg-subtle border border-gray-200 px-1 text-[10px] leading-tight text-gray-500 uppercase tracking-wide"
               title="Temporary layer — the SQL editor Run result, not persisted"
