@@ -1,7 +1,7 @@
 import { useState, useSyncExternalStore } from "react";
 import { Eye, EyeOff, GripVertical, X, Map as MapIcon, EllipsisVertical } from "lucide-react";
 import { layers, type ActiveLayer } from "../lib/layers";
-import { editing } from "../lib/editing";
+import { editing, canEditInPlace } from "../lib/editing";
 import { createLayerFromSelection, isLargePmSelection } from "../lib/overture";
 import { pmSelection } from "../lib/pmtilesSelection";
 import { errMsg } from "../lib/duckdb";
@@ -80,7 +80,7 @@ export function LayersPanel() {
     const items: MenuItem[] = [
       {
         label: editingThis ? "Stop editing" : "Toggle editing",
-        disabled: !layer.source || layer.status !== "ready" || editingElsewhere,
+        disabled: !canEditInPlace(layer) || editingElsewhere,
         onSelect: () => {
           setEditErr(null);
           if (editingThis) editing.finishEdit();

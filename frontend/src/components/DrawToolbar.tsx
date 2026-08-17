@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore } from "react";
-import { editing } from "../lib/editing";
+import { editing, canEditInPlace } from "../lib/editing";
 import { layers } from "../lib/layers";
 import { errMsg } from "../lib/duckdb";
 import { DrawToolbarView } from "./DrawToolbarView";
@@ -46,7 +46,7 @@ export function DrawToolbar() {
   // still-loading layers can't); `beginEdit` also enforces the row-count cap and
   // surfaces its own errors into the same `error` slot.
   const active = layers.active();
-  const canBeginEdit = Boolean(active?.source && active.status === "ready");
+  const canBeginEdit = canEditInPlace(active);
   const onBeginEdit = () => {
     if (!active) return;
     setError(null);

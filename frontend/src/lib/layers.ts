@@ -144,6 +144,12 @@ export function qualified(s: LayerSource): string {
   return `${ident(s.db)}.${ident(s.schema)}.${ident(s.table)}`;
 }
 
+/** The deck render query for a catalog source: its geometry column projected as
+ *  `geom`. Shared by `add` and `refresh` so the two can't diverge. */
+function sourceSql(s: LayerSource): string {
+  return `SELECT ${ident(s.geomColumn)} AS geom FROM ${qualified(s)}`;
+}
+
 // Stable, SQL/URL-safe id derived from the fully-qualified source tuple. The
 // same (table, column) always yields the same id, which is also how we dedupe.
 // Word-char-only so it is safe as a MapLibre layer id and an unquoted table name.
@@ -221,7 +227,7 @@ export const layers = {
   async refresh(id: string): Promise<void> {
     const layer = byId.get(id);
     if (!layer?.source) return;
-    const sql = `SELECT ${ident(layer.source.geomColumn)} AS geom FROM ${qualified(layer.source)}`;
+    const sql = sourceSql(layer.source);
     patch(id, { status: "loading" });
     try {
       const { bounds, style, geometryKind } = await addDeckLayer(id, sql);
@@ -256,7 +262,7 @@ export const layers = {
     emit();
 
     try {
-      const sql = `SELECT ${ident(source.geomColumn)} AS geom FROM ${qualified(source)}`;
+      const sql = sourceSql(source);
       const { bounds, style, geometryKind } = await addDeckLayer(id, sql);
       patch(id, { status: "ready", bounds, style, geometryKind });
       fitTo(bounds);

@@ -168,7 +168,7 @@ function DuplicateIcon({ size = ICON }: IconProps) {
   );
 }
 
-function CopyIcon2({ size = ICON }: IconProps) {
+function CopyIcon({ size = ICON }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" {...svgProps}>
       <rect x="9" y="9" width="11" height="11" rx="2" />
@@ -346,7 +346,6 @@ export function DrawToolbarView({
   const hasSelection = selectedCount > 0;
   const canMerge = selectedCount >= 2;
   const canCommit = featureCount > 0 && !busy;
-  const drawGlyph = allowedMode ? DRAW[allowedMode] : null;
 
   // One control: an icon-only pencil button (a top-left map control) that is the
   // anchor the digitising bar slides out of. Idle → just the pencil, enters
@@ -408,18 +407,22 @@ export function DrawToolbarView({
               <SelectIcon />
             </ToolButton>
 
-            {drawGlyph && allowedMode && (
-              <>
-                <Divider />
-                <ToolButton
-                  title={drawGlyph.title}
-                  on={active === allowedMode}
-                  onClick={() => onSetMode(active === allowedMode ? "select" : allowedMode)}
-                >
-                  <drawGlyph.Icon />
-                </ToolButton>
-              </>
-            )}
+            {allowedMode &&
+              (() => {
+                const glyph = DRAW[allowedMode];
+                return (
+                  <>
+                    <Divider />
+                    <ToolButton
+                      title={glyph.title}
+                      on={active === allowedMode}
+                      onClick={() => onSetMode(active === allowedMode ? "select" : allowedMode)}
+                    >
+                      <glyph.Icon />
+                    </ToolButton>
+                  </>
+                );
+              })()}
 
             <Divider />
 
@@ -461,7 +464,7 @@ export function DrawToolbarView({
               <DuplicateIcon />
             </ActionButton>
             <ActionButton title="Copy the selection" disabled={!hasSelection} onClick={onCopy}>
-              <CopyIcon2 />
+              <CopyIcon />
             </ActionButton>
             <ActionButton title="Paste features" disabled={!canPaste} onClick={onPaste}>
               <PasteIcon />

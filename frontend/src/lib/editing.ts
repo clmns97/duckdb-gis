@@ -195,6 +195,33 @@ function applySnapping(): void {
   d.updateModeOptions("polygon", { snapping });
 }
 
+/** Transform every selected feature by a position-map built from the selection's
+ *  shared bbox centre, then mark them dirty and recount — the shared body of
+ *  rotate/scale (T-045). `makeFn` receives the pivot and returns the per-point map. */
+function transformSelectedAbout(
+  makeFn: (cx: number, cy: number) => (p: number[]) => number[],
+): void {
+  const feats = selectedFeatures();
+  if (!draw || feats.length === 0) return;
+  const [cx, cy] = bboxCenterOf(feats.map((f) => f.geometry));
+  const fn = makeFn(cx, cy);
+  for (const f of feats) {
+    draw.updateFeatureGeometry(f.id!, transformGeometry(f.geometry, fn));
+    dirty.add(String(f.id));
+  }
+  refresh();
+}
+
+/** Add independent clones (nudged, no `__rid`) to the working set and mark them
+ *  dirty so Save INSERTs them — the shared tail of duplicate/paste (T-048). */
+function addClones(feats: GeoJSONStoreFeatures[], kind: GeometryKind): void {
+  if (!draw) return;
+  const clones = feats.map((f) => cloneFeatureOffset(f, kind));
+  draw.addFeatures(clones);
+  clones.forEach((c) => dirty.add(String(c.id)));
+  refresh();
+}
+
 /** The working-set features currently selected in Select mode. */
 function selectedFeatures(): GeoJSONStoreFeatures[] {
   if (!draw) return [];
@@ -238,15 +265,19 @@ function emit(): void {
 
 // Recount the working set (drawn features only) and notify. Called on every
 // Terra Draw change/finish so the toolbar's Commit affordance + count stay live.
-function refresh(): void {
-  featureCount = draw ? draw.getSnapshot().filter(isWorkingFeature).length : 0;
-  // Nudge deck to re-apply z-order only when the Terra Draw layer anchor
-  // actually appears/changes — not on every provisional edit (change fires per
-  // pointer move while drawing), so we don't rebuild the deck layers each frame.
-  const bottom = bottomLayerId();
-  if (bottom !== lastBottomId) {
-    lastBottomId = bottom;
-    requestSync();
+// `countUnchanged` skips the recount + deck-anchor rescan on pointer-move updates
+// (see the change handler) where neither can have changed.
+function refresh(countUnchanged = false): void {
+  if (!countUnchanged) {
+    featureCount = draw ? draw.getSnapshot().filter(isWorkingFeature).length : 0;
+    // Nudge deck to re-apply z-order only when the Terra Draw layer anchor
+    // actually appears/changes — the anchor can only move when features are
+    // created/removed, so this rides the same gate as the recount.
+    const bottom = bottomLayerId();
+    if (bottom !== lastBottomId) {
+      lastBottomId = bottom;
+      requestSync();
+    }
   }
   emit();
 }
@@ -261,6 +292,15 @@ function bottomLayerId(): string | undefined {
   const style = map.getStyle?.();
   const layer = style?.layers?.find((l) => l.id.startsWith("td-"));
   return layer?.id;
+}
+
+/** Whether a layer can be edited in place: a catalog-table layer that has
+ *  finished loading (query-backed and still-loading layers can't). The single
+ *  source of truth for the toolbar's Edit-button enable state and the Layers
+ *  panel's "Toggle editing" item; `beginEdit` remains the enforcing guard (it
+ *  also applies the row-count cap and returns specific error messages). */
+export function canEditInPlace(layer: ActiveLayer | null | undefined): boolean {
+  return Boolean(layer?.source && layer.status === "ready" && layer.geometryKind);
 }
 
 export const editing = {
@@ -335,11 +375,14 @@ export const editing = {
     // vertex-edited); record them so an existing-layer commit only writes rows
     // the user actually touched (T-042). Guidance-geometry ids get marked too but
     // never match a loaded feature, so they're harmless.
-    draw.on("change", (ids) => {
+    draw.on("change", (ids, type) => {
       for (const id of ids ?? []) dirty.add(String(id));
-      refresh();
+      // `change` fires per pointer move while drawing/dragging over a working set
+      // up to EDIT_CAP; only create/delete alter the feature count or the deck
+      // z-order anchor, so skip the O(n) snapshot recount on "update"/"styling".
+      refresh(type === "update" || type === "styling");
     });
-    draw.on("finish", refresh);
+    draw.on("finish", () => refresh());
     draw.on("select", (id) => {
       selectedIds.add(String(id));
       emit();
@@ -509,38 +552,22 @@ export const editing = {
    * both land in the working set and Save through the normal path.
    */
   rotateSelected(deg = 15): void {
-    const feats = selectedFeatures();
-    if (!draw || feats.length === 0) return;
-    const [cx, cy] = bboxCenterOf(feats.map((f) => f.geometry));
     const rad = (deg * Math.PI) / 180;
     const cos = Math.cos(rad);
     const sin = Math.sin(rad);
-    for (const f of feats) {
-      const g = transformGeometry(f.geometry, ([x, y]) => {
-        const dx = x - cx;
-        const dy = y - cy;
-        return [cx + dx * cos - dy * sin, cy + dx * sin + dy * cos];
-      });
-      draw.updateFeatureGeometry(f.id!, g);
-      dirty.add(String(f.id));
-    }
-    refresh();
+    transformSelectedAbout((cx, cy) => ([x, y]) => {
+      const dx = x - cx;
+      const dy = y - cy;
+      return [cx + dx * cos - dy * sin, cy + dx * sin + dy * cos];
+    });
   },
 
   /** Scale the selected features about their shared bbox centre by `factor` (T-045). */
   scaleSelected(factor = 1.1): void {
-    const feats = selectedFeatures();
-    if (!draw || feats.length === 0) return;
-    const [cx, cy] = bboxCenterOf(feats.map((f) => f.geometry));
-    for (const f of feats) {
-      const g = transformGeometry(f.geometry, ([x, y]) => [
-        cx + (x - cx) * factor,
-        cy + (y - cy) * factor,
-      ]);
-      draw.updateFeatureGeometry(f.id!, g);
-      dirty.add(String(f.id));
-    }
-    refresh();
+    transformSelectedAbout((cx, cy) => ([x, y]) => [
+      cx + (x - cx) * factor,
+      cy + (y - cy) * factor,
+    ]);
   },
 
   /**
@@ -582,10 +609,7 @@ export const editing = {
     if (!draw || !target) return;
     const feats = selectedFeatures();
     if (feats.length === 0) return;
-    const clones = feats.map((f) => cloneFeatureOffset(f, target!.geometryKind));
-    draw.addFeatures(clones);
-    clones.forEach((c) => dirty.add(String(c.id)));
-    refresh();
+    addClones(feats, target.geometryKind);
   },
 
   /** Copy the current selection into the clipboard (deep-cloned GeoJSON, T-048). */
@@ -606,10 +630,7 @@ export const editing = {
     if (clipboard.some((f) => familyOf(f.geometry) !== kind)) {
       throw new Error("Clipboard geometry doesn't match this layer's type.");
     }
-    const clones = clipboard.map((f) => cloneFeatureOffset(f, kind));
-    draw.addFeatures(clones);
-    clones.forEach((c) => dirty.add(String(c.id)));
-    refresh();
+    addClones(clipboard, kind);
   },
 
   /**
