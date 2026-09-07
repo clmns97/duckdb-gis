@@ -1,6 +1,6 @@
 # duckdb-gis
 
-A DuckDB **UI extension** (C++) that serves a browser-based GIS frontend, forked from `duckdb/duckdb-ui`. The extension runs an HTTP server that serves UI assets and handles SQL/DuckDB operations. See `README.md` for the architecture overview.
+A DuckDB **GIS extension** (C++) that serves a browser-based GIS frontend. It began as a fork of `duckdb/duckdb-ui` and is now developed as a standalone project. The extension runs an HTTP server that serves UI assets and handles SQL/DuckDB operations. See `README.md` for the architecture overview.
 
 ## Orientation — where the real code is
 
@@ -13,7 +13,7 @@ Our code:
 
 - `src/` — C++ extension. Key files: `http_server.cpp` (HTTP endpoints — SQL run, interrupt, tokenize, events; see `HttpServer::Run`), `event_dispatcher.cpp`, `state.cpp`, `settings.cpp`, `watcher.cpp`, `ui_extension.cpp`. Headers in `src/include/`, helpers in `src/utils/`.
 - `ts/` — TypeScript packages for the UI (e.g. `duckdb-ui-client`, `duckdb-data-reader`). See `ts/README.md`.
-- `frontend/` — our MapLibre-based GIS frontend (the point of the fork).
+- `frontend/` — our MapLibre-based GIS frontend (the point of the project).
 - `design-system/` — `@duckdb-gis/ui-kit`, the Storybook UI kit. Components
   re-export from `frontend/src`; the frontend is the source of truth.
 - `test/sql/` — SQL-level extension tests.
@@ -62,4 +62,4 @@ implement the geo operations as native DuckDB spatial SQL.
 
 ## Project context
 
-Fork of `duckdb/duckdb-ui` serving our own MapLibre frontend; supersedes the earlier Quacklas prototype. Frontend dev uses Vite + pnpm (`pnpm dev`, port 5173), proxying the SQL-over-HTTP API to the extension server on `localhost:4214` (see `frontend/vite.config.ts`).
+Derived from `duckdb/duckdb-ui`, serving our own MapLibre frontend; developed in a standalone repo and does not track upstream. Supersedes the earlier Quacklas prototype. Frontend dev uses Vite + pnpm (`pnpm dev`, port 5173), proxying the SQL-over-HTTP API to the extension server on `localhost:4214` (see `frontend/vite.config.ts`).

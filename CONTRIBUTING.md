@@ -130,7 +130,7 @@ Please don't report security problems in a public issue — see
 
 ## Licensing and attribution
 
-This project is MIT licensed, and is an independent fork of
+This project is MIT licensed, and is an independent project derived from
 [`duckdb/duckdb-ui`](https://github.com/duckdb/duckdb-ui). It is **not**
 affiliated with, maintained by, or endorsed by the DuckDB Foundation or DuckDB
 Labs. By contributing you agree that your contributions are licensed under the

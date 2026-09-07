@@ -12,9 +12,11 @@ in the same DuckDB instance — there is no remote backend.
 
 ![duckdb-gis: a table added from the Browser panel and rendered as a map layer](docs/screenshot.png)
 
-This repository is a fork of [`duckdb/duckdb-ui`](https://github.com/duckdb/duckdb-ui).
-It reuses that project's SQL-over-HTTP transport and TypeScript client, but
-replaces the hosted UI with our own MapLibre frontend under `frontend/`.
+`duckdb-gis` began as a fork of
+[`duckdb/duckdb-ui`](https://github.com/duckdb/duckdb-ui) and is now developed as
+a standalone project. It still builds on that project's SQL-over-HTTP transport
+and TypeScript client, but replaces the hosted UI with our own MapLibre frontend
+under `frontend/`.
 
 Bug reports and contributions are welcome — see
 [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -59,7 +61,7 @@ remote backend and no data leaves your machine.
 - `src/` — the C++ extension (HTTP server, event dispatcher, settings, state).
   See `src/http_server.cpp` (`HttpServer::Run`) for the endpoints.
 - `frontend/` — the MapLibre/deck.gl GIS frontend (React + Vite). This is the
-  point of the fork.
+  point of the project.
 - `ts/` — TypeScript packages shared with the frontend, notably
   `duckdb-ui-client` (the SQL-over-HTTP client). See `ts/README.md`.
 - `design-system/` — `@duckdb-gis/ui-kit`, a Storybook workspace for the
@@ -187,11 +189,12 @@ Our own releases start at `v0.1.0`.
 ## License and attribution
 
 MIT — see [LICENSE](LICENSE). The copyright notice is retained from upstream
-`duckdb/duckdb-ui` (Stichting DuckDB Foundation), which this project is a fork
-of and from which it inherits the extension scaffolding, the SQL-over-HTTP
-transport, and the TypeScript client packages under `ts/`.
+`duckdb/duckdb-ui` (Stichting DuckDB Foundation), from which this project is
+derived and from which it inherits the extension scaffolding, the SQL-over-HTTP
+transport, and the TypeScript client packages under `ts/`. duckdb-gis is
+developed in a separate repository and does not track upstream.
 
 DuckDB is a trademark of the DuckDB Foundation. This project is an independent
-fork and is not affiliated with, maintained by, or endorsed by the DuckDB
+derivative and is not affiliated with, maintained by, or endorsed by the DuckDB
 Foundation or DuckDB Labs. "duckdb-gis" is a descriptive name for a GIS
 extension for DuckDB; it does not indicate official status.
