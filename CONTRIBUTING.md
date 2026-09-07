@@ -25,6 +25,13 @@ welcome. The project's north star is replicating QGIS's core workflows with
 DuckDB as the engine, so "QGIS does it this way" is a good argument in design
 discussions.
 
+Before proposing a design change, it's worth reading
+[`docs/requirements/vision.md`](docs/requirements/vision.md) for what is
+deliberately in and out of scope, and [`docs/adr/`](docs/adr/) for decisions
+already taken — ADR-0001 in particular explains why attached databases are
+read-only. If your change contradicts one of those, that's fine, but argue
+with the ADR rather than around it.
+
 ## Getting set up
 
 `README.md` is the source of truth for building and running; this file won't

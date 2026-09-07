@@ -68,6 +68,9 @@ remote backend and no data leaves your machine.
 - `testdata/` — a deterministic demo database for manual and e2e testing.
   See `testdata/README.md`.
 - `scripts/` — build helpers, including the frontend-asset embedder.
+- `docs/` — documentation. `docs/requirements/` is the requirements record
+  (vision, glossary, register); `docs/adr/` holds architecture decision
+  records explaining why the design is the way it is.
 
 ## Build from source
 
