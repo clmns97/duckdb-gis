@@ -16,6 +16,9 @@ This repository is a fork of [`duckdb/duckdb-ui`](https://github.com/duckdb/duck
 It reuses that project's SQL-over-HTTP transport and TypeScript client, but
 replaces the hosted UI with our own MapLibre frontend under `frontend/`.
 
+Bug reports and contributions are welcome — see
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Install
 
 > **Not yet listed.** The submission to

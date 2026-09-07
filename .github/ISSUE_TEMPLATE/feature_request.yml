@@ -1,0 +1,50 @@
+name: Feature request
+description: Suggest a capability duckdb-gis should have
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The project's north star is to replicate QGIS's core workflows with
+        DuckDB as the engine, served through the browser — so "QGIS does X"
+        is a perfectly good argument here.
+
+        Please check [the roadmap](../../blob/main/docs/roadmap.md) first if it
+        exists yet; some things are deliberately out of scope.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: >
+        Describe the problem or workflow, not just the solution. Knowing what
+        you're actually trying to accomplish often changes what we'd build.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like to see?
+      description: How you imagine it working, if you have a view.
+    validations:
+      required: false
+
+  - type: input
+    id: qgis-equivalent
+    attributes:
+      label: QGIS (or other GIS) equivalent
+      description: >
+        If an existing tool already does this, naming it helps a lot — we try
+        to reach for established GIS vocabulary rather than inventing our own.
+      placeholder: "QGIS: Vector -> Geoprocessing Tools -> Dissolve"
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and this isn't a duplicate
+          required: true

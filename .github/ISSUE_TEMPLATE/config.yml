@@ -1,0 +1,12 @@
+# Blank issues stay enabled on purpose: not every report fits a form, and a
+# rough issue is better than a discouraged reporter. The forms exist to make
+# the common cases (bug, feature) arrive complete.
+blank_issues_enabled: true
+
+# If GitHub Discussions is enabled on this repo later, point questions there
+# so the issue tracker stays actionable:
+#
+# contact_links:
+#   - name: Question or idea
+#     url: https://github.com/clmns97/duckdb-gis/discussions
+#     about: For usage questions and open-ended ideas, use Discussions.

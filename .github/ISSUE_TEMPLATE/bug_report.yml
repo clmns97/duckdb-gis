@@ -1,0 +1,114 @@
+name: Bug report
+description: Something in duckdb-gis doesn't work the way it should
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a report.
+
+        `duckdb-gis` is a DuckDB extension **and** a browser frontend, so a bug
+        can live on either side. The version and platform fields below are what
+        let us tell those apart quickly — please don't skip them.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect, and what did you get instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: >
+        Include the SQL you ran, if any. A snippet that creates its own test
+        data is ideal — it means we can run it without your dataset.
+      placeholder: |
+        1. INSTALL spatial; LOAD spatial;
+        2. CREATE TABLE t AS SELECT ST_Point(0, 0) AS geom;
+        3. CALL start_gis();
+        4. Right-click `t` in the Browser panel -> "Add to map"
+        5. ...
+      render: sql
+    validations:
+      required: true
+
+  - type: input
+    id: gis-version
+    attributes:
+      label: duckdb-gis version
+      description: The release tag, or the commit SHA if you built from source.
+      placeholder: "v0.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: duckdb-version
+    attributes:
+      label: DuckDB version
+      description: "Output of `SELECT version();`"
+      placeholder: "v1.5.4"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      description: >
+        The extension ships per-platform binaries, and some failures are
+        platform-specific.
+      options:
+        - Linux x86_64
+        - Linux arm64
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Windows x86_64
+        - Other (describe below)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: How did you install it?
+      options:
+        - INSTALL gis FROM community
+        - Built from source (make)
+        - Other (describe below)
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser
+      description: >
+        The UI runs in your browser, so this matters for anything visual.
+        Skip it only if the bug is purely in SQL.
+      placeholder: "Firefox 142, Chrome 141, Safari 26 ..."
+    validations:
+      required: false
+
+  - type: textarea
+    id: console
+    attributes:
+      label: Browser console output
+      description: >
+        For anything involving the map or the UI, this is usually the single
+        most useful thing you can attach. Open your browser's developer tools
+        (F12) -> Console, reproduce the bug, and paste what appears.
+      render: text
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and this isn't a duplicate
+          required: true
