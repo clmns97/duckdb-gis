@@ -66,9 +66,9 @@ One convention for everyone, maintainer included:
   prefixes — `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`. This is what
   makes generated release notes readable, so it's worth the small discipline.
 
-Maintainer note: work is tracked on an in-repo board under `tickets/`, and a
-ticket records its branch in frontmatter. You do **not** need to create or read
-tickets to contribute — issues and PRs are the contributor-facing surface.
+Work is tracked in GitHub Issues, labelled by `priority:` and `area:`. Anything
+already being worked on carries `status: in-progress`, and its progress lives in
+that issue's comments — worth a read before starting, so you don't duplicate it.
 
 ## The quality gate
 

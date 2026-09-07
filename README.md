@@ -68,7 +68,6 @@ remote backend and no data leaves your machine.
 - `testdata/` — a deterministic demo database for manual and e2e testing.
   See `testdata/README.md`.
 - `scripts/` — build helpers, including the frontend-asset embedder.
-- `tickets/` — the work board (see `tickets/README.md`).
 
 ## Build from source
 
@@ -180,8 +179,6 @@ a release supports whichever DuckDB versions its CI matrix builds against (see
 `.github/workflows/MainDistributionPipeline.yml`), rather than mirroring a
 DuckDB version number.
 
-Note that tags `v1.4.x` and `v1.5.x` in this repository predate the fork: they
-are upstream `duckdb/duckdb-ui` releases, whose scheme tracked DuckDB versions.
 Our own releases start at `v0.1.0`.
 
 ## License and attribution

@@ -36,23 +36,20 @@ make                                       # build (release); binaries land in b
 
 `make` uses `extension-ci-tools/makefiles/duckdb_extension.Makefile`. Extension name is `gis` (`extension_config.cmake`).
 
-## Ticket workflow
+## Work tracking
 
-Work is tracked as self-contained markdown tickets under `tickets/` — the
-board state is the folder (`open/` → `in-progress/` → `blocked/` → `done/`).
-Tickets are the durable source of truth so work survives token resets: a cold
-session or subagent picks up a ticket without the prior chat.
+Work is tracked in **GitHub Issues**. There is no in-repo board.
 
-- **Choosing what to work on:** grep ticket frontmatter (`id`/`title`/
-  `priority`/`area`/`depends_on`) to shortlist — don't read full ticket bodies
-  until one is chosen. This keeps the selection step cheap.
-- **Resuming?** Read `tickets/in-progress/`; each ticket's Progress log says
-  where it stands and what's next.
-- **Working a ticket:** move it to `in-progress/`, keep its Progress log
-  current, one ticket ≈ one branch ≈ one PR. On completion, move to `done/`.
-- **New ticket:** copy `tickets/TEMPLATE.md` into `open/` with the next `T-NNN`.
+- **Choosing what to work on:** `gh issue list --label "priority: P1"`, or
+  filter by `area: frontend` / `area: src` / `area: build` / `area: docs`.
+- **Resuming?** `gh issue list --label "status: in-progress"`, then read that
+  issue's comments — the progress history lives there.
+- **Working an issue:** one issue ≈ one branch ≈ one PR. Branches are
+  `type/short-description` (`feat/`, `fix/`, `docs/`, `refactor/`, `chore/`)
+  with Conventional Commit messages. Record progress as issue comments so the
+  state survives a context loss.
 
-See `tickets/README.md` for the full workflow.
+See `CONTRIBUTING.md` for the contributor-facing version.
 
 ## Vision
 

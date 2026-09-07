@@ -32,7 +32,7 @@ Build inputs (re-sync):
     grid cells can't contain them) + `primaryStory: "Default"` + a card
     `viewport`.
   - `SelectionChipView`: `cardMode: "column"` (stories wider than a grid cell).
-  - `DrawToolbarView`: `cardMode: "column"` — added 2026-07-20 (T-038). The
+  - `DrawToolbarView`: `cardMode: "column"` — added 2026-07-20 (#39). The
     digitizing-toolbar redesign widened the toolbar (layer badge on top, status
     line below) past a grid cell, so `[GRID_OVERFLOW] … wide` flagged all four
     stories. Column keeps every story at full card width.
@@ -76,7 +76,7 @@ Build inputs (re-sync):
   of `_ds_bundle.css`. `conventions.md` was corrected on the 2026-07-18 re-sync
   (radii list, elevation line, neutrals list, and the input snippet's
   `borderRadius` → `var(--radius-sm)`). **Then it swung back:** the 2026-07-20
-  T-038 toolbar redesign put a `rounded-md` layer badge into `DrawToolbarView`
+  The #39 toolbar redesign put a `rounded-md` layer badge into `DrawToolbarView`
   (`DrawToolbarView.tsx:219`), so `--radius-md` (4px) re-entered the closure and
   `conventions.md`'s radii list was un-corrected to name it again. `--radius-md`
   now resolves — this is exactly the churn the rule below guards against, in

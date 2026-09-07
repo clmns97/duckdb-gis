@@ -7,7 +7,7 @@ compiled library + Storybook. Two purposes:
    map / DuckDB / dock boot (`pnpm storybook`).
 2. **claude.ai/design (design-sync)** — a clean component library a `/design-sync`
    run can import so the design agent builds new screens out of *our* components
-   on *our* tokens. See the skipped straight-sync note in `T-040`.
+   on *our* tokens. See the skipped straight-sync note in #41.
 
 ## Source of truth stays in the frontend
 
