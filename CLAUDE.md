@@ -14,9 +14,16 @@ Our code:
 - `src/` — C++ extension. Key files: `http_server.cpp` (HTTP endpoints — SQL run, interrupt, tokenize, events; see `HttpServer::Run`), `event_dispatcher.cpp`, `state.cpp`, `settings.cpp`, `watcher.cpp`, `ui_extension.cpp`. Headers in `src/include/`, helpers in `src/utils/`.
 - `ts/` — TypeScript packages for the UI (e.g. `duckdb-ui-client`, `duckdb-data-reader`). See `ts/README.md`.
 - `frontend/` — our MapLibre-based GIS frontend (the point of the fork).
-- `design-reference/` — design assets/reference.
+- `design-system/` — `@duckdb-gis/ui-kit`, the Storybook UI kit. Components
+  re-export from `frontend/src`; the frontend is the source of truth.
 - `test/sql/` — SQL-level extension tests.
-- `spike/` — experiments/prototypes; not production.
+- `testdata/` — deterministic demo fixture (`seed.sql` → `build.sh` → a
+  gitignored `demo.duckdb`) and `serve.sh` for e2e runs.
+- `scripts/` — build helpers, notably `generate_embedded_assets.py`.
+
+Gitignored, so **not present in a fresh clone** — they exist only on a machine
+where they were generated: `design-reference/` (Phase-1 design capture),
+`spike/` (throwaway prototypes), `build/`, `ds-bundle/`, `node_modules/`.
 
 ## Build & run
 

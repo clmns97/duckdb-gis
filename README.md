@@ -62,7 +62,12 @@ remote backend and no data leaves your machine.
   point of the fork.
 - `ts/` — TypeScript packages shared with the frontend, notably
   `duckdb-ui-client` (the SQL-over-HTTP client). See `ts/README.md`.
+- `design-system/` — `@duckdb-gis/ui-kit`, a Storybook workspace for the
+  frontend's components. See `design-system/README.md`.
 - `test/sql/` — SQL-level extension tests.
+- `testdata/` — a deterministic demo database for manual and e2e testing.
+  See `testdata/README.md`.
+- `scripts/` — build helpers, including the frontend-asset embedder.
 - `tickets/` — the work board (see `tickets/README.md`).
 
 ## Build from source
