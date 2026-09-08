@@ -37,6 +37,7 @@ import { toolMenuItems } from "./lib/geoprocessing";
 import { addOvertureLayers, createLayerFromSelection, type OvertureRequest } from "./lib/overture";
 import { pmSelection } from "./lib/pmtilesSelection";
 import { boxSelect } from "./lib/overtureTiles";
+import { ensureWorkingCatalog } from "./lib/workspace";
 
 export function App() {
   const [databases, setDatabases] = useState<CatalogDatabase[] | null>(null);
@@ -184,6 +185,14 @@ export function App() {
         await query("SET enable_object_cache=true;");
       } catch {
         // ignore; catalog still loads, spatial/arrow queries will report errors
+      }
+      // Unlike the extension loads above, a failure here is worth surfacing:
+      // scratch/new-layer writes silently land in the wrong catalog otherwise
+      // (#66) — see workspace.ts.
+      try {
+        await ensureWorkingCatalog();
+      } catch (e) {
+        setError(errMsg(e));
       }
       loadCatalog()
         .then(setDatabases)

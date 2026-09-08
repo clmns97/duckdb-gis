@@ -1,0 +1,75 @@
+# name: test/sql/attach_readonly.test
+# description: pin the DETACH + re-ATTACH read-only/writable cycle the
+#   frontend's edit-session write lock depends on (#66, ADR-0002; see
+#   frontend/src/lib/workspace.ts acquireWriteLock/releaseWriteLock). Pure
+#   core-DuckDB behaviour, no `gis` catalog objects involved — a regression
+#   guard in case a future DuckDB version changes this contract, not a test
+#   of our own code (which lives in TypeScript and isn't exercised here).
+# group: [sql]
+
+statement ok
+ATTACH '__TEST_DIR__/attach_readonly.db' AS src;
+
+statement ok
+CREATE TABLE src.t(a INT);
+
+statement ok
+INSERT INTO src.t VALUES (1);
+
+statement ok
+DETACH src;
+
+# Re-attach read-only (the state a source is in outside an edit session) and
+# confirm both the catalog flag and an actual write are consistent with it.
+statement ok
+ATTACH '__TEST_DIR__/attach_readonly.db' AS src (READ_ONLY);
+
+query I
+SELECT readonly FROM duckdb_databases() WHERE database_name = 'src';
+----
+true
+
+statement error
+INSERT INTO src.t VALUES (2);
+----
+read-only mode
+
+# Promote: DETACH + re-ATTACH writable under the *same* alias — the mechanism
+# an edit session uses to open up a source for its duration. The alias must
+# keep resolving so every layer's db.schema.table reference survives the swap.
+statement ok
+DETACH src;
+
+statement ok
+ATTACH '__TEST_DIR__/attach_readonly.db' AS src;
+
+query I
+SELECT readonly FROM duckdb_databases() WHERE database_name = 'src';
+----
+false
+
+statement ok
+INSERT INTO src.t VALUES (2);
+
+# Demote: back to read-only after the session ends (Save or Cancel), and the
+# write from the promoted window is durable.
+statement ok
+DETACH src;
+
+statement ok
+ATTACH '__TEST_DIR__/attach_readonly.db' AS src (READ_ONLY);
+
+query I
+SELECT readonly FROM duckdb_databases() WHERE database_name = 'src';
+----
+true
+
+query I
+SELECT count(*) FROM src.t;
+----
+2
+
+statement error
+INSERT INTO src.t VALUES (3);
+----
+read-only mode

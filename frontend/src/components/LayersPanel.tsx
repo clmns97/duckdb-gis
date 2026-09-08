@@ -83,7 +83,7 @@ export function LayersPanel() {
         disabled: !canEditInPlace(layer) || editingElsewhere,
         onSelect: () => {
           setEditErr(null);
-          if (editingThis) editing.finishEdit();
+          if (editingThis) editing.finishEdit().catch((err) => setEditErr(errMsg(err)));
           else editing.beginEdit(layer).catch((err) => setEditErr(errMsg(err)));
         },
       },
