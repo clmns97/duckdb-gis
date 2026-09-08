@@ -41,11 +41,15 @@ export const OVERTURE_THEMES: OvertureTheme[] = [
   { id: "divisions", label: "Divisions", type: "division_area" },
 ];
 
-// Fallback releases (latest first) if live-listing fails. `2026-06-17.0` is the
-// one release currently present in *both* the hosted-tiles bucket (used for
-// display, T-058) and the GeoParquet bucket (used to materialise selections), so
-// it is the safe default. `listOvertureReleases` normally supersedes this.
-export const OVERTURE_RELEASES = ["2026-06-17.0"];
+// Fallback releases (latest first) if live-listing fails. `2026-08-19.0` is
+// current in both buckets as of 2026-09-08 (verified live) — but this is only
+// a fallback: `listOvertureReleases` normally supersedes it, and buckets
+// rotate their published releases over time, so this value *will* go stale
+// again. Its staleness silently broke quick-load once already (#30) because
+// live-listing itself was broken (see `listParquetReleases`) and always fell
+// through to here; that bug is fixed, so this constant going stale should no
+// longer be user-visible, only a slower first release-list round-trip.
+export const OVERTURE_RELEASES = ["2026-08-19.0", "2026-07-22.0"];
 
 export interface OvertureRequest {
   /** Selected theme ids (one PMTiles map layer each). */
@@ -92,13 +96,30 @@ async function listTileReleases(origin: string): Promise<string[]> {
   return out;
 }
 
-/** Release ids present in the Overture GeoParquet bucket (via DuckDB glob). */
+/**
+ * Release ids present in the Overture GeoParquet bucket (via DuckDB glob).
+ *
+ * `glob('.../release/*')` — one level deep — always returns 0 rows: S3 has no
+ * real directories, so DuckDB's glob only matches actual object keys, and no
+ * object is named exactly `release/<version>` with nothing after it (every
+ * real object is `release/<version>/theme=.../type=.../*.parquet`). Verified
+ * live against the bucket: this silently broke release discovery entirely,
+ * so {@link listOvertureReleases}'s intersection was always empty and it
+ * always fell back to the hardcoded {@link OVERTURE_RELEASES} default — which
+ * then itself aged out of the bucket (#30).
+ *
+ * Fix: glob deep enough to hit real objects. Scoped to one theme/type
+ * (`divisions`/`division_area`, the smallest — 8 files/release, verified) so
+ * this stays a cheap listing rather than a scan of every theme.
+ */
 async function listParquetReleases(): Promise<Set<string>> {
   await ensureOvertureAccess();
-  const rows = await query(`SELECT file FROM glob('${OVERTURE_BUCKET}/release/*')`);
+  const rows = await query(
+    `SELECT file FROM glob('${OVERTURE_BUCKET}/release/*/theme=divisions/type=division_area/*')`,
+  );
   const set = new Set<string>();
   for (const r of rows) {
-    const m = /\/release\/([^/]+)\/?$/.exec(String(r.file));
+    const m = /\/release\/([^/]+)\/theme=/.exec(String(r.file));
     if (m) set.add(m[1]);
   }
   return set;
