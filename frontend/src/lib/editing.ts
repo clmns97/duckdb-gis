@@ -259,6 +259,125 @@ const CLONE_OFFSET = 0.0002;
 let version = 0;
 const listeners = new Set<Listener>();
 
+// --- Undo / redo (T-068) -----------------------------------------------------
+//
+// Decision (see docs/requirements/register.md and UC-003 extension 4a):
+//   • Granularity: one undo step per *gesture* — a drag, a run of vertex edits,
+//     or drawing one feature — not per pointer-move event. A burst of `change`
+//     events on the same working set collapses into one step: the pre-gesture
+//     state is checkpointed once, at the first change after a quiet period;
+//     further changes within GESTURE_IDLE_MS extend the same step.
+//   • Scope: digitizing only — drawn/edited/deleted/merged/duplicated/pasted/
+//     rotated/scaled features in the current edit target. Geoprocessing output
+//     and SQL-created tables are NOT covered: they are separate, coarser
+//     operations (a whole new layer) where "undo" is already just removing the
+//     layer, which exists.
+//   • Boundaries: undo/redo history is scoped to the *current edit session*.
+//     `beginEdit`/`beginNewLayer` start it empty; `finishEdit`/`destroy` clear
+//     it. Leaving edit mode always ends undo history — matches QGIS's own
+//     per-edit-session scope, and answers the open question directly: leaving
+//     edit mode does not "commit" anything new here, it already fully discards
+//     the working set (Commit is the separate, explicit save action).
+//   • Redo: in.
+const UNDO_CAP = 50;
+const GESTURE_IDLE_MS = 300;
+let undoStack: GeoJSONStoreFeatures[][] = [];
+let redoStack: GeoJSONStoreFeatures[][] = [];
+// The working set as of the last "settled" (quiet) point — the baseline the
+// next gesture's checkpoint is taken from. Kept as its own variable rather
+// than re-derived from the stack top so `restoreSnapshot` (undo/redo) and
+// `resetHistory` can set it directly.
+let settled: GeoJSONStoreFeatures[] = [];
+let gestureOpen = false;
+let gestureTimer: ReturnType<typeof setTimeout> | null = null;
+// True while `restoreSnapshot` is driving Terra Draw's store directly (undo/
+// redo/session-reset). Terra Draw fires `change` for *any* store mutation,
+// including our own `clear()`/`addFeatures()` — without this guard, restoring
+// a snapshot would immediately push a new (wrong) checkpoint and re-derive
+// `dirty` from the restore's own re-add instead of the snapshot's real state.
+let restoring = false;
+
+function cloneFeatures(feats: GeoJSONStoreFeatures[]): GeoJSONStoreFeatures[] {
+  return feats.map((f) => JSON.parse(JSON.stringify(f)) as GeoJSONStoreFeatures);
+}
+
+function workingSnapshot(): GeoJSONStoreFeatures[] {
+  return draw ? draw.getSnapshot().filter(isWorkingFeature) : [];
+}
+
+/** Clear undo/redo history and re-baseline `settled` on the current working
+ *  set. Called at every edit-session boundary (beginEdit, beginNewLayer,
+ *  finishEdit, destroy) so history never leaks across sessions or layers. */
+function resetHistory(): void {
+  undoStack = [];
+  redoStack = [];
+  settled = cloneFeatures(workingSnapshot());
+  gestureOpen = false;
+  if (gestureTimer) {
+    clearTimeout(gestureTimer);
+    gestureTimer = null;
+  }
+}
+
+/** Called on every Terra Draw `change` (both interactive — drag, vertex edit —
+ *  and programmatic — delete/merge/duplicate/paste/rotate/scale all mutate the
+ *  store the same way). Checkpoints the pre-gesture state once, at the start
+ *  of a burst; a GESTURE_IDLE_MS quiet period settles the gesture, so the next
+ *  checkpoint captures correctly. */
+function noteChange(): void {
+  if (!gestureOpen) {
+    undoStack.push(settled);
+    if (undoStack.length > UNDO_CAP) undoStack.shift();
+    redoStack = [];
+    gestureOpen = true;
+  }
+  if (gestureTimer) clearTimeout(gestureTimer);
+  gestureTimer = setTimeout(settleGesture, GESTURE_IDLE_MS);
+}
+
+/** Close the current gesture immediately: cancel the idle timer and
+ *  re-baseline `settled` on the working set right now, rather than waiting
+ *  out GESTURE_IDLE_MS. Called from Terra Draw's `finish` event — a point
+ *  placed, or a line/polygon completed, is a discrete, already-finished
+ *  action; without this, two quick clicks placing separate points (well
+ *  within the idle window — a completely normal fast workflow) would
+ *  otherwise coalesce into one undo step, verified live. The idle timer
+ *  alone remains the only signal for drags/vertex-edits, which have no
+ *  equivalent "done" event. */
+function settleGesture(): void {
+  if (gestureTimer) {
+    clearTimeout(gestureTimer);
+    gestureTimer = null;
+  }
+  gestureOpen = false;
+  settled = cloneFeatures(workingSnapshot());
+}
+
+/** Replace the working set with `snap` and reconcile the bookkeeping Commit
+ *  depends on. `dirty` is recomputed conservatively — every surviving
+ *  rid-bearing feature is marked dirty, guaranteeing Commit never misses a
+ *  real change at the cost of an occasional no-op UPDATE (we can't cheaply
+ *  know which subset actually still differs from the DB-loaded original).
+ *  Selection is cleared: an undo/redo can add or remove features out from
+ *  under a selection, so start clean rather than reference stale ids. */
+function restoreSnapshot(snap: GeoJSONStoreFeatures[]): void {
+  if (!draw) return;
+  const restored = cloneFeatures(snap);
+  restoring = true;
+  try {
+    draw.clear();
+    if (restored.length) draw.addFeatures(restored);
+  } finally {
+    restoring = false;
+  }
+  selectedIds.clear();
+  dirty.clear();
+  for (const f of restored) {
+    if (f.properties?.__rid != null) dirty.add(String(f.id));
+  }
+  refresh();
+}
+
 function emit(): void {
   version += 1;
   listeners.forEach((l) => l());
@@ -375,15 +494,26 @@ export const editing = {
     // Terra Draw's `change` fires with the ids that changed (drawn, dragged,
     // vertex-edited); record them so an existing-layer commit only writes rows
     // the user actually touched (T-042). Guidance-geometry ids get marked too but
-    // never match a loaded feature, so they're harmless.
+    // never match a loaded feature, so they're harmless. Skip entirely while
+    // `restoreSnapshot` is driving the store (undo/redo/session-reset) — that
+    // path recomputes `dirty` itself from the restored snapshot, and must not
+    // be treated as a new user gesture (T-068).
     draw.on("change", (ids, type) => {
+      if (restoring) return;
       for (const id of ids ?? []) dirty.add(String(id));
+      noteChange();
       // `change` fires per pointer move while drawing/dragging over a working set
       // up to EDIT_CAP; only create/delete alter the feature count or the deck
       // z-order anchor, so skip the O(n) snapshot recount on "update"/"styling".
       refresh(type === "update" || type === "styling");
     });
-    draw.on("finish", () => refresh());
+    draw.on("finish", () => {
+      // A completed feature (point placed, or line/polygon finished) is a
+      // discrete action — close its undo gesture now rather than leaving it
+      // open for GESTURE_IDLE_MS (T-068).
+      if (!restoring) settleGesture();
+      refresh();
+    });
     draw.on("select", (id) => {
       selectedIds.add(String(id));
       emit();
@@ -424,6 +554,7 @@ export const editing = {
     loadedRids.clear();
     dirty.clear();
     selectedIds.clear();
+    resetHistory(); // fresh undo/redo scope for this session (T-068)
     target = { kind: "new", name: opts.name, geometryKind: opts.geometryKind };
     this.setMode(opts.geometryKind); // drop straight into drawing
     refresh(); // recount even if setMode short-circuited (mode already matched)
@@ -494,8 +625,12 @@ export const editing = {
     });
     if (feats.length) draw.addFeatures(feats);
     // Loading features fires `change`; reset dirty so the freshly loaded set
-    // counts as untouched until the user actually edits (T-042).
+    // counts as untouched until the user actually edits (T-042). Also reset
+    // undo/redo (T-068) — the load itself pushed a spurious checkpoint via
+    // that same `change` event, and the just-loaded set is the real baseline
+    // this session's history should start from.
     dirty.clear();
+    resetHistory();
 
     target = {
       kind: "existing",
@@ -564,6 +699,52 @@ export const editing = {
     snapEnabled = !snapEnabled;
     applySnapping();
     emit();
+  },
+
+  /** Whether there is a step to undo (T-068). */
+  get canUndo(): boolean {
+    return undoStack.length > 0;
+  },
+  /** Whether there is a step to redo (T-068). */
+  get canRedo(): boolean {
+    return redoStack.length > 0;
+  },
+
+  /** Step the working set back one gesture (T-068). No-op with nothing to
+   *  undo. Closes any in-progress gesture first so the step being undone
+   *  can't keep absorbing further changes after the fact. */
+  undo(): void {
+    if (!draw || undoStack.length === 0) return;
+    if (gestureTimer) {
+      clearTimeout(gestureTimer);
+      gestureTimer = null;
+    }
+    gestureOpen = false;
+    const current = cloneFeatures(workingSnapshot());
+    const prev = undoStack.pop()!;
+    redoStack.push(current);
+    if (redoStack.length > UNDO_CAP) redoStack.shift();
+    settled = cloneFeatures(prev);
+    restoreSnapshot(prev);
+  },
+
+  /** Step the working set forward one gesture (T-068). No-op with nothing to
+   *  redo, or once a new edit has been made since the last undo (the normal
+   *  undo/redo contract — a fresh gesture clears `redoStack`, see
+   *  `noteChange`). */
+  redo(): void {
+    if (!draw || redoStack.length === 0) return;
+    if (gestureTimer) {
+      clearTimeout(gestureTimer);
+      gestureTimer = null;
+    }
+    gestureOpen = false;
+    const current = cloneFeatures(workingSnapshot());
+    const next = redoStack.pop()!;
+    undoStack.push(current);
+    if (undoStack.length > UNDO_CAP) undoStack.shift();
+    settled = cloneFeatures(next);
+    restoreSnapshot(next);
   },
 
   /**
@@ -672,6 +853,7 @@ export const editing = {
     loadedRids.clear();
     dirty.clear();
     draw?.clear();
+    resetHistory(); // undo/redo never survives leaving edit mode (T-068)
     if (t?.kind === "existing" && layers.get(t.layerId)) {
       setDeckLayerSuppressed(t.layerId, false);
     }
@@ -797,6 +979,7 @@ export const editing = {
     selectedIds.clear();
     loadedRids.clear();
     dirty.clear();
+    resetHistory(); // undo/redo never survives a torn-down draw instance (T-068)
     emit();
   },
 };

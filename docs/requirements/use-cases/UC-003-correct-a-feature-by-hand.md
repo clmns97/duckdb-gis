@@ -55,7 +55,11 @@ already have.
     is not really achievable, which limits how far this use case can be
     trusted.*
 - **3b.** The actor makes a mistake and wants to undo.
-  - **3b1.** *Undo scope is unspecified — #68.*
+  - **3b1.** Cmd/Ctrl+Z steps back one action (REQ-F-008, #68): a completed
+    feature (this vertex move, once released) is its own step; Cmd/Ctrl+Shift+Z
+    (or Ctrl+Y) redoes. Scoped to this edit session only — it does not reach
+    back past step 1, and ends the moment the actor leaves edit mode (4/4a),
+    same as the rest of the working set.
 - **4a.** The actor cancels instead of saving.
   - **4a1.** The working set is discarded and the source (if any) is demoted
     back to read-only; nothing was ever written to it.
@@ -95,20 +99,17 @@ afterward succeeds.
 ## Traces to
 
 **Requirements.** REQ-F-004 (digitizing), REQ-F-007 (project save/open),
-REQ-F-006 (read-only sources, writable only in an edit session), REQ-Q-002
-(QGIS familiarity) — [`../register.md`](../register.md)
+REQ-F-006 (read-only sources, writable only in an edit session), REQ-F-008
+(undo/redo), REQ-Q-002 (QGIS familiarity) — [`../register.md`](../register.md)
 **Decisions.** [ADR-0002](../../adr/0002-edit-session-promotes-a-source-to-writable.md)
 (supersedes the read-only clause of
 [ADR-0001](../../adr/0001-in-memory-working-database-and-project-files.md))
 **Issues.** #26, #39, #44, #50 (snapping), #33 (project files — blocks the 1a
 working-database case), #66 (source promote/demote — this use case's main
-scenario) · gaps: #67, #68
+scenario), #68 (undo/redo, 3b) · gaps: #67
 
 ## Open questions
 
-- **Undo is unspecified** — filed as #68. Per-vertex, per-edit, or per-session?
-  Does leaving edit mode commit? This is the most conspicuous gap the scenario
-  exposes.
 - **No unsaved-work warning** — filed as #67. Applies to the working-database
   case (1a): ADR-0001 makes loss-on-close the accepted default there, and the
   absence of a warning turns an accepted trade-off into a surprise. Does not
