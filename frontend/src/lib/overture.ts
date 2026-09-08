@@ -23,6 +23,7 @@ import { layers, ident, sanitizeIdent } from "./layers";
 import { OVERTURE_BUCKET, ensureOvertureAccess } from "./remote";
 import { OVERTURE_TILES_BASE } from "./overtureTiles";
 import { pmSelection } from "./pmtilesSelection";
+import { unsavedChanges } from "./unsavedChanges";
 
 /** One selectable Overture theme. `type` is the representative type partition
  *  loaded for the shell; per-type refinement is a later sub-ticket. */
@@ -219,6 +220,7 @@ export async function createLayerFromSelection(theme: OvertureTheme, release: st
   await query(
     `CREATE TABLE main.${ident(table)} AS ${buildOvertureSelectionQuery(theme, release, bbox, ids)}`,
   );
+  unsavedChanges.markDirty(); // wrote a new working-catalog table outside any edit session (#67)
   const dbRows = await query(`SELECT current_database() AS db`);
   const db = str(dbRows[0]?.db ?? "memory");
   await layers.add({ db, schema: "main", table, geomColumn: "geom" });

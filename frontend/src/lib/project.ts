@@ -21,8 +21,20 @@ import { basemap } from "./basemaps";
 import { getMap } from "./mapBus";
 import { editing } from "./editing";
 import { attach } from "./attach";
+import { unsavedChanges } from "./unsavedChanges";
 
 export const PROJECT_SCHEMA_VERSION = 1;
+
+/** Thrown by {@link openProject} when the target is a project, the working
+ *  catalog has unsaved changes, and the caller didn't pass `force: true`
+ *  (#67) — replacing the working set would silently discard them. The caller
+ *  is expected to confirm with the user and retry with `force: true`. */
+export class UnsavedChangesError extends Error {
+  constructor() {
+    super("Opening this project will discard unsaved changes in the current session.");
+    this.name = "UnsavedChangesError";
+  }
+}
 
 // Fixed, reserved aliases for the file being saved/opened — never left
 // attached past the end of the operation (always detached in a `finally`), so
@@ -130,6 +142,12 @@ export async function saveProject(opts: { path: string; name: string }): Promise
   } finally {
     await query(`DETACH ${ident(SAVE_ALIAS)}`).catch(() => {});
   }
+  // The working catalog now matches what's on disk — *except* an uncommitted
+  // Terra Draw draft (drawn but not yet committed via the digitizing
+  // toolbar's own Save), which was never in `memory` for COPY FROM DATABASE
+  // to pick up. Leave dirty set in that case (#67) — this project Save did
+  // not actually capture it.
+  if (!(editing.isEditing() && editing.featureCount > 0)) unsavedChanges.clear();
 }
 
 async function writeMetadata(
@@ -253,8 +271,16 @@ function layerToRow(layer: ActiveLayer, dbPaths: Map<string, string>): LayerRow 
  * project (replacing the current working session); otherwise fall back to a
  * plain read-only attach (#8) — `_gis`'s presence is the only thing that
  * distinguishes the two, per #33/#8.
+ *
+ * Throws {@link UnsavedChangesError} instead of restoring if the target is a
+ * project and the current working catalog has unsaved changes (#67) — pass
+ * `force: true` (after confirming with the user) to discard them and proceed.
+ * The plain-attach fallback never discards anything, so it's never gated.
  */
-export async function openProject(path: string): Promise<"project" | "attached"> {
+export async function openProject(
+  path: string,
+  opts: { force?: boolean } = {},
+): Promise<"project" | "attached"> {
   const p = path.trim();
   if (!p) throw new Error("Enter a file path to open.");
 
@@ -274,14 +300,14 @@ export async function openProject(path: string): Promise<"project" | "attached">
   }
 
   try {
-    await restoreProject(OPEN_ALIAS);
+    await restoreProject(OPEN_ALIAS, opts.force ?? false);
   } finally {
     await query(`DETACH ${ident(OPEN_ALIAS)}`).catch(() => {});
   }
   return "project";
 }
 
-async function restoreProject(alias: string): Promise<void> {
+async function restoreProject(alias: string, force: boolean): Promise<void> {
   const projectRows = await query(`SELECT * FROM ${g(alias, "project")}`);
   const meta = projectRows[0];
   if (!meta) throw new Error("Project file has a _gis schema but no project metadata — it may be corrupt.");
@@ -293,6 +319,7 @@ async function restoreProject(alias: string): Promise<void> {
         `Open it with a matching build of duckdb-gis.`,
     );
   }
+  if (unsavedChanges.isDirty && !force) throw new UnsavedChangesError();
 
   const layerRows = await query(`SELECT * FROM ${g(alias, "layers")} ORDER BY z_order DESC`); // bottom-most first
   const styleRows = await query(`SELECT layer_id AS id, style FROM ${g(alias, "style")}`);
@@ -374,4 +401,5 @@ async function restoreProject(alias: string): Promise<void> {
       pitch: Number(meta.pitch),
     });
   }
+  unsavedChanges.clear(); // the working catalog now matches what was just opened (#67)
 }
