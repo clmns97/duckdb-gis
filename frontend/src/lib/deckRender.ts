@@ -545,7 +545,33 @@ async function probeGeometry(innerSql: string): Promise<Probe> {
   const bounds = nums.every((v) => Number.isFinite(v))
     ? (nums as [number, number, number, number])
     : null;
+  assertPlausibleWgs84(bounds);
   return { type: str(r.gt).toUpperCase(), count, bounds };
+}
+
+// #65/ADR-0003, tier 2: an extent outside WGS84's legal range can only mean
+// the coordinates aren't lon/lat at all — most likely an unannotated
+// projected CRS (UTM, a national grid, Web Mercator metres) `layers.ts`
+// couldn't reproject because DuckDB has no CRS metadata to reproject *from*.
+// Refuse before anything reaches the deck overlay or the camera, with a
+// specific explanation, rather than rendering first and letting MapLibre's
+// own `fitBounds` throw a generic "Invalid LngLat" error after the fact (the
+// previous, accidental, latitude-only-and-inconsistent behaviour — verified
+// live before this fix). Shared by every render path (`addDeckLayer`,
+// `renderGeoArrow`), so this is the one guarantee every path gets for free
+// regardless of how its SQL was built.
+function assertPlausibleWgs84(bounds: [number, number, number, number] | null): void {
+  if (!bounds) return;
+  const [xmin, ymin, xmax, ymax] = bounds;
+  if (xmin < -180 || xmax > 180 || ymin < -90 || ymax > 90) {
+    throw new Error(
+      `Geometry is outside the valid WGS84 (lon/lat) range — extent is ` +
+        `[${xmin.toFixed(1)}, ${ymin.toFixed(1)}, ${xmax.toFixed(1)}, ${ymax.toFixed(1)}]. ` +
+        `This looks like a projected coordinate system (e.g. UTM), not WGS84. ` +
+        `duckdb-gis can reproject automatically when a column's CRS is known ` +
+        `(#65) — otherwise, reproject the source data to WGS84 first.`,
+    );
+  }
 }
 
 // Fetch a query's result as an Arrow IPC stream. `to_arrow_ipc` returns the

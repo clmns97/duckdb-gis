@@ -24,9 +24,14 @@ export interface CatalogDatabase {
 // keep all schemas of user databases. A fresh in-memory instance shows `memory › main`.
 //
 // Geometry layers are detected by *column type* (T-001): a table is a candidate
-// map layer iff it has a column of `data_type = 'GEOMETRY'`. This catches
+// map layer iff it has a column of DuckDB `GEOMETRY` type. This catches
 // geometry columns of any name, never false-positives on a lookalike name, and
 // spans every attached database — strictly better than name-matching.
+//
+// Matches both plain `GEOMETRY` and its CRS-annotated form `GEOMETRY('EPSG:…')`
+// (#65) — a column carrying a CRS (e.g. from `ST_Read()`, or an unstripped
+// GeoParquet read) reports `data_type` as that literal annotated string, not
+// `'GEOMETRY'`; an exact-match filter silently missed every one of those.
 export async function loadCatalog(): Promise<CatalogDatabase[]> {
   const [schemaRows, tableRows, geomRows] = await Promise.all([
     query(`
@@ -47,7 +52,7 @@ export async function loadCatalog(): Promise<CatalogDatabase[]> {
              c.table_name AS name, c.column_name AS geom_column
       FROM duckdb_columns() c
       JOIN duckdb_databases() d ON d.database_name = c.database_name
-      WHERE c.data_type = 'GEOMETRY' AND NOT d.internal
+      WHERE (c.data_type = 'GEOMETRY' OR c.data_type LIKE 'GEOMETRY(%') AND NOT d.internal
       ORDER BY 1, 2, 3, 4
     `),
   ]);
