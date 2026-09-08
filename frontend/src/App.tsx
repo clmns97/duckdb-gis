@@ -21,6 +21,8 @@ import { OvertureModal } from "./components/OvertureModal";
 import { OvertureLogo } from "./components/OvertureLogo";
 import { AttachModal } from "./components/AttachModal";
 import { NewLayerModal } from "./components/NewLayerModal";
+import { SaveProjectModal } from "./components/SaveProjectModal";
+import { OpenProjectModal } from "./components/OpenProjectModal";
 import { ContextMenu, type MenuItem, type MenuState } from "./components/ContextMenu";
 import { ROW_BASE, LEAD_SLOT, KEBAB_SLOT } from "./components/rowSlots";
 import { loadCatalog, type CatalogDatabase, type CatalogTable } from "./lib/catalog";
@@ -50,6 +52,8 @@ export function App() {
   const [overtureOpen, setOvertureOpen] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
   const [newLayerOpen, setNewLayerOpen] = useState(false);
+  const [saveProjectOpen, setSaveProjectOpen] = useState(false);
+  const [openProjectOpen, setOpenProjectOpen] = useState(false);
   // Re-render when the active basemap changes so both the Browser entry label
   // and the pinned Layers row (via LayersPanel) reflect it.
   useSyncExternalStore(basemap.subscribe, basemap.getSnapshot);
@@ -142,6 +146,14 @@ export function App() {
   // submenu, anchored under the button (same menu the pinned Layers row uses).
   const openBasemapMenu = (e: React.MouseEvent) => anchorMenu(e, basemapMenuItems());
 
+  // Project Save/Open (#33): a header dropdown, same anchorMenu pattern as
+  // Processing/Basemap, next to Help.
+  const openProjectMenu = (e: React.MouseEvent) =>
+    anchorMenu(e, [
+      { label: "Save project…", onSelect: () => setSaveProjectOpen(true) },
+      { label: "Open project…", onSelect: () => setOpenProjectOpen(true) },
+    ]);
+
   // Right-click a geometry-bearing table → "Add to map" (QGIS "Add Layer").
   // Only spatial tables get the menu (T-001 flagged their geometry columns);
   // one item per geometry column so a multi-geometry table exposes each.
@@ -175,11 +187,13 @@ export function App() {
     (async () => {
       // Spatial is required for ST_* functions; the arrow extension powers the
       // columnar Arrow-IPC render path (to_arrow_ipc); duck_geoarrow provides the
-      // st_asgeoarrow* encoders that feed the GeoArrow deck.gl layers.
+      // st_asgeoarrow* encoders that feed the GeoArrow deck.gl layers; json backs
+      // the _gis.style column project files use (#33).
       try {
         await query("INSTALL spatial; LOAD spatial;");
         await query("INSTALL arrow FROM community; LOAD arrow;");
         await query("INSTALL duck_geoarrow FROM community; LOAD duck_geoarrow;");
+        await query("INSTALL json; LOAD json;");
         // Cache parquet metadata across queries so remote reads (Overture on S3,
         // T-029) don't re-fetch file footers each scan — ~10x on repeat reads.
         await query("SET enable_object_cache=true;");
@@ -229,6 +243,9 @@ export function App() {
         <span className="flex-1" />
         <Button variant="ghost" onClick={openProcessingMenu} title="Geoprocessing tools">
           Processing
+        </Button>
+        <Button variant="ghost" onClick={openProjectMenu} title="Save or open a project file">
+          Project
         </Button>
         <Button variant="ghost">Help</Button>
       </header>
@@ -449,6 +466,18 @@ export function App() {
             setNewLayerOpen(false);
             setTab("layers"); // surface the Layers panel so the new layer is visible
             editing.beginNewLayer({ name, geometryKind });
+          }}
+        />
+      )}
+
+      {saveProjectOpen && <SaveProjectModal onClose={() => setSaveProjectOpen(false)} />}
+
+      {openProjectOpen && (
+        <OpenProjectModal
+          onClose={() => setOpenProjectOpen(false)}
+          onOpened={(kind) => {
+            refreshCatalog();
+            if (kind === "project") setTab("layers"); // restored layers are what changed
           }}
         />
       )}
