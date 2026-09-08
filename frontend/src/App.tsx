@@ -40,6 +40,7 @@ import { addOvertureLayers, createLayerFromSelection, type OvertureRequest } fro
 import { pmSelection } from "./lib/pmtilesSelection";
 import { boxSelect } from "./lib/overtureTiles";
 import { ensureWorkingCatalog } from "./lib/workspace";
+import { unsavedChanges } from "./lib/unsavedChanges";
 
 export function App() {
   const [databases, setDatabases] = useState<CatalogDatabase[] | null>(null);
@@ -57,6 +58,9 @@ export function App() {
   // Re-render when the active basemap changes so both the Browser entry label
   // and the pinned Layers row (via LayersPanel) reflect it.
   useSyncExternalStore(basemap.subscribe, basemap.getSnapshot);
+  // Unsaved-working-database-state (#67): drives both the persistent "Unsaved"
+  // indicator on the Project button and the beforeunload guard below.
+  const dirty = useSyncExternalStore(unsavedChanges.subscribe, () => unsavedChanges.isDirty);
   // Left sidebar collapse (T-030). Collapsing hands the reclaimed width to the
   // map; a thin rail keeps the expand affordance visible. Persisted across
   // reloads. Toggle-only for v1 (no drag-resize).
@@ -183,6 +187,19 @@ export function App() {
     addOvertureLayers(req);
   };
 
+  // Warn before the tab closes/reloads/navigates away with unsaved working-
+  // database state (#67) — the browser's own native confirmation, no custom
+  // UI needed. No-op (and no dialog) whenever `dirty` is false.
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!dirty) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [dirty]);
+
   useEffect(() => {
     (async () => {
       // Spatial is required for ST_* functions; the arrow extension powers the
@@ -244,8 +261,20 @@ export function App() {
         <Button variant="ghost" onClick={openProcessingMenu} title="Geoprocessing tools">
           Processing
         </Button>
-        <Button variant="ghost" onClick={openProjectMenu} title="Save or open a project file">
-          Project
+        <Button
+          variant="ghost"
+          onClick={openProjectMenu}
+          title={dirty ? "Save or open a project file — unsaved changes" : "Save or open a project file"}
+        >
+          <span className="inline-flex items-center gap-1.5">
+            Project
+            {dirty && (
+              <span
+                className="w-1.5 h-1.5 rounded-full bg-amber-500"
+                aria-label="Unsaved changes"
+              />
+            )}
+          </span>
         </Button>
         <Button variant="ghost">Help</Button>
       </header>

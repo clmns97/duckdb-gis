@@ -43,6 +43,7 @@ import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
 import { getMap } from "./mapBus";
 import { query, str, sqlLit } from "./duckdb";
 import { setDrawHooks, requestSync, setDeckLayerSuppressed } from "./deckRender";
+import { unsavedChanges } from "./unsavedChanges";
 import {
   layers,
   ident,
@@ -378,6 +379,12 @@ export const editing = {
     // never match a loaded feature, so they're harmless.
     draw.on("change", (ids, type) => {
       for (const id of ids ?? []) dirty.add(String(id));
+      // Real feature content changed (not Terra Draw's own internal restyle,
+      // and not an empty `clear()` on an already-empty store — that fires as
+      // a "delete" with `ids: []`, verified live) — mark the session dirty
+      // (#67) so closing the tab before a commit warns, same as an
+      // already-committed-but-unsaved working-catalog table would.
+      if (type !== "styling" && (ids?.length ?? 0) > 0) unsavedChanges.markDirty();
       // `change` fires per pointer move while drawing/dragging over a working set
       // up to EDIT_CAP; only create/delete alter the feature count or the deck
       // z-order anchor, so skip the O(n) snapshot recount on "update"/"styling".
