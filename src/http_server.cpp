@@ -21,6 +21,7 @@
 #include <duckdb/main/client_data.hpp>
 #include <duckdb/parser/parsed_data/create_table_info.hpp>
 #include <duckdb/parser/parser.hpp>
+#include <duckdb/transaction/meta_transaction.hpp>
 
 namespace duckdb {
 namespace gis {
@@ -576,6 +577,17 @@ void HttpServer::DoHandleRun(const httplib::Request &req,
     // Get the result. This should be quick because it's ready.
     auto result = pending->Execute();
 
+    // DuckDB main (1.6.0-dev) made BaseQueryResult::names/types private in
+    // favor of GetNames()/GetTypes() (names is now vector<Identifier>, not
+    // vector<string>); 1.4/1.5 only have the public members.
+#if DUCKDB_VERSION_AT_LEAST(1, 6, 0)
+    const auto &result_names = result->GetNames();
+    const auto &result_types = result->GetTypes();
+#else
+    const auto &result_names = result->names;
+    const auto &result_types = result->types;
+#endif
+
     // We use a separate connection for the appender, including creating the
     // result table, because we still need to fetch chunks from the pending
     // query on the user's connection.
@@ -590,14 +602,22 @@ void HttpServer::DoHandleRun(const httplib::Request &req,
                                     ? "main"
                                     : result_schema_name_option;
 
+#if DUCKDB_VERSION_AT_LEAST(1, 6, 0)
+      auto result_table_info =
+          make_uniq<duckdb::CreateTableInfo>(QualifiedName(
+              AsCatalogIdentifier(result_database_name),
+              AsCatalogIdentifier(result_schema_name),
+              AsCatalogIdentifier(result_table_name)));
+#else
       auto result_table_info = make_uniq<duckdb::CreateTableInfo>(
           AsCatalogIdentifier(result_database_name),
           AsCatalogIdentifier(result_schema_name),
           AsCatalogIdentifier(result_table_name));
-      for (idx_t i = 0; i < result->names.size(); i++) {
+#endif
+      for (idx_t i = 0; i < result_names.size(); i++) {
         result_table_info->columns.AddColumn(
-            ColumnDefinition(AsCatalogIdentifier(result->names[i]),
-                             result->types[i]));
+            ColumnDefinition(AsCatalogIdentifier(result_names[i]),
+                             result_types[i]));
       }
 
       appender_connection = make_uniq<duckdb::Connection>(*db);
@@ -624,8 +644,13 @@ void HttpServer::DoHandleRun(const httplib::Request &req,
 
     // Fetch the chunks and serialize the result.
     SuccessResult success_result;
+#if DUCKDB_VERSION_AT_LEAST(1, 6, 0)
+    success_result.column_names_and_types = {IdentifiersToStrings(result_names),
+                                             result_types};
+#else
     success_result.column_names_and_types = {std::move(result->names),
                                              std::move(result->types)};
+#endif
 
     auto row_limit = std::max(result_row_limit, result_table_row_limit);
     auto rows_fetched = 0;

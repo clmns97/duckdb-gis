@@ -41,6 +41,9 @@ namespace duckdb {
 inline Identifier AsCatalogIdentifier(const std::string &name) {
   return Identifier(name);
 }
+inline const Identifier &AsCatalogIdentifier(const Identifier &name) {
+  return name;
+}
 #else
 inline const std::string &AsCatalogIdentifier(const std::string &name) {
   return name;
@@ -48,6 +51,15 @@ inline const std::string &AsCatalogIdentifier(const std::string &name) {
 #endif
 
 typedef std::string (*simple_tf_t)(ClientContext &);
+
+// DuckDB main (1.6.0-dev) also migrated table_function_bind_t's `names`
+// output parameter from vector<string> to vector<Identifier>, alongside the
+// CreateTableInfo/BaseQueryResult changes above.
+#if DUCKDB_VERSION_AT_LEAST(1, 6, 0)
+typedef vector<Identifier> tf_bind_names_t;
+#else
+typedef vector<std::string> tf_bind_names_t;
+#endif
 
 struct RunOnceTableFunctionState : GlobalTableFunctionState {
   RunOnceTableFunctionState() : run(false){};
@@ -64,12 +76,12 @@ namespace internal {
 unique_ptr<FunctionData> SingleBoolResultBind(ClientContext &,
                                               TableFunctionBindInput &,
                                               vector<LogicalType> &out_types,
-                                              vector<std::string> &out_names);
+                                              tf_bind_names_t &out_names);
 
 unique_ptr<FunctionData> SingleStringResultBind(ClientContext &,
                                                 TableFunctionBindInput &,
                                                 vector<LogicalType> &,
-                                                vector<std::string> &);
+                                                tf_bind_names_t &);
 
 bool ShouldRun(TableFunctionInput &input);
 
