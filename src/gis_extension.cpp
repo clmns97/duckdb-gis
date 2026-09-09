@@ -13,7 +13,6 @@
 
 #ifdef _WIN32
 #define OPEN_COMMAND "start"
-#undef CreateDirectory // avoid being transformed to `CreateDirectoryA`
 #elif __linux__
 #define OPEN_COMMAND "xdg-open"
 #else
@@ -101,23 +100,6 @@ static void LoadInternal(DatabaseInstance &instance) {
   // since the previous one was invalidated (eg. in the shell when we '.open'
   // a new database)
   gis::HttpServer::UpdateDatabaseInstanceIfRunning(instance.shared_from_this());
-
-  auto &fs = FileSystem::GetFileSystem(instance);
-  // CreateDirectory is a single-level mkdir; ~/.duckdb won't exist yet on a
-  // genuinely fresh home directory (a pristine CI container, or a real
-  // first-time install), so it must be created recursively. Expand "~" on
-  // its own and JoinPath the rest, rather than embedding "/" in a string
-  // with "~" -- ExpandPath produces a native (backslash) path on Windows, so
-  // concatenating "~/.duckdb/..." mixes separators, which broke path parsing
-  // there (observed: CreateDirectoriesRecursive still failed on Windows CI
-  // with a mixed "C:\Users\foo/.duckdb/..." path). Chain the two-arg
-  // JoinPath rather than the variadic N-arg overload: this extension
-  // supports DuckDB back to v1.4, whose FileSystem header doesn't have the
-  // variadic template (confirmed by a v1.4.5/linux_arm64 CI build failure).
-  auto data_dir = fs.JoinPath(fs.ExpandPath("~"), ".duckdb");
-  data_dir = fs.JoinPath(data_dir, "extension_data");
-  data_dir = fs.JoinPath(data_dir, "gis");
-  fs.CreateDirectoriesRecursive(data_dir);
 
   auto &config = DBConfig::GetConfig(instance);
   {
