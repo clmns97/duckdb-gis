@@ -40,10 +40,26 @@ make                                       # build (release); binaries land in b
 
 Work is tracked in **GitHub Issues**. There is no in-repo board.
 
-- **Choosing what to work on:** `gh issue list --label "priority: P1"`, or
-  filter by `area: frontend` / `area: src` / `area: build` / `area: docs`.
+**Currently in a milestone-gated phase (decided 2026-09-08).** The project
+had drifted into ~11 issues open "in progress" at once — feature surface
+growing faster than the core loop was solid, features getting duct-taped onto
+a build that wasn't reliably green. Until
+[v0.1.0](https://github.com/clmns97/duckdb-gis/milestone/1) closes:
+
+- **Choosing what to work on:** `gh issue list --milestone "v0.1.0 — harden
+  the core loop"`. Nothing outside that milestone, even a filed P1, until it
+  ships. The milestone description is the actual gate (CI green including the
+  fresh-install crash, project save/open, undo, unsaved-work warning, correct
+  CRS handling, Overture quick-load working — the core loop, not new surface).
+- **Do not start** repo-public-visibility work (#61) or the
+  community-extensions submission (#55) — both explicitly wait until this
+  milestone closes, not in parallel with it.
+- The P2/P3 backlog (dark mode, CAD tools, dockable panels, SQL notebooks,
+  additional attach sources, …) stays filed but frozen — don't pick it up
+  even if idle.
 - **Resuming?** `gh issue list --label "status: in-progress"`, then read that
-  issue's comments — the progress history lives there.
+  issue's comments — the progress history lives there. This should be a short
+  list right now; if it isn't, that's the drift happening again.
 - **Working an issue:** one issue ≈ one branch ≈ one PR. Branches are
   `type/short-description` (`feat/`, `fix/`, `docs/`, `refactor/`, `chore/`)
   with Conventional Commit messages. Record progress as issue comments so the
