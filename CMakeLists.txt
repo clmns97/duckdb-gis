@@ -83,6 +83,18 @@ build_loadable_extension(${TARGET_NAME} " " ${EXTENSION_SOURCES})
 target_link_libraries(${EXTENSION_NAME} OpenSSL::SSL OpenSSL::Crypto)
 target_link_libraries(${TARGET_NAME}_loadable_extension OpenSSL::SSL OpenSSL::Crypto)
 
+# DuckDB's vendored httplib auto-enables CPPHTTPLIB_USE_CERTS_FROM_MACOSX_KEYCHAIN
+# on macOS, so the inline tls::load_system_certs it pulls into http_server.cpp
+# needs the system frameworks at link time. Same pattern as duckdb-httpfs.
+if(APPLE)
+  find_library(COREFOUNDATION_FRAMEWORK CoreFoundation)
+  find_library(SECURITY_FRAMEWORK Security)
+  target_link_libraries(${EXTENSION_NAME} ${COREFOUNDATION_FRAMEWORK}
+                        ${SECURITY_FRAMEWORK})
+  target_link_libraries(${TARGET_NAME}_loadable_extension
+                        ${COREFOUNDATION_FRAMEWORK} ${SECURITY_FRAMEWORK})
+endif()
+
 install(
   TARGETS ${EXTENSION_NAME}
   EXPORT "${DUCKDB_EXPORT_SET}"
