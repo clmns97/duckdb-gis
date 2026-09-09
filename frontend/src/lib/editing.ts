@@ -53,6 +53,7 @@ import {
 } from "./layers";
 import { selection } from "./selection";
 import { boxSelect } from "./overtureTiles";
+import { WORKING_CATALOG, acquireWriteLock, releaseWriteLock } from "./workspace";
 
 // UI-facing modes. `static` = drawing off (Terra Draw's built-in render-only
 // mode); the rest map to Terra Draw mode names (`line` → `linestring`).
@@ -403,7 +404,10 @@ export const editing = {
     // fight over map clicks/dragPan. Turning box-select on cancels any in-progress
     // edit; `begin*` below turns box-select off when an edit starts.
     boxSelect.subscribe(() => {
-      if (boxSelect.active && editing.isEditing()) editing.finishEdit();
+      // Best-effort: box-select toggling shouldn't surface a lock-release
+      // failure with nowhere to show it. finishEdit's local teardown (the
+      // part the rest of the app depends on) always runs regardless.
+      if (boxSelect.active && editing.isEditing()) editing.finishEdit().catch(() => {});
     });
   },
 
@@ -430,6 +434,10 @@ export const editing = {
    * the editable working set (keyed by DuckDB `rowid` so Commit can write back to
    * the exact rows). Guarded by a row-count cap. Rejects with a readable Error
    * for non-editable layers (query-backed, still loading) or oversized ones.
+   *
+   * Promotes the layer's source catalog to writable before doing anything else
+   * (#66) — a locked-out source (another process holds the file) fails here,
+   * before any work is invested, rather than at Save.
    */
   async beginEdit(layer: ActiveLayer): Promise<void> {
     if (!layer.source) {
@@ -438,24 +446,36 @@ export const editing = {
     if (layer.status !== "ready" || !layer.geometryKind) {
       throw new Error("Layer is still loading — try again in a moment.");
     }
+    await acquireWriteLock(layer.source);
     this.init();
-    if (!draw) throw new Error("The map is not ready yet.");
+    if (!draw) {
+      await releaseWriteLock(layer.source);
+      throw new Error("The map is not ready yet.");
+    }
     boxSelect.set(false); // digitizing and box-select are mutually exclusive
 
     const kind = layer.geometryKind;
     const q = qualified(layer.source);
     const gcol = ident(layer.source.geomColumn);
-    const cnt = await query(`SELECT count(*) AS n FROM ${q} WHERE ${gcol} IS NOT NULL`);
-    const n = Number(cnt[0]?.n ?? 0);
-    if (n > EDIT_CAP) {
-      throw new Error(
-        `Layer has ${n} features; edit-in-place is limited to ${EDIT_CAP}. ` +
-          `Editing a selected subset is a follow-up.`,
+    let rows: Awaited<ReturnType<typeof query>>;
+    try {
+      const cnt = await query(`SELECT count(*) AS n FROM ${q} WHERE ${gcol} IS NOT NULL`);
+      const n = Number(cnt[0]?.n ?? 0);
+      if (n > EDIT_CAP) {
+        throw new Error(
+          `Layer has ${n} features; edit-in-place is limited to ${EDIT_CAP}. ` +
+            `Editing a selected subset is a follow-up.`,
+        );
+      }
+      rows = await query(
+        `SELECT rowid AS rid, ST_AsGeoJSON(${gcol}) AS gj FROM ${q} WHERE ${gcol} IS NOT NULL`,
       );
+    } catch (e) {
+      // Nothing was invested in the working set yet (target isn't set), so
+      // finishEdit's normal release path never runs — release here instead.
+      await releaseWriteLock(layer.source);
+      throw e;
     }
-    const rows = await query(
-      `SELECT rowid AS rid, ST_AsGeoJSON(${gcol}) AS gj FROM ${q} WHERE ${gcol} IS NOT NULL`,
-    );
 
     selection.clear();
     draw.clear();
@@ -637,8 +657,14 @@ export const editing = {
    * Leave edit mode, discarding the working set. Cancels an in-progress edit
    * without committing; also the post-commit teardown. Restores the read-only
    * deck copy of an edited existing layer.
+   *
+   * Local teardown always happens first and unconditionally — the UI never
+   * gets stuck in edit mode. The source's write lock (#66) is released after;
+   * if that fails (rare — a lock re-attach can only fail with the working set
+   * already torn down), the promise rejects so the caller can tell the user
+   * their source is still writable, but editing has still ended locally.
    */
-  finishEdit(): void {
+  async finishEdit(): Promise<void> {
     const t = target;
     target = null;
     mode = "static";
@@ -651,12 +677,20 @@ export const editing = {
     }
     featureCount = 0;
     emit();
+    if (t?.kind === "existing") {
+      await releaseWriteLock(t.source);
+    }
   },
 
   /**
    * Persist the working set. Diverges by target:
-   *   • new     → CREATE TABLE `main.<name>` (single geometry column) and
-   *               register it as a catalog layer (so it's re-editable/styleable).
+   *   • new     → CREATE TABLE in the working catalog (single geometry column)
+   *               and register it as a catalog layer (so it's re-editable/
+   *               styleable). Explicitly qualified with `WORKING_CATALOG`
+   *               rather than the bare `main.` it used to be — under a
+   *               `duckdb file.db -ui` launch, unqualified `main.` resolves to
+   *               the launch file, silently writing a "new" layer into a
+   *               source (#66).
    *   • existing→ UPDATE/INSERT/DELETE against the source table keyed by `rowid`,
    *               in one transaction, then re-render the layer.
    * Returns the affected table (qualified), or null when there is nothing to
@@ -669,17 +703,15 @@ export const editing = {
     if (target.kind === "new") {
       if (features.length === 0) return null;
       const name = target.name;
-      const table = `main.${ident(name)}`;
+      const table = `${ident(WORKING_CATALOG)}.main.${ident(name)}`;
       const rows = features
         .map((f, i) => `(${i + 1}, ST_GeomFromGeoJSON('${sqlLit(JSON.stringify(f.geometry))}'))`)
         .join(",\n  ");
       await query(
         `CREATE TABLE ${table} AS SELECT * FROM (VALUES\n  ${rows}\n) AS t(id, geom)`,
       );
-      const dbRows = await query(`SELECT current_database() AS db`);
-      const db = str(dbRows[0]?.db ?? "memory");
-      this.finishEdit();
-      await layers.add({ db, schema: "main", table: name, geomColumn: "geom" });
+      await this.finishEdit();
+      await layers.add({ db: WORKING_CATALOG, schema: "main", table: name, geomColumn: "geom" });
       return table;
     }
 
@@ -732,8 +764,12 @@ export const editing = {
       throw e;
     }
 
+    // The write above has already succeeded at this point; a finishEdit
+    // rejection here means only the read-only demotion failed, and its
+    // message says so distinctly (releaseWriteLock) rather than implying the
+    // save itself failed.
     const layerId = t.layerId;
-    this.finishEdit();
+    await this.finishEdit();
     await layers.refresh(layerId); // re-render the edited layer from its table
     return q;
   },
@@ -741,8 +777,13 @@ export const editing = {
   /** Tear Terra Draw down (map unmount). */
   destroy(): void {
     // Restore a mid-edit layer's deck copy so an unmount during an existing-layer
-    // edit never leaves it permanently suppressed (T-043).
-    if (target?.kind === "existing") setDeckLayerSuppressed(target.layerId, false);
+    // edit never leaves it permanently suppressed (T-043). Also release its
+    // write lock (#66), best-effort — there's no UI left to surface a failure
+    // to once the map is gone.
+    if (target?.kind === "existing") {
+      setDeckLayerSuppressed(target.layerId, false);
+      releaseWriteLock(target.source).catch(() => {});
+    }
     try {
       draw?.stop();
     } catch {

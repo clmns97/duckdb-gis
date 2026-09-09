@@ -12,6 +12,11 @@
 // (noted on the ticket). Object storage (T-008) and Postgres (T-009) reuse this
 // same entry point with different ATTACH targets.
 //
+// Always read-only (#66, ADR-0002) — unconditionally, not a default a caller
+// can opt out of. A source becomes writable only for the span of an explicit
+// edit session on one of its tables (`workspace.ts` acquireWriteLock/
+// releaseWriteLock), never as a standing attach-time choice.
+//
 // This module tracks the aliases *we* attached this session (a subscribable
 // store mirroring `layers`/`selection`) so the Browser can offer "Detach" only
 // on those nodes — never on the default/in-memory database.
@@ -62,20 +67,19 @@ export const attach = {
   },
 
   /**
-   * Attach a DuckDB database file. `alias` defaults to {@link aliasFromPath};
-   * `readOnly` defaults true (safer — the default DB and any file are untouched
-   * by exploration). Throws with DuckDB's message on failure (missing file, bad
-   * path, alias collision) so the caller can surface it. On success records the
-   * alias; the caller refreshes the catalog to reveal the new tree.
+   * Attach a DuckDB database file, always read-only (#66 — the default DB and
+   * any attached file are untouched by exploration; only an explicit edit
+   * session lifts that, per source, for its duration). `alias` defaults to
+   * {@link aliasFromPath}. Throws with DuckDB's message on failure (missing
+   * file, bad path, alias collision) so the caller can surface it. On success
+   * records the alias; the caller refreshes the catalog to reveal the new tree.
    */
-  async run(opts: { path: string; alias?: string; readOnly?: boolean }): Promise<string> {
+  async run(opts: { path: string; alias?: string }): Promise<string> {
     const path = opts.path.trim();
     if (!path) throw new Error("Enter a database file path.");
     const alias = (opts.alias?.trim() || aliasFromPath(path));
-    const readOnly = opts.readOnly ?? true;
 
-    const clause = readOnly ? " (READ_ONLY)" : "";
-    await query(`ATTACH '${sqlLit(path)}' AS ${ident(alias)}${clause}`);
+    await query(`ATTACH '${sqlLit(path)}' AS ${ident(alias)} (READ_ONLY)`);
 
     attachedAliases.add(alias);
     emit();
