@@ -4,14 +4,14 @@ A DuckDB **GIS extension** (C++) that serves a browser-based GIS frontend. It be
 
 ## Orientation — where the real code is
 
-Only ~177 files are ours. **Ignore the vendored submodules** unless explicitly investigating upstream behavior:
+Only ~290 files are ours. **Ignore the vendored submodules** unless explicitly investigating upstream behavior:
 
 - `duckdb/` — upstream DuckDB source (289 MB submodule). **Do not search/grep here by default.**
 - `extension-ci-tools/`, `third_party/` — vendored build tooling / deps. Ignore by default.
 
 Our code:
 
-- `src/` — C++ extension. Key files: `http_server.cpp` (HTTP endpoints — SQL run, interrupt, tokenize, events; see `HttpServer::Run`), `event_dispatcher.cpp`, `state.cpp`, `settings.cpp`, `watcher.cpp`, `ui_extension.cpp`. Headers in `src/include/`, helpers in `src/utils/`.
+- `src/` — C++ extension. Key files: `http_server.cpp` (HTTP endpoints — SQL run, interrupt, tokenize, events; see `HttpServer::Run`), `event_dispatcher.cpp`, `state.cpp`, `settings.cpp`, `watcher.cpp`, `gis_extension.cpp`. Headers in `src/include/`, helpers in `src/utils/`.
 - `ts/` — TypeScript packages for the UI (e.g. `duckdb-ui-client`, `duckdb-data-reader`). See `ts/README.md`.
 - `frontend/` — our MapLibre-based GIS frontend (the point of the project).
 - `design-system/` — `@duckdb-gis/ui-kit`, the Storybook UI kit. Components
