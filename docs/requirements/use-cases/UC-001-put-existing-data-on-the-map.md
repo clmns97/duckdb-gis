@@ -40,7 +40,11 @@ at least one table with a geometry column.
     catalog. *Gap: it does not currently explain why a table they expected is
     absent, which is the most likely first confusion for a new user.*
 - **4b.** The geometry column exists but its CRS is not WGS84.
-  - **4b1.** *Undecided — #65.*
+  - **4b1.** If the column's CRS is known (e.g. read via `ST_Read()`, or an
+    unstripped GeoParquet read), the system reprojects it to WGS84
+    automatically. If the CRS is unknown and the layer's extent is outside
+    the valid WGS84 range, the system refuses to render it and explains why.
+    Decided in ADR-0003 (REQ-F-008, #65).
 - **6a.** The layer is large enough that preparing it for rendering is slow.
   - **6a1.** The system shows the layer as loading and the map stays interactive.
     *Gap: not met today — see REQ-Q-001, #59.*
@@ -58,17 +62,14 @@ is untouched in every branch — nothing in this use case writes.
 ## Traces to
 
 **Requirements.** REQ-F-001 (geometry-type detection), REQ-F-002 (add as layer),
-REQ-F-006 (read-only sources), REQ-Q-001 (responsiveness), REQ-C-003 (in-process
-compute) — [`../register.md`](../register.md)
-**Decisions.** [ADR-0001](../../adr/0001-in-memory-working-database-and-project-files.md)
-**Issues.** #2, #8, #9, #22, #23, #25, #32 · gaps: #65 (CRS)
+REQ-F-006 (read-only sources), REQ-F-008 (CRS handling), REQ-Q-001
+(responsiveness), REQ-C-003 (in-process compute) — [`../register.md`](../register.md)
+**Decisions.** [ADR-0001](../../adr/0001-in-memory-working-database-and-project-files.md),
+[ADR-0003](../../adr/0003-crs-detection-reprojection-and-refusal.md)
+**Issues.** #2, #8, #9, #22, #23, #25, #32, #65
 
 ## Open questions
 
-- **CRS handling is unspecified** — filed as #65. Step 4b has no defined
-  behaviour. Does the system reproject, refuse, or render wrong coordinates
-  silently? Silently wrong is the worst outcome and is plausibly what happens
-  today.
 - **What counts as "renderable" is narrower than "has a geometry column"** — an
   unsupported geometry type would pass detection and fail at render. Should
   detection or rendering own that check?

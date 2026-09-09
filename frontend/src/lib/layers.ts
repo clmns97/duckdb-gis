@@ -144,10 +144,44 @@ export function qualified(s: LayerSource): string {
   return `${ident(s.db)}.${ident(s.schema)}.${ident(s.table)}`;
 }
 
-/** The deck render query for a catalog source: its geometry column projected as
- *  `geom`. Shared by `add` and `refresh` so the two can't diverge. */
-function sourceSql(s: LayerSource): string {
-  return `SELECT ${ident(s.geomColumn)} AS geom FROM ${qualified(s)}`;
+// A CRS-annotated DuckDB type prints as `GEOMETRY('EPSG:32633')`/`GEOMETRY('OGC:CRS84')`
+// etc.; unannotated `GEOMETRY` carries none. Matches `catalog.ts`'s detection.
+const CRS_ANNOTATION = /^GEOMETRY\('([^']+)'\)$/;
+
+// CRSes already in [lon, lat] WGS84 — a column carrying one of these needs no
+// reprojection (#65).
+const WGS84_EQUIVALENT = new Set(["EPSG:4326", "OGC:CRS84", "CRS:84"]);
+
+/** The column's declared CRS (#65), read from its type annotation — `null` for
+ *  a plain, unannotated `GEOMETRY` column (the common case: DuckDB has no
+ *  metadata to recover a CRS from in that case, see ADR-0003). One metadata-only
+ *  round trip; not cached, since it's only paid at add/refresh time. */
+async function columnCrs(s: LayerSource): Promise<string | null> {
+  const rows = await query(
+    `SELECT data_type AS t FROM duckdb_columns()
+      WHERE database_name = '${sqlLit(s.db)}' AND schema_name = '${sqlLit(s.schema)}'
+        AND table_name = '${sqlLit(s.table)}' AND column_name = '${sqlLit(s.geomColumn)}'`,
+  );
+  const m = CRS_ANNOTATION.exec(str(rows[0]?.t ?? "").trim());
+  return m ? m[1] : null;
+}
+
+/** The geometry expression for a source column (#65, ADR-0003): reproject to
+ *  WGS84 when the column's CRS is known and isn't already WGS84-equivalent,
+ *  otherwise pass the column through unchanged (see `columnCrs` for why an
+ *  unknown CRS can't be reprojected — there's nothing to reproject *from*).
+ *  `always_xy` matches this codebase's one other `ST_Transform` use (`tiles.ts`). */
+async function geomExpr(s: LayerSource): Promise<string> {
+  const crs = await columnCrs(s);
+  if (!crs || WGS84_EQUIVALENT.has(crs.toUpperCase())) return ident(s.geomColumn);
+  return `ST_Transform(${ident(s.geomColumn)}, '${sqlLit(crs)}', 'EPSG:4326', always_xy := true)`;
+}
+
+/** The deck render query for a catalog source: its geometry column (reprojected
+ *  to WGS84 where its CRS is known, #65) projected as `geom`. Shared by `add`
+ *  and `refresh` so the two can't diverge. */
+async function sourceSql(s: LayerSource): Promise<string> {
+  return `SELECT ${await geomExpr(s)} AS geom FROM ${qualified(s)}`;
 }
 
 // Stable, SQL/URL-safe id derived from the fully-qualified source tuple. The
@@ -227,9 +261,9 @@ export const layers = {
   async refresh(id: string): Promise<void> {
     const layer = byId.get(id);
     if (!layer?.source) return;
-    const sql = sourceSql(layer.source);
     patch(id, { status: "loading" });
     try {
+      const sql = await sourceSql(layer.source);
       const { bounds, style, geometryKind } = await addDeckLayer(id, sql);
       patch(id, { status: "ready", bounds, style, geometryKind });
     } catch (e) {
@@ -262,7 +296,7 @@ export const layers = {
     emit();
 
     try {
-      const sql = sourceSql(source);
+      const sql = await sourceSql(source);
       const { bounds, style, geometryKind } = await addDeckLayer(id, sql);
       patch(id, { status: "ready", bounds, style, geometryKind });
       fitTo(bounds);
@@ -500,7 +534,9 @@ export interface LayerInfo {
   geometryType: string | null;
   /** Extent [xmin,ymin,xmax,ymax] (lon/lat), from the add-time probe. */
   bounds: [number, number, number, number] | null;
-  /** CRS is unknown for plain GEOMETRY today; shown as such (T-011). */
+  /** The column's declared CRS (#65) — `null` for a plain, unannotated
+   *  `GEOMETRY` column, which is genuinely unknown (T-011; ADR-0003). Notes
+   *  when the source CRS isn't WGS84 (`layers.ts` reprojects those on render). */
   crs: string | null;
   /** True for a catalog-table layer; false for a query-backed layer (Overture /
    *  SQL editor) whose attributes/count we don't resolve without re-running it. */
@@ -543,10 +579,18 @@ export async function loadLayerInfo(layer: ActiveLayer): Promise<LayerInfo> {
   ]);
 
   const stat = statRows[0] ?? {};
+  const geomType = str(colRows.find((r) => str(r.name) === s.geomColumn)?.type ?? "");
+  const crsMatch = CRS_ANNOTATION.exec(geomType.trim());
+  const crs = crsMatch
+    ? WGS84_EQUIVALENT.has(crsMatch[1].toUpperCase())
+      ? crsMatch[1]
+      : `${crsMatch[1]} (reprojected to WGS84 for display)`
+    : null;
   return {
     ...base,
     columns: colRows.map((r) => ({ name: str(r.name), type: str(r.type) })),
     featureCount: Number(stat.n ?? 0),
     geometryType: stat.gt == null ? null : str(stat.gt),
+    crs,
   };
 }

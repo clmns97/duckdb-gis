@@ -259,6 +259,45 @@ that makes in-memory-by-default safe.
 
 ---
 
+### REQ-F-008 — Never render non-WGS84 geometry silently wrong
+
+| | |
+|---|---|
+| **Type** | Functional |
+| **Status** | Implemented |
+| **Priority** | P1 |
+| **Stakeholder** | GIS practitioner; data engineer |
+| **Source** | ADR-0003; #65 |
+
+**Requirement.** When a layer's geometry column carries a known, non-WGS84
+CRS, the system shall reproject it to WGS84 for rendering. When a layer's
+extent is outside the valid WGS84 range and its CRS is unknown, the system
+shall refuse to render it and explain why, rather than plotting coordinates
+that don't belong there.
+
+**Rationale.** REQ-F-001 detects layers by column type alone, with no regard
+for CRS — a projected dataset (UTM, a national grid, Web Mercator metres)
+passes detection exactly like a lon/lat one. Verified live: such data can
+render at a plausible-looking but entirely wrong location with no error at
+all. Silently wrong is worse than loudly broken; a user has no way to notice
+it on their own.
+
+**Acceptance criteria.**
+
+- [x] A layer whose geometry column carries a known, non-WGS84 CRS is
+      reprojected automatically.
+- [x] A layer whose extent is outside `[-180,180]×[-90,90]` and whose CRS is
+      unknown is refused with a specific, readable explanation — not rendered,
+      and not left to fail later on a MapLibre camera error.
+- [x] A layer with a plausible (in-range) extent and no CRS metadata — the
+      common case for data this app itself produces — renders as before; this
+      requirement does not add friction to the working majority case.
+
+**Traces to.** ADR-0003 · #65 · `frontend/src/lib/catalog.ts`,
+`frontend/src/lib/layers.ts`, `frontend/src/lib/deckRender.ts`
+
+---
+
 ## Quality requirements
 
 ### REQ-Q-001 — Stay responsive on large layers
