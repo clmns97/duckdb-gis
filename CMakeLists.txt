@@ -14,6 +14,15 @@ include_directories(${OPENSSL_INCLUDE_DIR})
 set(EXTENSION_NAME ${TARGET_NAME}_extension)
 
 project(${TARGET_NAME})
+# third_party/httplib is a compatibility shim for DuckDB v1.4.x (LTS), whose
+# CMakeLists does not include_directories(third_party/httplib) -- there, our
+# copy is the only httplib.hpp on the include path. From v1.5 on, DuckDB adds
+# that directory itself at parent scope, ahead of ours, so its copy (0.53.1 on
+# main) wins and ours is shadowed. Both share the CPPHTTPLIB_HTTPLIB_H guard
+# and the duckdb_httplib_openssl namespace, so exactly one is ever compiled.
+# Do not delete this while v1.4 is supported: it looks dead on a main-branch
+# build and is not (removing it fails every v1.4 leg with "httplib.hpp: No
+# such file or directory" -- confirmed in CI, see #79).
 include_directories(src/include ${PROJECT_SOURCE_DIR}/third_party/httplib)
 
 set(EXTENSION_SOURCES
@@ -82,6 +91,18 @@ build_loadable_extension(${TARGET_NAME} " " ${EXTENSION_SOURCES})
 
 target_link_libraries(${EXTENSION_NAME} OpenSSL::SSL OpenSSL::Crypto)
 target_link_libraries(${TARGET_NAME}_loadable_extension OpenSSL::SSL OpenSSL::Crypto)
+
+# DuckDB's vendored httplib auto-enables CPPHTTPLIB_USE_CERTS_FROM_MACOSX_KEYCHAIN
+# on macOS, so the inline tls::load_system_certs it pulls into http_server.cpp
+# needs the system frameworks at link time. Same pattern as duckdb-httpfs.
+if(APPLE)
+  find_library(COREFOUNDATION_FRAMEWORK CoreFoundation)
+  find_library(SECURITY_FRAMEWORK Security)
+  target_link_libraries(${EXTENSION_NAME} ${COREFOUNDATION_FRAMEWORK}
+                        ${SECURITY_FRAMEWORK})
+  target_link_libraries(${TARGET_NAME}_loadable_extension
+                        ${COREFOUNDATION_FRAMEWORK} ${SECURITY_FRAMEWORK})
+endif()
 
 install(
   TARGETS ${EXTENSION_NAME}
