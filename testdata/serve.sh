@@ -10,12 +10,18 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DUCKDB="$ROOT/build/release/duckdb"
-EXT="$ROOT/build/release/extension/gis/gis.duckdb_extension"
+# Any DuckDB CLI >= 1.4.5 loads the extension (it targets the stable C API);
+# override with DUCKDB=/path/to/duckdb.
+DUCKDB="${DUCKDB:-$(command -v duckdb || true)}"
+EXT="$ROOT/build/release/gis.duckdb_extension"
 PORT="${1:-4214}"
 
-if [[ ! -x "$DUCKDB" ]]; then
-  echo "fork build not found at $DUCKDB — run 'make release' first" >&2
+if [[ -z "$DUCKDB" || ! -x "$DUCKDB" ]]; then
+  echo "no DuckDB CLI found — install one (>= 1.4.5) or set DUCKDB=/path/to/duckdb" >&2
+  exit 1
+fi
+if [[ ! -f "$EXT" ]]; then
+  echo "extension not built at $EXT — run 'make configure release' first" >&2
   exit 1
 fi
 
@@ -36,7 +42,6 @@ echo "Serving $WORK on port $PORT (Ctrl-C to stop)"
 {
   printf "LOAD '%s';\n"          "$EXT"
   printf "INSTALL spatial; LOAD spatial;\n"
-  printf "SET gis_local_port=%s;\n" "$PORT"
-  printf "CALL start_gis();\n"
+  printf "CALL start_gis(port := %s);\n" "$PORT"
   tail -f /dev/null
 } | "$DUCKDB" -unsigned "$WORK"
