@@ -17,13 +17,16 @@ import {
   LIST,
   MAP,
   SMALLINT,
+  SQLNULL,
   STRUCT,
   TIME,
+  TIME_NS,
   TIMESTAMP,
   TIMESTAMP_MS,
   TIMESTAMP_NS,
   TIMESTAMP_S,
   TIMESTAMPTZ,
+  TIMESTAMPTZ_NS,
   TIMETZ,
   TINYINT,
   UBIGINT,
@@ -168,6 +171,27 @@ suite('parseLogicalTypeString', () => {
     expect(parseLogicalTypeString('DOUBLE[]')).toStrictEqual(LIST(DOUBLE));
   });
 
+  test('TIME_NS', () => {
+    expect(parseLogicalTypeString('TIME_NS')).toStrictEqual(TIME_NS);
+  });
+  test('TIMESTAMPTZ_NS', () => {
+    expect(parseLogicalTypeString('TIMESTAMPTZ_NS')).toStrictEqual(
+      TIMESTAMPTZ_NS,
+    );
+  });
+  test('SQLNULL', () => {
+    expect(parseLogicalTypeString('SQLNULL')).toStrictEqual(SQLNULL);
+  });
+  test('NULL', () => {
+    expect(parseLogicalTypeString('NULL')).toStrictEqual(SQLNULL);
+  });
+  test('"NULL"', () => {
+    expect(parseLogicalTypeString('"NULL"')).toStrictEqual(SQLNULL);
+  });
+  test('round trip SQLNULL', () => {
+    expect(parseLogicalTypeString(SQLNULL.toString())).toStrictEqual(SQLNULL);
+  });
+
   test('STRUCT(a INTEGER, b VARCHAR)', () => {
     expect(
       parseLogicalTypeString('STRUCT(a INTEGER, b VARCHAR)'),
@@ -188,6 +212,16 @@ suite('parseLogicalTypeString', () => {
         b: LIST(VARCHAR),
       }),
     );
+  });
+
+  test('STRUCT(a "NULL")', () => {
+    expect(parseLogicalTypeString('STRUCT(a "NULL")')).toStrictEqual(
+      STRUCT({ a: SQLNULL }),
+    );
+  });
+
+  test('"NULL"[]', () => {
+    expect(parseLogicalTypeString('"NULL"[]')).toStrictEqual(LIST(SQLNULL));
   });
 
   test('STRUCT(a INTEGER, b VARCHAR)[]', () => {

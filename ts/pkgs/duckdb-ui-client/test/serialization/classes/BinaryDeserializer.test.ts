@@ -21,6 +21,76 @@ suite('BinaryDeserializer', () => {
     );
     expect(deserializer.readVarInt()).toBe((3 << 14) | (2 << 7) | 1);
   });
+  test('read varint of 2^31 and above', () => {
+    const deserializer = new BinaryDeserializer(
+      new BinaryStreamReader(
+        makeBuffer([
+          0x80, 0x80, 0x80, 0x80, 0x08, 0x85, 0x80, 0x80, 0x80, 0x10, 0xff,
+          0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x0f,
+        ]),
+      ),
+    );
+    expect(deserializer.readVarInt()).toBe(2 ** 31);
+    expect(deserializer.readVarInt()).toBe(2 ** 32 + 5);
+    expect(deserializer.readVarInt()).toBe(Number.MAX_SAFE_INTEGER);
+  });
+  test('read varint too large for a number', () => {
+    const deserializer = new BinaryDeserializer(
+      new BinaryStreamReader(
+        makeBuffer([0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x10]),
+      ),
+    );
+    expect(() => deserializer.readVarInt()).toThrow(
+      'varint exceeds Number.MAX_SAFE_INTEGER',
+    );
+  });
+  test('read signed varint', () => {
+    const cases: [number, number[]][] = [
+      [0, [0x00]],
+      [63, [0x3f]],
+      [64, [0xc0, 0x00]],
+      [100, [0xe4, 0x00]],
+      [-1, [0x7f]],
+      [-5, [0x7b]],
+      [-64, [0x40]],
+      [-65, [0xbf, 0x7f]],
+      [2 ** 31, [0x80, 0x80, 0x80, 0x80, 0x08]],
+      [-(2 ** 31), [0x80, 0x80, 0x80, 0x80, 0x78]],
+      [
+        Number.MAX_SAFE_INTEGER,
+        [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x0f],
+      ],
+      [
+        Number.MIN_SAFE_INTEGER,
+        [0x81, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x70],
+      ],
+    ];
+    for (const [value, bytes] of cases) {
+      const deserializer = new BinaryDeserializer(
+        new BinaryStreamReader(makeBuffer(bytes)),
+      );
+      expect(deserializer.readSignedVarInt()).toBe(value);
+    }
+  });
+  test('read signed varint too large for a number', () => {
+    const deserializer = new BinaryDeserializer(
+      new BinaryStreamReader(
+        makeBuffer([0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x10]),
+      ),
+    );
+    expect(() => deserializer.readSignedVarInt()).toThrow(
+      'signed varint exceeds the safe integer range',
+    );
+  });
+  test('read float32 and float64', () => {
+    const buffer = new ArrayBuffer(12);
+    const dv = new DataView(buffer);
+    dv.setFloat32(0, 1.25, true);
+    dv.setFloat64(4, -0.5, true);
+    const deserializer = new BinaryDeserializer(new BinaryStreamReader(buffer));
+    expect(deserializer.readFloat32()).toBe(1.25);
+    expect(deserializer.readFloat64()).toBe(-0.5);
+  });
   test('read nullable', () => {
     const deserializer = new BinaryDeserializer(
       new BinaryStreamReader(makeBuffer([0, 1, 17])),

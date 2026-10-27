@@ -8,12 +8,14 @@ import {
   DuckDBListValue,
   DuckDBMapValue,
   DuckDBStructValue,
+  DuckDBTimeNanosecondsValue,
   DuckDBTimeTZValue,
   DuckDBTimeValue,
   DuckDBTimestampMicrosecondsValue,
   DuckDBTimestampMillisecondsValue,
   DuckDBTimestampNanosecondsValue,
   DuckDBTimestampSecondsValue,
+  DuckDBTimestampTZNanosecondsValue,
   DuckDBTimestampTZValue,
   DuckDBUUIDValue,
   DuckDBValue,
@@ -65,6 +67,10 @@ export function duckDBValueFromVector(
 
   const { id, typeInfo } = typeIdAndInfo;
   switch (id) {
+    // Every row of a SQLNULL vector is invalid, so this is unreachable in practice.
+    case LogicalTypeId.SQLNULL:
+      return null;
+
     case LogicalTypeId.BOOLEAN:
       return getBoolean(getDataVector(vector).data, rowIndex);
 
@@ -83,6 +89,10 @@ export function duckDBValueFromVector(
       );
     case LogicalTypeId.TIME:
       return new DuckDBTimeValue(
+        getInt64(getDataVector(vector).data, rowIndex * 8),
+      );
+    case LogicalTypeId.TIME_NS:
+      return new DuckDBTimeNanosecondsValue(
         getInt64(getDataVector(vector).data, rowIndex * 8),
       );
     case LogicalTypeId.TIMESTAMP_SEC:
@@ -137,7 +147,8 @@ export function duckDBValueFromVector(
     case LogicalTypeId.VARCHAR:
       return getStringVector(vector).data[rowIndex];
 
-    case LogicalTypeId.BLOB: {
+    case LogicalTypeId.BLOB:
+    case LogicalTypeId.GEOMETRY: {
       const dv = getDataListVector(vector).data[rowIndex];
       return new DuckDBBlobValue(
         new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength),
@@ -163,6 +174,10 @@ export function duckDBValueFromVector(
 
     case LogicalTypeId.TIMESTAMP_TZ:
       return new DuckDBTimestampTZValue(
+        getInt64(getDataVector(vector).data, rowIndex * 8),
+      );
+    case LogicalTypeId.TIMESTAMP_TZ_NS:
+      return new DuckDBTimestampTZNanosecondsValue(
         getInt64(getDataVector(vector).data, rowIndex * 8),
       );
     case LogicalTypeId.TIME_TZ:
@@ -194,7 +209,8 @@ export function duckDBValueFromVector(
         getInt128(getDataVector(vector).data, rowIndex * 16),
       );
 
-    case LogicalTypeId.STRUCT: {
+    case LogicalTypeId.STRUCT:
+    case LogicalTypeId.TUPLE: {
       const { childTypes } = getStructTypeInfo(typeInfo);
       const { data } = getVectorListVector(vector);
       return new DuckDBStructValue(

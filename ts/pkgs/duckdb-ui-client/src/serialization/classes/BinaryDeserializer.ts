@@ -62,16 +62,57 @@ export class BinaryDeserializer {
     return this.reader.readUint8();
   }
 
+  /**
+   * Read an unsigned LEB128 varint. Uses arithmetic rather than bitwise operators, which are limited to 32 bits.
+   * Throws if the value can't be represented exactly as a number.
+   */
   public readVarInt() {
     let result = 0;
     let byte = 0;
-    let shift = 0;
+    let multiplier = 1;
     do {
       byte = this.reader.readUint8();
-      result |= (byte & 0x7f) << shift;
-      shift += 7;
+      result += (byte & 0x7f) * multiplier;
+      multiplier *= 0x80;
     } while (byte & 0x80);
+    if (!Number.isSafeInteger(result)) {
+      throw new Error(
+        `varint exceeds Number.MAX_SAFE_INTEGER (offset=${this.reader.getOffset()})`,
+      );
+    }
     return result;
+  }
+
+  /**
+   * Read a signed LEB128 varint, as DuckDB writes signed integers. Throws if the value can't be represented exactly as
+   * a number.
+   */
+  public readSignedVarInt() {
+    let result = 0;
+    let multiplier = 1;
+    let byte = this.reader.readUint8();
+    while (byte & 0x80) {
+      result += (byte & 0x7f) * multiplier;
+      multiplier *= 0x80;
+      byte = this.reader.readUint8();
+    }
+    // The last byte's 0x40 bit is the sign. Apply it within that byte's contribution, rather than sign-extending the
+    // whole result afterwards, so values near the safe integer limits don't lose precision.
+    result += ((byte & 0x3f) - (byte & 0x40)) * multiplier;
+    if (!Number.isSafeInteger(result)) {
+      throw new Error(
+        `signed varint exceeds the safe integer range (offset=${this.reader.getOffset()})`,
+      );
+    }
+    return result;
+  }
+
+  public readFloat32() {
+    return this.reader.readData(4).getFloat32(0, true);
+  }
+
+  public readFloat64() {
+    return this.reader.readData(8).getFloat64(0, true);
   }
 
   public readNullable<T>(reader: Reader<T>) {

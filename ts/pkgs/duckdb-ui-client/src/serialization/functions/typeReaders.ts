@@ -1,9 +1,19 @@
 import { BinaryDeserializer } from '../classes/BinaryDeserializer.js';
-import { BaseTypeInfo, TypeIdAndInfo, TypeInfo } from '../types/TypeInfo.js';
+import { LogicalTypeId } from '../constants/LogicalTypeId.js';
 import {
+  BaseTypeInfo,
+  ExtensionTypeInfo,
+  ScalarValue,
+  TypeIdAndInfo,
+  TypeInfo,
+  TypeModifier,
+} from '../types/TypeInfo.js';
+import {
+  readBoolean,
   readList,
   readNullable,
   readPair,
+  readSignedVarInt,
   readString,
   readStringList,
   readUint8,
@@ -23,6 +33,90 @@ export function readStructEntryList(
   return readList(deserializer, readStructEntry);
 }
 
+/** See CoordinateReferenceSystem::Deserialize in https://github.com/duckdb/duckdb/blob/main/src/common/types/geometry_crs.cpp */
+export function readCoordinateReferenceSystem(
+  deserializer: BinaryDeserializer,
+): string {
+  const definition = deserializer.readPropertyWithDefault(100, readString, '');
+  deserializer.expectObjectEnd();
+  return definition;
+}
+
+/** Read the data of a non-null scalar Value of the given type. See Value::SerializeInternal. */
+function readScalarValueData(
+  deserializer: BinaryDeserializer,
+  type: TypeIdAndInfo,
+): ScalarValue {
+  switch (type.id) {
+    case LogicalTypeId.BOOLEAN:
+      return readBoolean(deserializer);
+    case LogicalTypeId.TINYINT:
+    case LogicalTypeId.SMALLINT:
+    case LogicalTypeId.INTEGER:
+    case LogicalTypeId.BIGINT:
+      return readSignedVarInt(deserializer);
+    case LogicalTypeId.UTINYINT:
+    case LogicalTypeId.USMALLINT:
+    case LogicalTypeId.UINTEGER:
+    case LogicalTypeId.UBIGINT:
+      return readVarInt(deserializer);
+    case LogicalTypeId.FLOAT:
+      return deserializer.readFloat32();
+    case LogicalTypeId.DOUBLE:
+      return deserializer.readFloat64();
+    case LogicalTypeId.CHAR:
+    case LogicalTypeId.VARCHAR:
+    case LogicalTypeId.BLOB: // as an escaped string, e.g. '\x01'
+      return readString(deserializer);
+    default:
+      // The binary format can't be skipped without knowing its shape, so there's no way to ignore other values.
+      throw new Error(`unsupported value type: ${type.id}`);
+  }
+}
+
+/** Read a scalar Value. See Value::Deserialize in https://github.com/duckdb/duckdb/blob/main/src/common/types/value.cpp */
+export function readScalarValue(deserializer: BinaryDeserializer): ScalarValue {
+  // The type is written for every root (non-nested) value.
+  const type = deserializer.readProperty(100, readType);
+  const isNull = deserializer.readProperty(101, readBoolean);
+  const value = isNull
+    ? null
+    : deserializer.readProperty(102, (d) => readScalarValueData(d, type));
+  deserializer.expectObjectEnd();
+  return value;
+}
+
+/** See LogicalTypeModifier::Deserialize in https://github.com/duckdb/duckdb/blob/main/src/storage/serialization/serialize_types.cpp */
+export function readTypeModifier(
+  deserializer: BinaryDeserializer,
+): TypeModifier {
+  const value = deserializer.readProperty(100, readScalarValue);
+  const label = deserializer.readPropertyWithDefault(101, readString, '');
+  deserializer.expectObjectEnd();
+  return { value, label };
+}
+
+/** See ExtensionTypeInfo::Deserialize in https://github.com/duckdb/duckdb/blob/main/src/storage/serialization/serialize_types.cpp */
+export function readExtensionTypeInfo(
+  deserializer: BinaryDeserializer,
+): ExtensionTypeInfo {
+  const modifiers = deserializer.readPropertyWithDefault(
+    100,
+    (d) => readList(d, readTypeModifier),
+    [],
+  );
+  const properties = deserializer.readPropertyWithDefault(
+    101,
+    (d) =>
+      Object.fromEntries(
+        readList(d, (pd) => readPair(pd, readString, readScalarValue)),
+      ),
+    {},
+  );
+  deserializer.expectObjectEnd();
+  return { modifiers, properties };
+}
+
 /** See ExtraTypeInfo::Deserialize in https://github.com/duckdb/duckdb/blob/main/src/storage/serialization/serialize_types.cpp */
 export function readTypeInfo(deserializer: BinaryDeserializer): TypeInfo {
   const typeInfoType = deserializer.readProperty(100, readUint8);
@@ -32,9 +126,16 @@ export function readTypeInfo(deserializer: BinaryDeserializer): TypeInfo {
     readUnsupported,
     null,
   );
+  // Written for types with type modifiers or properties, typically ones defined by extensions.
+  const extensionInfo = deserializer.readPropertyWithDefault(
+    103,
+    (d) => readNullable(d, readExtensionTypeInfo),
+    null,
+  );
   const baseInfo: BaseTypeInfo = {
     ...(alias ? { alias } : {}),
     ...(modifiers ? { modifiers } : {}),
+    ...(extensionInfo ? { extensionInfo } : {}),
   };
   let typeInfo: TypeInfo | undefined;
   switch (typeInfoType) {
@@ -56,6 +157,21 @@ export function readTypeInfo(deserializer: BinaryDeserializer): TypeInfo {
         };
       }
       break;
+    case 3: // STRING_TYPE_INFO
+      {
+        // Not written when empty, which is the case for most string types.
+        const collation = deserializer.readPropertyWithDefault(
+          200,
+          readString,
+          '',
+        );
+        typeInfo = {
+          ...baseInfo,
+          kind: 'string',
+          collation,
+        };
+      }
+      break;
     case 4: // LIST_TYPE_INFO
       {
         const childType = deserializer.readProperty(200, readType);
@@ -68,7 +184,12 @@ export function readTypeInfo(deserializer: BinaryDeserializer): TypeInfo {
       break;
     case 5: // STRUCT_TYPE_INFO
       {
-        const childTypes = deserializer.readProperty(200, readStructEntryList);
+        // Not written for a struct with no entries (e.g. `STRUCT()`, new in DuckDB 2.0).
+        const childTypes = deserializer.readPropertyWithDefault(
+          200,
+          readStructEntryList,
+          [],
+        );
         typeInfo = {
           ...baseInfo,
           kind: 'struct',
@@ -97,6 +218,19 @@ export function readTypeInfo(deserializer: BinaryDeserializer): TypeInfo {
           kind: 'array',
           childType,
           size,
+        };
+      }
+      break;
+    case 13: // GEO_TYPE_INFO
+      {
+        const crs = deserializer.readProperty(
+          200,
+          readCoordinateReferenceSystem,
+        );
+        typeInfo = {
+          ...baseInfo,
+          kind: 'geo',
+          crs,
         };
       }
       break;

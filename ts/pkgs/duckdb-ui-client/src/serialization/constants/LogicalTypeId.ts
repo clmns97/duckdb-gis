@@ -4,6 +4,7 @@
  * See LogicalTypeId in https://github.com/duckdb/duckdb/blob/main/src/include/duckdb/common/types.hpp
  */
 export const LogicalTypeId = {
+  SQLNULL: 1,
   BOOLEAN: 10,
   TINYINT: 11,
   SMALLINT: 12,
@@ -27,16 +28,20 @@ export const LogicalTypeId = {
   UINTEGER: 30,
   UBIGINT: 31,
   TIMESTAMP_TZ: 32,
+  TIMESTAMP_TZ_NS: 33,
   TIME_TZ: 34,
+  TIME_NS: 35,
   BIT: 36,
   BIGNUM: 39,
   UHUGEINT: 49,
   HUGEINT: 50,
   UUID: 54,
+  GEOMETRY: 60,
   STRUCT: 100,
   LIST: 101,
   MAP: 102,
   ENUM: 104,
   UNION: 107,
   ARRAY: 108,
+  TUPLE: 110,
 };

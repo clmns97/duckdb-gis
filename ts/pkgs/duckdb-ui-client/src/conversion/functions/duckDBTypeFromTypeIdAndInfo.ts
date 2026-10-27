@@ -13,10 +13,14 @@ import {
   DuckDBIntegerType,
   DuckDBIntervalType,
   DuckDBSmallIntType,
+  DuckDBSQLNullType,
+  DuckDBStructType,
+  DuckDBTimeNanosecondsType,
   DuckDBTimestampMillisecondsType,
   DuckDBTimestampNanosecondsType,
   DuckDBTimestampSecondsType,
   DuckDBTimestampType,
+  DuckDBTimestampTZNanosecondsType,
   DuckDBTimestampTZType,
   DuckDBTimeType,
   DuckDBTimeTZType,
@@ -30,10 +34,10 @@ import {
   DuckDBUUIDType,
   DuckDBVarCharType,
   ENUM,
+  GEOMETRY,
   JSONType,
   LIST,
   MAP,
-  STRUCT,
   UNION,
 } from '@duckdb/data-types';
 import { LogicalTypeId } from '../../serialization/constants/LogicalTypeId.js';
@@ -54,6 +58,9 @@ export function duckDBTypeFromTypeIdAndInfo(
   const { id, typeInfo } = typeIdAndInfo;
   const alias = typeInfo?.alias;
   switch (id) {
+    case LogicalTypeId.SQLNULL:
+      return DuckDBSQLNullType.create(alias);
+
     case LogicalTypeId.BOOLEAN:
       return DuckDBBooleanType.create(alias);
 
@@ -70,6 +77,8 @@ export function duckDBTypeFromTypeIdAndInfo(
       return DuckDBDateType.create(alias);
     case LogicalTypeId.TIME:
       return DuckDBTimeType.create(alias);
+    case LogicalTypeId.TIME_NS:
+      return DuckDBTimeNanosecondsType.create(alias);
     case LogicalTypeId.TIMESTAMP_SEC:
       return DuckDBTimestampSecondsType.create(alias);
     case LogicalTypeId.TIMESTAMP_MS:
@@ -98,6 +107,10 @@ export function duckDBTypeFromTypeIdAndInfo(
       return DuckDBVarCharType.create(alias);
     case LogicalTypeId.BLOB:
       return DuckDBBlobType.create(alias);
+    case LogicalTypeId.GEOMETRY:
+      // Matches how DuckDB before 1.5 (and later DuckDB targeting older storage) serializes geometry: as a BLOB
+      // aliased GEOMETRY. Any coordinate reference system is not reflected in the type.
+      return alias ? DuckDBBlobType.create(alias) : GEOMETRY;
 
     case LogicalTypeId.INTERVAL:
       return DuckDBIntervalType.create(alias);
@@ -113,6 +126,8 @@ export function duckDBTypeFromTypeIdAndInfo(
 
     case LogicalTypeId.TIMESTAMP_TZ:
       return DuckDBTimestampTZType.create(alias);
+    case LogicalTypeId.TIMESTAMP_TZ_NS:
+      return DuckDBTimestampTZNanosecondsType.create(alias);
     case LogicalTypeId.TIME_TZ:
       return DuckDBTimeTZType.create(alias);
 
@@ -130,13 +145,16 @@ export function duckDBTypeFromTypeIdAndInfo(
     case LogicalTypeId.UUID:
       return DuckDBUUIDType.create(alias);
 
-    case LogicalTypeId.STRUCT: {
+    case LogicalTypeId.STRUCT:
+    case LogicalTypeId.TUPLE: {
       const { childTypes } = getStructTypeInfo(typeInfo);
-      const entries: Record<string, DuckDBType> = {};
-      for (const [key, valueTypeIdAndInfo] of childTypes) {
-        entries[key] = duckDBTypeFromTypeIdAndInfo(valueTypeIdAndInfo);
-      }
-      return STRUCT(entries, alias);
+      // Built from arrays rather than a record, because entry names aren't unique in an unnamed struct (e.g.
+      // `row(1, 'a')`), where every name is empty.
+      return new DuckDBStructType(
+        childTypes.map(([name]) => name),
+        childTypes.map(([, type]) => duckDBTypeFromTypeIdAndInfo(type)),
+        alias,
+      );
     }
 
     case LogicalTypeId.LIST: {
