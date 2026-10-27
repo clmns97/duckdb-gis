@@ -35,6 +35,7 @@ set(EXTENSION_SOURCES
     src/utils/env.cpp
     src/utils/helpers.cpp
     src/utils/serialization.cpp
+    src/utils/statement_execution.cpp
     src/watcher.cpp)
 
 # Embed frontend/dist (committed build output; see `make frontend`) into the
@@ -58,6 +59,25 @@ add_custom_command(
   VERBATIM)
 
 list(APPEND EXTENSION_SOURCES ${EMBEDDED_ASSETS_SRC})
+
+# DuckDB 2.x treats the DUCKDB_VERSION environment variable as an explicit
+# version. extension-ci-tools sets it to the requested ref (e.g. "main"), which
+# doesn't parse as vX.Y.Z and leaves the version variables empty. Fall back to
+# the release version file DuckDB uses for dev builds. (From duckdb-ui.)
+if("${DUCKDB_MAJOR_VERSION}" STREQUAL ""
+   AND EXISTS "${CMAKE_SOURCE_DIR}/scripts/ci/release_version.txt")
+  file(READ "${CMAKE_SOURCE_DIR}/scripts/ci/release_version.txt"
+       GIS_DUCKDB_RELEASE_VERSION)
+  string(STRIP "${GIS_DUCKDB_RELEASE_VERSION}" GIS_DUCKDB_RELEASE_VERSION)
+  if(GIS_DUCKDB_RELEASE_VERSION MATCHES "^([0-9]+)[.]([0-9]+)$")
+    set(DUCKDB_MAJOR_VERSION "${CMAKE_MATCH_1}")
+    set(DUCKDB_MINOR_VERSION "${CMAKE_MATCH_2}")
+    set(DUCKDB_PATCH_VERSION "0")
+  endif()
+endif()
+if("${DUCKDB_MAJOR_VERSION}" STREQUAL "")
+  message(FATAL_ERROR "Unable to determine the DuckDB version")
+endif()
 
 add_definitions(-DDUCKDB_MAJOR_VERSION=${DUCKDB_MAJOR_VERSION})
 add_definitions(-DDUCKDB_MINOR_VERSION=${DUCKDB_MINOR_VERSION})
