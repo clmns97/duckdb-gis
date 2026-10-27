@@ -11,7 +11,6 @@ Only ~290 files are ours. **Ignore the vendored submodules** unless explicitly i
 Our code:
 
 - `src/` — C++ extension on DuckDB's **stable C extension API** (no DuckDB C++ internals; see #88). `gis_extension.cpp` (entrypoint, SQL functions), `http_server.cpp` (embedded frontend, `/ddb/run`, `/ddb/interrupt`), `query.cpp` (SQL → Arrow IPC via nanoarrow). Headers in `src/include/`.
-- `ts/` — duckdb-ui's TypeScript client packages; no longer used by the frontend (which decodes Arrow results in `frontend/src/lib/duckdb.ts`). Due for removal (#88).
 - `frontend/` — our MapLibre-based GIS frontend (the point of the project).
 - `design-system/` — `@duckdb-gis/ui-kit`, the Storybook UI kit. Components
   re-export from `frontend/src`; the frontend is the source of truth.

@@ -88,16 +88,6 @@ make frontend        # rebuilds frontend/dist
 > run `make frontend` and **commit the resulting `frontend/dist`**. CI fails
 > the PR if it's stale.
 
-**TypeScript workspace (`ts/`)**
-
-```sh
-cd ts
-pnpm install
-pnpm build
-pnpm check      # formatting + lint
-pnpm test
-```
-
 **C++ extension (`src/`, `CMakeLists.txt`)**
 
 ```sh

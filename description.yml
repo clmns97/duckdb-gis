@@ -72,10 +72,11 @@ docs:
     The UI is reached at `http://localhost:4214` by default; change it with
     `CALL start_gis(port := 4300)`.
 
-    This project is a fork of
-    [`duckdb/duckdb-ui`](https://github.com/duckdb/duckdb-ui), whose
-    SQL-over-HTTP transport and TypeScript client it reuses, with the hosted UI
-    replaced by a MapLibre map frontend. It registers `start_gis()` rather than
+    This project began as a fork of
+    [`duckdb/duckdb-ui`](https://github.com/duckdb/duckdb-ui), with the hosted
+    UI replaced by a MapLibre map frontend. It is built on DuckDB's stable C
+    extension API, so one binary works on DuckDB 1.4 LTS and later; query
+    results reach the browser as Arrow. It registers `start_gis()` rather than
     `start_ui()`, so it can be loaded alongside DuckDB's core `ui` extension.
 
     DuckDB is a trademark of the DuckDB Foundation. This is an independent fork
