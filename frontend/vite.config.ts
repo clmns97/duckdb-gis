@@ -22,8 +22,6 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/ddb": withOrigin(),
-      "/info": withOrigin(),
-      "/localEvents": withOrigin(),
     },
   },
   build: {

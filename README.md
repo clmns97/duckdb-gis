@@ -58,12 +58,13 @@ remote backend and no data leaves your machine.
 
 ## Repository layout
 
-- `src/` — the C++ extension (HTTP server, event dispatcher, settings, state).
-  See `src/http_server.cpp` (`HttpServer::Run`) for the endpoints.
+- `src/` — the C++ extension, on DuckDB's stable C API: SQL functions
+  (`gis_extension.cpp`), HTTP server (`http_server.cpp`) and SQL → Arrow IPC
+  (`query.cpp`).
 - `frontend/` — the MapLibre/deck.gl GIS frontend (React + Vite). This is the
   point of the project.
-- `ts/` — TypeScript packages shared with the frontend, notably
-  `duckdb-ui-client` (the SQL-over-HTTP client). See `ts/README.md`.
+- `ts/` — the TypeScript client packages inherited from duckdb-ui. No longer
+  used by the frontend (it decodes Arrow with `apache-arrow`); due for removal.
 - `design-system/` — `@duckdb-gis/ui-kit`, a Storybook workspace for the
   frontend's components. See `design-system/README.md`.
 - `test/sql/` — SQL-level extension tests.
@@ -167,9 +168,9 @@ statement's result as an [Arrow IPC](https://arrow.apache.org/docs/format/Column
 stream; `POST /ddb/interrupt` cancels a running query. See
 [http_server.cpp](src/http_server.cpp) and [query.cpp](src/query.cpp).
 
-The frontend talks to the server through the TypeScript
-[duckdb-ui-client](ts/pkgs/duckdb-ui-client/package.json) package, which decodes
-the binary result format. Spatial work is done with DuckDB's `spatial` extension
+The frontend talks to the server through `frontend/src/lib/duckdb.ts`, which
+decodes the Arrow results with `apache-arrow`; the map renders the same Arrow
+tables directly. Spatial work is done with DuckDB's `spatial` extension
 and rendered via GeoArrow deck.gl layers (`frontend/src/lib/deckRender.ts`);
 tiled rendering uses `ST_AsMVT` (`frontend/src/lib/tiles.ts`).
 
