@@ -15,7 +15,7 @@ type or module is named.
 are **read-only sources**: the system reads from them but never writes edits
 back. Contrast **working database**.
 
-**Basemap** — The raster or vector backdrop beneath the layers (OSM, CARTO,
+**Basemap** — The raster or vector backdrop beneath the layers (OpenFreeMap, OSM,
 ESRI). Selected by the user; see `frontend/src/lib/basemaps.ts`. Basemap tiles
 are fetched from the network, which is a user-initiated fetch and therefore
 compatible with the **offline guarantee**.

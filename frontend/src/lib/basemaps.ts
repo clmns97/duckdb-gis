@@ -1,67 +1,70 @@
 // ---------------------------------------------------------------------------
 // Basemaps (T-033).
 //
-// A switchable raster basemap sits *underneath* all data layers. The catalog is
-// plain data so adding a provider is one entry. Switching never calls
+// A switchable basemap sits *underneath* all data layers. The catalog is plain
+// data so adding a provider is one entry. Switching never calls
 // `map.setStyle()` — that wipes every source/layer (our deck.gl overlay and
-// ST_AsMVT sources included). Instead we keep the basemap as a single raster
-// source + raster layer inserted at the very bottom of the style, and swap it by
-// removing/re-adding just that pair (`applyBasemap`), leaving data layers alone.
+// ST_AsMVT sources included). Instead the basemap's sources and layers are
+// inserted at the very bottom of the style, and swapped by removing/re-adding
+// just that group (`applyBasemap`), leaving data layers alone. A basemap is
+// either XYZ raster tiles (one source + layer) or a MapLibre style URL, whose
+// sources/layers are copied in under an id prefix.
 // ---------------------------------------------------------------------------
 
+import type maplibregl from "maplibre-gl";
+import type { LayerSpecification, StyleSpecification } from "maplibre-gl";
 import type { MenuItem } from "../components/ContextMenu";
-import { getMap } from "./mapBus";
+import { getMap, whenStyleReady } from "./mapBus";
 
-export type BasemapProvider = "OSM" | "CARTO" | "ESRI" | "None";
+export type BasemapProvider = "OpenFreeMap" | "OSM" | "ESRI" | "None";
 
 export interface Basemap {
   id: string;
   label: string;
   provider: BasemapProvider;
-  /** XYZ raster tile URL templates, or null for "no basemap". */
-  tiles: string[] | null;
+  /** XYZ raster tile URL templates (a raster basemap). */
+  tiles?: string[];
+  /** MapLibre style JSON URL (a vector basemap). */
+  styleUrl?: string;
+  /** Neither `tiles` nor `styleUrl`: "no basemap". */
   attribution: string;
   tileSize?: number;
 }
 
-// CARTO serves from four subdomains; MapLibre has no `{s}` token, so expand
-// them into an explicit tiles array (retina `{r}` dropped — standard tiles).
-const carto = (name: string): string[] =>
-  ["a", "b", "c", "d"].map(
-    (s) => `https://${s}.basemaps.cartocdn.com/${name}/{z}/{x}/{y}.png`,
-  );
-
 const OSM_ATTR = "© OpenStreetMap contributors";
-const CARTO_ATTR = `${OSM_ATTR} © CARTO`;
+// OpenFreeMap: free, no API key or registration (https://openfreemap.org).
+// CARTO's raster basemaps, used before, now require an API key (#83).
+const OFM_ATTR = `OpenFreeMap © OpenMapTiles ${OSM_ATTR}`;
+const ofm = (style: string): string => `https://tiles.openfreemap.org/styles/${style}`;
 
 export const BASEMAPS: Basemap[] = [
+  {
+    id: "ofm-positron",
+    label: "Positron (light)",
+    provider: "OpenFreeMap",
+    styleUrl: ofm("positron"),
+    attribution: OFM_ATTR,
+  },
+  {
+    id: "ofm-dark",
+    label: "Dark",
+    provider: "OpenFreeMap",
+    styleUrl: ofm("dark"),
+    attribution: OFM_ATTR,
+  },
+  {
+    id: "ofm-liberty",
+    label: "Liberty",
+    provider: "OpenFreeMap",
+    styleUrl: ofm("liberty"),
+    attribution: OFM_ATTR,
+  },
   {
     id: "osm",
     label: "Standard",
     provider: "OSM",
     tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
     attribution: OSM_ATTR,
-  },
-  {
-    id: "carto-positron",
-    label: "Positron (light)",
-    provider: "CARTO",
-    tiles: carto("light_all"),
-    attribution: CARTO_ATTR,
-  },
-  {
-    id: "carto-dark",
-    label: "Dark Matter",
-    provider: "CARTO",
-    tiles: carto("dark_all"),
-    attribution: CARTO_ATTR,
-  },
-  {
-    id: "carto-voyager",
-    label: "Voyager",
-    provider: "CARTO",
-    tiles: carto("rastertiles/voyager"),
-    attribution: CARTO_ATTR,
   },
   {
     id: "esri-imagery",
@@ -85,17 +88,15 @@ export const BASEMAPS: Basemap[] = [
     id: "none",
     label: "None",
     provider: "None",
-    tiles: null,
     attribution: "",
   },
 ];
 
-const DEFAULT_ID = "carto-positron";
+const DEFAULT_ID = "ofm-positron";
 const STORAGE_KEY = "gis.basemap.id";
 
-// Fixed ids for the single basemap source+layer we own in the map style.
-const SRC_ID = "gis-basemap";
-const LAYER_ID = "gis-basemap";
+// Every source/layer id we own in the map style carries this prefix.
+const PREFIX = "gis-basemap";
 
 function readStored(): string {
   try {
@@ -114,30 +115,104 @@ function byId(id: string): Basemap | undefined {
   return BASEMAPS.find((b) => b.id === id);
 }
 
+// Fetched style JSON, by URL (switching back to a style doesn't refetch it).
+const styleCache = new Map<string, Promise<StyleSpecification>>();
+function fetchStyle(url: string): Promise<StyleSpecification> {
+  let p = styleCache.get(url);
+  if (!p) {
+    p = fetch(url).then((r) => {
+      if (!r.ok) throw new Error(`basemap style ${url}: HTTP ${r.status}`);
+      return r.json() as Promise<StyleSpecification>;
+    });
+    p.catch(() => styleCache.delete(url)); // retry on the next switch
+    styleCache.set(url, p);
+  }
+  return p;
+}
+
+// The basemap sources/layers currently in the map style, and a counter that
+// lets a slow style fetch notice it has been superseded by a later switch.
+let ownedLayers: string[] = [];
+let ownedSources: string[] = [];
+let applySeq = 0;
+
+function removeOwned(map: maplibregl.Map): void {
+  for (const id of ownedLayers) if (map.getLayer(id)) map.removeLayer(id);
+  for (const id of ownedSources) if (map.getSource(id)) map.removeSource(id);
+  ownedLayers = [];
+  ownedSources = [];
+}
+
+/** Add layers in order, all beneath the current bottom (data) layer. */
+function addBeneathData(map: maplibregl.Map, layers: LayerSpecification[]): void {
+  const first = map.getStyle().layers?.[0]?.id;
+  for (const layer of layers) {
+    map.addLayer(layer, first);
+    ownedLayers.push(layer.id);
+  }
+}
+
+function addRaster(map: maplibregl.Map, b: Basemap, tiles: string[]): void {
+  map.addSource(PREFIX, {
+    type: "raster",
+    tiles,
+    tileSize: b.tileSize ?? 256,
+    attribution: b.attribution,
+  });
+  ownedSources.push(PREFIX);
+  addBeneathData(map, [{ id: PREFIX, type: "raster", source: PREFIX }]);
+}
+
+function addStyle(map: maplibregl.Map, b: Basemap, style: StyleSpecification): void {
+  // Data layers draw no labels or icons, so the basemap's fonts and sprite can
+  // own the map-level glyphs/sprite.
+  if (style.glyphs) map.setGlyphs(style.glyphs);
+  if (typeof style.sprite === "string") map.setSprite(style.sprite);
+  const sourceId = (id: string) => `${PREFIX}:${id}`;
+  for (const [id, source] of Object.entries(style.sources)) {
+    map.addSource(sourceId(id), { ...source, attribution: b.attribution } as never);
+    ownedSources.push(sourceId(id));
+  }
+  addBeneathData(
+    map,
+    style.layers.map(
+      (layer) =>
+        ({
+          ...layer,
+          id: `${PREFIX}:${layer.id}`,
+          ...("source" in layer && typeof layer.source === "string"
+            ? { source: sourceId(layer.source) }
+            : {}),
+        }) as LayerSpecification,
+    ),
+  );
+}
+
 /**
- * Remove the current basemap source/layer and add the chosen one at the bottom
- * of the style (below every data layer). "None" leaves nothing behind. Safe to
- * call before the style has loaded — it defers to the map's `load` event.
+ * Remove the current basemap and add the chosen one at the bottom of the style
+ * (below every data layer). "None" leaves nothing behind. Safe to call before
+ * the style has loaded, and while a previous switch is still fetching its style
+ * (the later switch wins).
  */
 export function applyBasemap(map: maplibregl.Map | null, id: string): void {
   if (!map) return;
-  const doApply = () => {
-    if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
-    if (map.getSource(SRC_ID)) map.removeSource(SRC_ID);
-    const b = byId(id);
-    if (!b || !b.tiles) return; // "None" — data layers show on the app background
-    map.addSource(SRC_ID, {
-      type: "raster",
-      tiles: b.tiles,
-      tileSize: b.tileSize ?? 256,
-      attribution: b.attribution,
-    });
-    // Insert below the first existing layer so all data layers stay on top.
-    const first = map.getStyle().layers?.[0]?.id;
-    map.addLayer({ id: LAYER_ID, type: "raster", source: SRC_ID }, first);
-  };
-  if (map.isStyleLoaded()) doApply();
-  else map.once("load", doApply);
+  const seq = ++applySeq;
+  const b = byId(id);
+  const stylePromise = b?.styleUrl ? fetchStyle(b.styleUrl) : null;
+  void whenStyleReady(map, () => {
+    if (!stylePromise) {
+      removeOwned(map);
+      if (b?.tiles) addRaster(map, b, b.tiles);
+      return;
+    }
+    stylePromise
+      .then((style) => {
+        if (seq !== applySeq) return; // superseded by a later switch
+        removeOwned(map);
+        addStyle(map, b!, style);
+      })
+      .catch((e) => console.error("[basemap]", e));
+  });
 }
 
 // Tiny subscribe/notify store for the active basemap id (mirrors the app's
