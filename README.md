@@ -76,24 +76,30 @@ remote backend and no data leaves your machine.
 
 ## Build from source
 
-The build is based on the [DuckDB extension template](https://github.com/duckdb/extension-template):
+The extension is built on DuckDB's stable
+[C extension API](https://github.com/duckdb/extension-template-c): it calls
+DuckDB only through the function table DuckDB hands it at load time, so it
+contains no DuckDB code and **one binary loads on DuckDB 1.4 LTS and every
+later release**. The build needs CMake, a C/C++ compiler and Python 3, but no
+DuckDB checkout:
 
 ```sh
-make
+make configure      # once: Python venv with duckdb + the test runner
+make                # builds build/release/gis.duckdb_extension
+make test_release   # runs test/sql against the duckdb Python package
+make test_release DUCKDB_TEST_VERSION=1.4.5   # ...or against another DuckDB
 ```
 
-This produces:
+The targeted C-API version is `TARGET_DUCKDB_VERSION` in the `Makefile`; the
+DuckDB headers it builds against are vendored in `duckdb_capi/`. Load the
+result into any DuckDB with `-unsigned`:
 
 ```sh
-./build/release/duckdb                                # DuckDB shell with the extension loaded
-./build/release/test/unittest                         # test runner
-./build/release/extension/gis/gis.duckdb_extension    # loadable extension binary
+duckdb -unsigned -cmd "LOAD 'build/release/gis.duckdb_extension'"
 ```
 
-The extension is auto-loaded into the bundled `duckdb`/`unittest` binaries. The
-extension name is `gis` (see `extension_config.cmake`) — distinct from
-DuckDB's own core `ui` extension, so `LOAD ui; LOAD gis;` both work in the same
-session.
+The extension name is `gis` — distinct from DuckDB's own core `ui` extension,
+so `LOAD ui; LOAD gis;` both work in the same session.
 
 The built frontend (`frontend/dist/`) is committed and compiled into the
 extension binary as gzip-compressed byte arrays (see
@@ -114,11 +120,12 @@ stale relative to `frontend/src`.
 From SQL:
 
 ```sql
-CALL start_gis();          -- start the server and open a browser
-CALL start_gis_server();   -- start the server without opening a browser
-FROM gis_is_started();     -- is the server running?
-SELECT get_gis_url();      -- the local URL
-CALL stop_gis_server();    -- stop the server
+FROM start_gis();                      -- start the server and open a browser
+FROM start_gis_server();               -- start the server without opening a browser
+FROM start_gis_server(port := 4300);   -- ...on another port (default 4214, or $GIS_LOCAL_PORT)
+FROM gis_is_started();                 -- is the server running?
+FROM get_gis_url();                    -- the local URL
+FROM stop_gis_server();                -- stop the server
 ```
 
 The DuckDB shell's `-ui` flag is hardcoded to call `start_ui()`, which this
@@ -129,47 +136,36 @@ this UI, put `.ui_command start_gis()` in your `~/.duckdbrc`.
 
 ## Frontend development
 
-By default `CALL start_gis_server()` serves the frontend embedded in the
-extension binary — no network access, works fully offline. During
-development you'll want live reload instead: point the server at a Vite dev
-server with hot-module reload, which proxies the SQL-over-HTTP API back to
-the running extension. From `frontend/`:
+`FROM start_gis_server()` serves the frontend embedded in the extension
+binary — no network access, works fully offline. During development, run the
+Vite dev server with hot-module reload instead, which proxies the
+SQL-over-HTTP API to the running extension. From `frontend/`:
 
 ```sh
 pnpm install
 pnpm dev        # Vite dev server on http://127.0.0.1:5173
 ```
 
-Then start the extension shell **with `-unsigned`** — `gis_remote_url` is
-gated behind `allow_unsigned_extensions`, which can only be set at startup,
-not via `SET` once the database is running:
+and start the extension server in a DuckDB shell:
 
-```sh
-./build/release/duckdb -unsigned
-```
 ```sql
-SET gis_remote_url = 'http://localhost:5173';
-CALL start_gis_server();   -- binds localhost:4214
+LOAD 'build/release/gis.duckdb_extension';
+FROM start_gis_server();   -- binds localhost:4214
 ```
 
-Vite proxies `/ddb`, `/info`, and `/localEvents` to the extension server,
-rewriting `Origin` so the extension's same-origin gate is satisfied (see
-`frontend/vite.config.ts` and `src/http_server.cpp`). Other scripts:
+Then open http://127.0.0.1:5173. Vite proxies `/ddb` to the extension
+server, rewriting `Origin` so the extension's same-origin gate is satisfied
+(see `frontend/vite.config.ts` and `src/http_server.cpp`). Other scripts:
 `pnpm build`, `pnpm typecheck`.
 
 ## Architecture
 
-The extension starts an HTTP server that both serves the frontend and handles
-DuckDB operations. Requests to run SQL, interrupt runs, tokenize SQL, and
-receive events (e.g. catalog updates) are exposed as HTTP endpoints — see
-`HttpServer::Run` in [http_server.cpp](src/http_server.cpp).
-
-Which assets the server serves is controlled by the `gis_remote_url` setting
-(the DuckDB-UI mechanism we inherited). It defaults to empty, in which case
-the server serves the frontend embedded in the binary — see
-`HttpServer::HandleGetEmbedded` in `http_server.cpp`. Setting it to a URL
-(e.g. the Vite dev server above) restores the original DuckDB-UI behavior of
-proxying every GET to that origin.
+The extension starts an HTTP server that both serves the frontend and runs
+SQL. `GET` serves the frontend embedded in the binary (no network access);
+`POST /ddb/run` runs the SQL in the request body and returns the last
+statement's result as an [Arrow IPC](https://arrow.apache.org/docs/format/Columnar.html#ipc-streaming-format)
+stream; `POST /ddb/interrupt` cancels a running query. See
+[http_server.cpp](src/http_server.cpp) and [query.cpp](src/query.cpp).
 
 The frontend talks to the server through the TypeScript
 [duckdb-ui-client](ts/pkgs/duckdb-ui-client/package.json) package, which decodes

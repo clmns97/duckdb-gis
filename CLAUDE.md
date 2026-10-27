@@ -6,12 +6,11 @@ A DuckDB **GIS extension** (C++) that serves a browser-based GIS frontend. It be
 
 Only ~290 files are ours. **Ignore the vendored submodules** unless explicitly investigating upstream behavior:
 
-- `duckdb/` — upstream DuckDB source (289 MB submodule). **Do not search/grep here by default.**
-- `extension-ci-tools/`, `third_party/` — vendored build tooling / deps. Ignore by default.
+- `extension-ci-tools/`, `third_party/`, `duckdb_capi/` — vendored build tooling, deps (cpp-httplib, nanoarrow) and DuckDB's C API headers. Ignore by default.
 
 Our code:
 
-- `src/` — C++ extension. Key files: `http_server.cpp` (HTTP endpoints — SQL run, interrupt, tokenize, events; see `HttpServer::Run`), `event_dispatcher.cpp`, `state.cpp`, `settings.cpp`, `watcher.cpp`, `gis_extension.cpp`. Headers in `src/include/`, helpers in `src/utils/`.
+- `src/` — C++ extension on DuckDB's **stable C extension API** (no DuckDB C++ internals; see #88). `gis_extension.cpp` (entrypoint, SQL functions), `http_server.cpp` (embedded frontend, `/ddb/run`, `/ddb/interrupt`), `query.cpp` (SQL → Arrow IPC via nanoarrow). Headers in `src/include/`.
 - `ts/` — TypeScript packages for the UI (e.g. `duckdb-ui-client`, `duckdb-data-reader`). See `ts/README.md`.
 - `frontend/` — our MapLibre-based GIS frontend (the point of the project).
 - `design-system/` — `@duckdb-gis/ui-kit`, the Storybook UI kit. Components
@@ -28,13 +27,14 @@ where they were generated: `design-reference/` (Phase-1 design capture),
 ## Build & run
 
 ```sh
-make                                       # build (release); binaries land in build/release/
-./build/release/duckdb                     # DuckDB shell with extension auto-loaded
-./build/release/duckdb -cmd "CALL start_gis_server()"   # start the UI
-./build/release/test/unittest              # run tests
+make configure                             # once: Python venv with duckdb + test runner
+make                                       # build/release/gis.duckdb_extension
+make test_release                          # test/sql via duckdb_sqllogictest (latest duckdb)
+make test_release DUCKDB_TEST_VERSION=1.4.5   # ...against another DuckDB
+duckdb -unsigned -cmd "LOAD 'build/release/gis.duckdb_extension'; FROM start_gis_server()"
 ```
 
-`make` uses `extension-ci-tools/makefiles/duckdb_extension.Makefile`. Extension name is `gis` (`extension_config.cmake`).
+`make` uses `extension-ci-tools/makefiles/c_api_extensions/`. Extension name is `gis`; it targets C API `TARGET_DUCKDB_VERSION=v1.2.0` (Makefile), i.e. one binary for DuckDB 1.4 LTS and later. Only call DuckDB through `duckdb_*` C functions available in that band (see `duckdb_capi/duckdb_extension.h`).
 
 ## Work tracking
 

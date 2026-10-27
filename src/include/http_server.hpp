@@ -1,96 +1,36 @@
 #pragma once
 
-#include <duckdb.hpp>
-#include <duckdb/common/http_util.hpp>
+#include "duckdb_extension.h"
 
-#define CPPHTTPLIB_OPENSSL_SUPPORT
-#include "httplib.hpp"
-
-#include <memory>
+#include <cstdint>
 #include <string>
-#include <thread>
-
-#include "embedded_assets.hpp"
-#include "event_dispatcher.hpp"
-#include "watcher.hpp"
-
-namespace httplib = duckdb_httplib_openssl;
-
-namespace duckdb {
-struct HTTPParams;
-class MemoryStream;
 
 namespace gis {
 
-class HttpServer {
+// The UI server: serves the embedded frontend and runs the SQL it sends.
+// There is one per process. It runs queries on a connection the extension
+// opens while loading (see SetServerConnection).
+//
+// All functions are thread-safe.
 
-public:
-  HttpServer(shared_ptr<DatabaseInstance> _ddb_instance)
-      : ddb_instance(_ddb_instance) {}
+// Hands the server the connection to run queries on, replacing (and closing)
+// any previous one. Called while the extension loads, because the database
+// handle DuckDB passes to the entrypoint may not be kept: the connection
+// keeps the database alive instead.
+void SetServerConnection(duckdb_connection connection);
 
-  static HttpServer *GetInstance(ClientContext &);
-  static void UpdateDatabaseInstanceIfRunning(shared_ptr<DatabaseInstance>);
-  static bool IsRunningOnMachine(ClientContext &);
-  static bool Started();
-  static void StopInstance();
+// Starts the server on localhost:`port`. Sets `already_started` if it was
+// running already (on whatever port it was started with). Throws
+// std::runtime_error if it can't listen on the port.
+void StartServer(uint16_t port, bool &already_started);
 
-  static const HttpServer &Start(ClientContext &, bool *was_started = nullptr);
-  static bool Stop();
+// Stops the server. Returns false if it wasn't running.
+bool StopServer();
 
-  std::string LocalUrl() const;
+bool ServerStarted();
 
-private:
-  friend class Watcher;
-
-  // Lifecycle
-  void DoStart(const uint16_t local_port, const std::string &remote_url,
-               unique_ptr<HTTPParams>);
-  void DoStop();
-  void Run();
-  void UpdateDatabaseInstance(shared_ptr<DatabaseInstance> context_db);
-
-  // Http handlers
-  void HandleGetInfo(const httplib::Request &req, httplib::Response &res);
-  void HandleGetLocalEvents(const httplib::Request &req,
-                            httplib::Response &res);
-  void HandleGet(const httplib::Request &req, httplib::Response &res);
-  void HandleGetEmbedded(const httplib::Request &req, httplib::Response &res);
-  static const EmbeddedAsset *FindEmbeddedAsset(const std::string &path);
-  void HandleInterrupt(const httplib::Request &req, httplib::Response &res);
-  void DoHandleRun(const httplib::Request &req, httplib::Response &res,
-                   const httplib::ContentReader &content_reader);
-  void HandleRun(const httplib::Request &req, httplib::Response &res,
-                 const httplib::ContentReader &content_reader);
-  void HandleTokenize(const httplib::Request &req, httplib::Response &res,
-                      const httplib::ContentReader &content_reader);
-  std::string ReadContent(const httplib::ContentReader &content_reader);
-
-  // Http responses
-  void SetResponseContent(httplib::Response &res, const MemoryStream &content);
-  void SetResponseEmptyResult(httplib::Response &res);
-  void SetResponseErrorResult(httplib::Response &res, const std::string &error);
-
-  // Misc
-  shared_ptr<DatabaseInstance> LockDatabaseInstance();
-  void InitClientFromParams(httplib::Client &);
-
-  static void CopyAndSlice(duckdb::DataChunk &source, duckdb::DataChunk &target,
-                           idx_t row_count);
-
-  uint16_t local_port;
-  std::string local_url;
-  std::string remote_url;
-  weak_ptr<DatabaseInstance> ddb_instance;
-  std::string user_agent;
-  httplib::Server server;
-  unique_ptr<std::thread> main_thread;
-  unique_ptr<EventDispatcher> event_dispatcher;
-  unique_ptr<Watcher> watcher;
-  unique_ptr<HTTPParams> http_params;
-
-  static unique_ptr<HttpServer> server_instance;
-};
-;
+// The URL the running server serves the UI on, e.g. "http://localhost:4214/".
+// Empty if the server isn't running.
+std::string ServerUrl();
 
 } // namespace gis
-} // namespace duckdb

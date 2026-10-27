@@ -16,6 +16,7 @@ extension:
   version: 0.1.0
   language: C++
   build: cmake
+  requires_toolchains: "python3"
   license: MIT
   # The extension runs a threaded HTTP server, which has no wasm equivalent.
   excluded_platforms: wasm_mvp;wasm_eh;wasm_threads
@@ -69,7 +70,7 @@ docs:
     The frontend is compiled into the extension binary, so it works offline.
 
     The UI is reached at `http://localhost:4214` by default; change it with
-    `SET gis_local_port`.
+    `CALL start_gis(port := 4300)`.
 
     This project is a fork of
     [`duckdb/duckdb-ui`](https://github.com/duckdb/duckdb-ui), whose
