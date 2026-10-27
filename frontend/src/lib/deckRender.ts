@@ -6,8 +6,8 @@ import {
   GeoArrowPathLayer,
   GeoArrowPolygonLayer,
 } from "@geoarrow/deck.gl-geoarrow";
-import { tableFromIPC, type RecordBatch, type Table } from "apache-arrow";
-import { query, str } from "./duckdb";
+import { type RecordBatch, type Table } from "apache-arrow";
+import { query, queryArrow, str } from "./duckdb";
 import { getMap } from "./mapBus";
 import { selection, FID, fidTaggedRelation } from "./selection";
 import type { PickingInfo } from "@deck.gl/core";
@@ -15,14 +15,12 @@ import type { PickingInfo } from "@deck.gl/core";
 // ---------------------------------------------------------------------------
 // Unified GeoArrow render path. Geometry is encoded server-side by the
 // `duck_geoarrow` extension's `st_asgeoarrow*` functions into native GeoArrow
-// memory layout (STRUCT(x,y) coords nested by LIST), shipped as an Arrow-IPC
-// stream via `to_arrow_ipc`, and handed straight to the GeoArrow deck.gl layers
+// memory layout (STRUCT(x,y) coords nested by LIST), returned by the
+// extension as an Arrow IPC stream, and handed straight to the GeoArrow deck.gl layers
 // — which triangulate/tesselate on the GPU with zero per-row JS objects. Run
 // probes the geometry type first and dispatches to the matching layer.
 // ---------------------------------------------------------------------------
 
-// The ui-client decodes a BLOB result to a value carrying `.bytes`; extract it.
-const wkbBytes = (v: unknown): Uint8Array => (v as { bytes: Uint8Array }).bytes;
 const clean = (sql: string) => sql.trim().replace(/;\s*$/, "");
 
 let overlay: MapboxOverlay | null = null;
@@ -548,20 +546,10 @@ async function probeGeometry(innerSql: string): Promise<Probe> {
   return { type: str(r.gt).toUpperCase(), count, bounds };
 }
 
-// Fetch a query's result as an Arrow IPC stream. `to_arrow_ipc` returns the
-// stream split across a few BLOB rows (`ipc`), in order; concatenating them in
-// row order yields a parseable stream.
-async function fetchArrow(innerSql: string): Promise<{ table: Table; bytes: number }> {
-  const rows = await query(`SELECT ipc FROM to_arrow_ipc((${innerSql}))`);
-  const buffers = rows.map((r) => wkbBytes(r.ipc));
-  const bytes = buffers.reduce((s, b) => s + b.byteLength, 0);
-  const merged = new Uint8Array(bytes);
-  let off = 0;
-  for (const b of buffers) {
-    merged.set(b, off);
-    off += b.byteLength;
-  }
-  return { table: tableFromIPC(merged), bytes };
+// Fetch a query's result as an Arrow table: the extension answers every query
+// with an Arrow IPC stream, so this is a single round-trip.
+function fetchArrow(innerSql: string): Promise<{ table: Table; bytes: number }> {
+  return queryArrow(innerSql);
 }
 
 // Build one selection-aware deck.gl layer per non-empty Arrow batch from the
