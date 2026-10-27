@@ -44,7 +44,25 @@ jobs:
       extension_name: gis
 
   duckdb-next-patch-build:
-    name: Build GIS extension for next patch (v1.5-variegata)
+    name: Build GIS extension for next patch (v2.0-cyanoptera)
+    uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v2.0-cyanoptera
+    with:
+      ci_tools_version: v2.0-cyanoptera
+      duckdb_version: v2.0-cyanoptera
+      exclude_archs: 'wasm_mvp;wasm_eh;wasm_threads'
+      extension_name: gis
+
+  duckdb-stable-build:
+    name: Build GIS extension for DuckDB v2.0.0
+    uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v2.0-cyanoptera
+    with:
+      ci_tools_version: v2.0-cyanoptera
+      duckdb_version: v2.0.0
+      exclude_archs: 'wasm_mvp;wasm_eh;wasm_threads'
+      extension_name: gis
+
+  duckdb-prev-next-patch-build:
+    name: Build GIS extension for next 1.5 patch (v1.5-variegata)
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v1.5-variegata
     with:
       ci_tools_version: v1.5-variegata
@@ -52,12 +70,12 @@ jobs:
       exclude_archs: 'wasm_mvp;wasm_eh;wasm_threads'
       extension_name: gis
 
-  duckdb-stable-build:
-    name: Build GIS extension for DuckDB v1.5.4
+  duckdb-prev-build:
+    name: Build GIS extension for DuckDB v1.5.6
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v1.5-variegata
     with:
       ci_tools_version: v1.5-variegata
-      duckdb_version: v1.5.4
+      duckdb_version: v1.5.6
       exclude_archs: 'wasm_mvp;wasm_eh;wasm_threads'
       extension_name: gis
 

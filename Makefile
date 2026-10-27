@@ -4,6 +4,18 @@ PROJ_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 EXT_NAME=gis
 EXT_CONFIG=${PROJ_DIR}extension_config.cmake
 
+# DuckDB 2.x no longer derives its version from `git describe`: without an
+# explicit DUCKDB_VERSION it builds as v2.0.0-dev<commit count>, which can't
+# install official extensions (e.g. spatial) for the release. CI sets
+# DUCKDB_VERSION itself; for local builds, use the submodule's release tag
+# when it is checked out exactly at one. DuckDB 1.x ignores the variable.
+ifeq ($(DUCKDB_VERSION),)
+DUCKDB_SUBMODULE_TAG := $(shell git -C $(PROJ_DIR)duckdb describe --tags --exact-match 2>/dev/null)
+ifneq ($(DUCKDB_SUBMODULE_TAG),)
+export DUCKDB_VERSION := $(DUCKDB_SUBMODULE_TAG)
+endif
+endif
+
 # Include the Makefile from extension-ci-tools
 include extension-ci-tools/makefiles/duckdb_extension.Makefile
 
@@ -27,5 +39,6 @@ install-build-prereqs:
 # binary (see CMakeLists.txt / scripts/generate_embedded_assets.py). Not a
 # dependency of `release`/`debug`: the community-extensions CI has no Node,
 # so this must be run and the result committed deliberately.
+.PHONY: frontend
 frontend:
 	cd frontend && pnpm install && pnpm build
