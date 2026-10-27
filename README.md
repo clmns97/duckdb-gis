@@ -63,8 +63,6 @@ remote backend and no data leaves your machine.
   (`query.cpp`).
 - `frontend/` — the MapLibre/deck.gl GIS frontend (React + Vite). This is the
   point of the project.
-- `ts/` — the TypeScript client packages inherited from duckdb-ui. No longer
-  used by the frontend (it decodes Arrow with `apache-arrow`); due for removal.
 - `design-system/` — `@duckdb-gis/ui-kit`, a Storybook workspace for the
   frontend's components. See `design-system/README.md`.
 - `test/sql/` — SQL-level extension tests.
@@ -187,8 +185,9 @@ Our own releases start at `v0.1.0`.
 
 MIT — see [LICENSE](LICENSE). The copyright notice is retained from upstream
 `duckdb/duckdb-ui` (Stichting DuckDB Foundation), from which this project is
-derived and from which it inherits the extension scaffolding, the SQL-over-HTTP
-transport, and the TypeScript client packages under `ts/`. duckdb-gis is
+derived. It started from duckdb-ui's extension scaffolding, SQL-over-HTTP
+transport and TypeScript client; since the move to DuckDB's stable C API (#88)
+the extension, transport and client have been rewritten. duckdb-gis is
 developed in a separate repository and does not track upstream.
 
 DuckDB is a trademark of the DuckDB Foundation. This project is an independent
