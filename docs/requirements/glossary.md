@@ -15,10 +15,11 @@ type or module is named.
 are **read-only sources**: the system reads from them but never writes edits
 back. Contrast **working database**.
 
-**Basemap** — The raster or vector backdrop beneath the layers (OpenFreeMap, OSM,
-ESRI). Selected by the user; see `frontend/src/lib/basemaps.ts`. Basemap tiles
-are fetched from the network, which is a user-initiated fetch and therefore
-compatible with the **offline guarantee**.
+**Basemap** — The raster or vector backdrop beneath the layers. Selected by the
+user; see `frontend/src/lib/basemaps.ts`. The default, Natural Earth, is
+embedded in the extension and needs no network. The others (OpenFreeMap, OSM,
+ESRI) fetch tiles from the network only once the user chooses them, which is a
+user-initiated fetch and therefore compatible with the **offline guarantee**.
 
 **Browser panel** — The sidebar tab showing the read-only catalog of available
 **sources** — databases, schemas, tables. The counterpart to the **Layers

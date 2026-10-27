@@ -7,8 +7,9 @@
 // ST_AsMVT sources included). Instead the basemap's sources and layers are
 // inserted at the very bottom of the style, and swapped by removing/re-adding
 // just that group (`applyBasemap`), leaving data layers alone. A basemap is
-// either XYZ raster tiles (one source + layer) or a MapLibre style URL, whose
-// sources/layers are copied in under an id prefix.
+// XYZ raster tiles (one source + layer), a MapLibre style URL, or a style built
+// here (the offline Natural Earth default); a style's sources/layers are copied
+// in under an id prefix.
 // ---------------------------------------------------------------------------
 
 import type maplibregl from "maplibre-gl";
@@ -16,7 +17,7 @@ import type { LayerSpecification, StyleSpecification } from "maplibre-gl";
 import type { MenuItem } from "../components/ContextMenu";
 import { getMap, whenStyleReady } from "./mapBus";
 
-export type BasemapProvider = "OpenFreeMap" | "OSM" | "ESRI" | "None";
+export type BasemapProvider = "Natural Earth" | "OpenFreeMap" | "OSM" | "ESRI" | "None";
 
 export interface Basemap {
   id: string;
@@ -26,9 +27,64 @@ export interface Basemap {
   tiles?: string[];
   /** MapLibre style JSON URL (a vector basemap). */
   styleUrl?: string;
-  /** Neither `tiles` nor `styleUrl`: "no basemap". */
+  /** A MapLibre style built here (an offline basemap). */
+  style?: () => StyleSpecification;
+  /** None of `tiles`, `styleUrl` or `style`: "no basemap". */
   attribution: string;
   tileSize?: number;
+}
+
+// Offline default (#85): Natural Earth 1:50m land, lakes and country borders
+// (public domain), built by scripts/build_natural_earth.py into frontend/public
+// and embedded in the extension with the rest of the app, so the map needs no
+// network. No labels: those would need fonts from a server.
+interface NaturalEarthPalette {
+  water: string;
+  land: string;
+  coast: string;
+  border: string;
+  graticule: string;
+}
+
+const neData = (name: string): string =>
+  new URL(`basemaps/natural-earth/${name}.json`, document.baseURI).href;
+
+// Meridians and parallels every `step` degrees, within Web Mercator's latitudes.
+function graticule(step: number): GeoJSON.FeatureCollection {
+  const line = (coordinates: [number, number][]): GeoJSON.Feature => ({
+    type: "Feature",
+    properties: {},
+    geometry: { type: "LineString", coordinates },
+  });
+  const features: GeoJSON.Feature[] = [];
+  for (let lon = -180; lon <= 180; lon += step) features.push(line([[lon, -85], [lon, 85]]));
+  for (let lat = -90 + step; lat < 90; lat += step) features.push(line([[-180, lat], [180, lat]]));
+  return { type: "FeatureCollection", features };
+}
+
+function naturalEarth(p: NaturalEarthPalette): () => StyleSpecification {
+  // Thin lines at world scale, thickening as the map zooms in.
+  const width = (from: number, to: number) =>
+    ["interpolate", ["linear"], ["zoom"], 0, from, 7, to] as unknown as number;
+  return () => ({
+    version: 8,
+    sources: {
+      // GeoJSON tiles past z8 add nothing at 1:50m; overzoom them instead.
+      land: { type: "geojson", data: neData("land"), maxzoom: 8 },
+      lakes: { type: "geojson", data: neData("lakes"), maxzoom: 8 },
+      borders: { type: "geojson", data: neData("borders"), maxzoom: 8 },
+      graticule: { type: "geojson", data: graticule(15), maxzoom: 4 },
+    },
+    layers: [
+      { id: "water", type: "background", paint: { "background-color": p.water } },
+      { id: "graticule", type: "line", source: "graticule", paint: { "line-color": p.graticule, "line-width": 0.6 } },
+      { id: "land", type: "fill", source: "land", paint: { "fill-color": p.land } },
+      { id: "lakes", type: "fill", source: "lakes", paint: { "fill-color": p.water } },
+      { id: "coast", type: "line", source: "land", paint: { "line-color": p.coast, "line-width": width(0.4, 1) } },
+      { id: "lake-shore", type: "line", source: "lakes", paint: { "line-color": p.coast, "line-width": width(0.3, 0.8) } },
+      { id: "borders", type: "line", source: "borders", paint: { "line-color": p.border, "line-width": width(0.5, 1.2) } },
+    ],
+  });
 }
 
 const OSM_ATTR = "© OpenStreetMap contributors";
@@ -38,6 +94,32 @@ const OFM_ATTR = `OpenFreeMap © OpenMapTiles ${OSM_ATTR}`;
 const ofm = (style: string): string => `https://tiles.openfreemap.org/styles/${style}`;
 
 export const BASEMAPS: Basemap[] = [
+  {
+    id: "ne-light",
+    label: "Light (offline)",
+    provider: "Natural Earth",
+    style: naturalEarth({
+      water: "#d5dfe8",
+      land: "#f6f5f1",
+      coast: "#b4bfc9",
+      border: "#c2bcb2",
+      graticule: "rgba(110, 130, 150, 0.22)",
+    }),
+    attribution: "Made with Natural Earth",
+  },
+  {
+    id: "ne-dark",
+    label: "Dark (offline)",
+    provider: "Natural Earth",
+    style: naturalEarth({
+      water: "#1b2129",
+      land: "#2d333b",
+      coast: "#47515c",
+      border: "#58626d",
+      graticule: "rgba(150, 170, 190, 0.16)",
+    }),
+    attribution: "Made with Natural Earth",
+  },
   {
     id: "ofm-positron",
     label: "Positron (light)",
@@ -92,7 +174,7 @@ export const BASEMAPS: Basemap[] = [
   },
 ];
 
-const DEFAULT_ID = "ofm-positron";
+const DEFAULT_ID = "ne-light";
 const STORAGE_KEY = "gis.basemap.id";
 
 // Every source/layer id we own in the map style carries this prefix.
@@ -198,7 +280,11 @@ export function applyBasemap(map: maplibregl.Map | null, id: string): void {
   if (!map) return;
   const seq = ++applySeq;
   const b = byId(id);
-  const stylePromise = b?.styleUrl ? fetchStyle(b.styleUrl) : null;
+  const stylePromise = b?.styleUrl
+    ? fetchStyle(b.styleUrl)
+    : b?.style
+      ? Promise.resolve(b.style())
+      : null;
   void whenStyleReady(map, () => {
     if (!stylePromise) {
       removeOwned(map);

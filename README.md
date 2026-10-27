@@ -194,6 +194,10 @@ derived and from which it inherits the extension scaffolding, the SQL-over-HTTP
 transport, and the TypeScript client packages under `ts/`. duckdb-gis is
 developed in a separate repository and does not track upstream.
 
+The offline default basemap is made with [Natural Earth](https://www.naturalearthdata.com)
+(public domain) 1:50m data, built by `scripts/build_natural_earth.py` into
+`frontend/public/basemaps/natural-earth/`.
+
 DuckDB is a trademark of the DuckDB Foundation. This project is an independent
 derivative and is not affiliated with, maintained by, or endorsed by the DuckDB
 Foundation or DuckDB Labs. "duckdb-gis" is a descriptive name for a GIS
