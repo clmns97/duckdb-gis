@@ -44,20 +44,13 @@ duplicate it. Read:
 
 Two things worth knowing that aren't obvious from a directory listing:
 
-- **Ignore `duckdb/`, `extension-ci-tools/`, and `third_party/`.** They're
-  vendored submodules — hundreds of megabytes of upstream source. Almost
+- **Ignore `extension-ci-tools/`, `third_party/` and `duckdb_capi/`.** They're
+  vendored build tooling, libraries and DuckDB's C API headers. Almost
   nothing you want to change lives there.
 - **You probably don't need the C++ build.** A frontend-only change needs Node
-  and pnpm, nothing else. The first C++ build pulls the DuckDB submodule and
-  compiles OpenSSL through vcpkg, which takes a while; only take that on if
-  you're touching `src/`.
-
-For the C++ build you'll need a vcpkg checkout (the extension depends on
-OpenSSL — see `vcpkg.json`) with `VCPKG_TOOLCHAIN_PATH` pointing at
-`scripts/buildsystems/vcpkg.cmake`. The
-[DuckDB extension template](https://github.com/duckdb/extension-template)
-documents that toolchain setup. Note that CMake 4.x breaks some vcpkg ports;
-CMake 3.3x is the safe choice.
+  and pnpm, nothing else. The extension build needs CMake, a C/C++ compiler
+  and Python 3 (no DuckDB checkout); see
+  [Build from source](README.md#build-from-source).
 
 pnpm is pinned per workspace via `packageManager`, so `corepack enable pnpm`
 gets you the right version automatically.
@@ -95,21 +88,12 @@ make frontend        # rebuilds frontend/dist
 > run `make frontend` and **commit the resulting `frontend/dist`**. CI fails
 > the PR if it's stale.
 
-**TypeScript workspace (`ts/`)**
-
-```sh
-cd ts
-pnpm install
-pnpm build
-pnpm check      # formatting + lint
-pnpm test
-```
-
 **C++ extension (`src/`, `CMakeLists.txt`)**
 
 ```sh
+make configure    # once
 make
-./build/release/test/unittest
+make test_release
 ```
 
 ## Pull requests

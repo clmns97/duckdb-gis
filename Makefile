@@ -1,27 +1,36 @@
+.PHONY: clean clean_all frontend
+
 PROJ_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
-# Configuration of extension
-EXT_NAME=gis
-EXT_CONFIG=${PROJ_DIR}extension_config.cmake
+EXTENSION_NAME=gis
 
-# Include the Makefile from extension-ci-tools
-include extension-ci-tools/makefiles/duckdb_extension.Makefile
+# The stable C extension API version the extension targets (see #88). The
+# extension loads on every DuckDB that provides it: v1.2.0 is the oldest
+# stable band, so in practice DuckDB 1.4 LTS and every later release (1.2/1.3
+# use a different Linux platform name). Raising it unlocks newer C-API
+# functions but drops the DuckDB versions that lack them.
+USE_UNSTABLE_C_API=0
+TARGET_DUCKDB_VERSION=v1.2.0
 
-# OpenSSL's ./Configure needs Perl core modules (FindBin, File::Basename,
-# File::Path, ...). The linux_amd64 LTS build image ships only perl-IPC-Cmd, so
-# building OpenSSL *from source* fails there with a missing-Perl-module error.
-# Install perl-core before the build runs. Guarded so it is a no-op anywhere
-# without yum (macOS, Windows) and when OpenSSL is restored from the vcpkg cache.
-#
-# Not version-specific: 3.5.4 and 3.6.0 have byte-identical `use` lines in
-# Configure, so pinning an older OpenSSL in vcpkg.json does NOT avoid this (and
-# a non-default pin makes a binary-cache miss, i.e. a source build, more likely).
-# The only way to retire this hack is to drop the OpenSSL dependency outright
-# — see T-056.
-release debug: | install-build-prereqs
+all: configure release
 
-install-build-prereqs:
-	@command -v yum >/dev/null 2>&1 && yum install -y perl-core || true
+# Include makefiles from DuckDB
+include extension-ci-tools/makefiles/c_api_extensions/base.Makefile
+include extension-ci-tools/makefiles/c_api_extensions/c_cpp.Makefile
+
+configure: venv platform extension_version
+
+debug: build_extension_library_debug build_extension_with_metadata_debug
+release: build_extension_library_release build_extension_with_metadata_release
+
+# The tests run against the duckdb Python package installed into the venv
+# (latest by default; set DUCKDB_TEST_VERSION, e.g. 1.4.5, for another).
+test: test_debug
+test_debug: test_extension_debug
+test_release: test_extension_release
+
+clean: clean_build clean_cmake
+clean_all: clean clean_configure
 
 # Rebuilds frontend/dist, which is committed and embedded into the extension
 # binary (see CMakeLists.txt / scripts/generate_embedded_assets.py). Not a
