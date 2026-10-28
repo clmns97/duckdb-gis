@@ -21,6 +21,8 @@ import { OvertureModal } from "./components/OvertureModal";
 import { OvertureLogo } from "./components/OvertureLogo";
 import { AttachModal } from "./components/AttachModal";
 import { NewLayerModal } from "./components/NewLayerModal";
+import { SaveProjectModal } from "./components/SaveProjectModal";
+import { OpenProjectModal } from "./components/OpenProjectModal";
 import { ContextMenu, type MenuItem, type MenuState } from "./components/ContextMenu";
 import { ROW_BASE, LEAD_SLOT, KEBAB_SLOT } from "./components/rowSlots";
 import { loadCatalog, type CatalogDatabase, type CatalogTable } from "./lib/catalog";
@@ -37,6 +39,8 @@ import { toolMenuItems } from "./lib/geoprocessing";
 import { addOvertureLayers, createLayerFromSelection, type OvertureRequest } from "./lib/overture";
 import { pmSelection } from "./lib/pmtilesSelection";
 import { boxSelect } from "./lib/overtureTiles";
+import { ensureWorkingCatalog } from "./lib/workspace";
+import { unsavedChanges } from "./lib/unsavedChanges";
 
 export function App() {
   const [databases, setDatabases] = useState<CatalogDatabase[] | null>(null);
@@ -49,9 +53,14 @@ export function App() {
   const [overtureOpen, setOvertureOpen] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
   const [newLayerOpen, setNewLayerOpen] = useState(false);
+  const [saveProjectOpen, setSaveProjectOpen] = useState(false);
+  const [openProjectOpen, setOpenProjectOpen] = useState(false);
   // Re-render when the active basemap changes so both the Browser entry label
   // and the pinned Layers row (via LayersPanel) reflect it.
   useSyncExternalStore(basemap.subscribe, basemap.getSnapshot);
+  // Unsaved-working-database-state (#67): drives both the persistent "Unsaved"
+  // indicator on the Project button and the beforeunload guard below.
+  const dirty = useSyncExternalStore(unsavedChanges.subscribe, () => unsavedChanges.isDirty);
   // Left sidebar collapse (T-030). Collapsing hands the reclaimed width to the
   // map; a thin rail keeps the expand affordance visible. Persisted across
   // reloads. Toggle-only for v1 (no drag-resize).
@@ -141,6 +150,14 @@ export function App() {
   // submenu, anchored under the button (same menu the pinned Layers row uses).
   const openBasemapMenu = (e: React.MouseEvent) => anchorMenu(e, basemapMenuItems());
 
+  // Project Save/Open (#33): a header dropdown, same anchorMenu pattern as
+  // Processing/Basemap, next to Help.
+  const openProjectMenu = (e: React.MouseEvent) =>
+    anchorMenu(e, [
+      { label: "Save project…", onSelect: () => setSaveProjectOpen(true) },
+      { label: "Open project…", onSelect: () => setOpenProjectOpen(true) },
+    ]);
+
   // Right-click a geometry-bearing table → "Add to map" (QGIS "Add Layer").
   // Only spatial tables get the menu (T-001 flagged their geometry columns);
   // one item per geometry column so a multi-geometry table exposes each.
@@ -170,18 +187,41 @@ export function App() {
     addOvertureLayers(req);
   };
 
+  // Warn before the tab closes/reloads/navigates away with unsaved working-
+  // database state (#67) — the browser's own native confirmation, no custom
+  // UI needed. No-op (and no dialog) whenever `dirty` is false.
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!dirty) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [dirty]);
+
   useEffect(() => {
     (async () => {
-      // Spatial is required for ST_* functions. Results arrive as Arrow IPC
-      // from the extension itself, and geometry as WKB that the frontend
-      // decodes for deck.gl (lib/wkb.ts): no community extensions needed.
+      // Spatial is required for ST_* functions; json backs the _gis.style
+      // column project files use (#33). Results arrive as Arrow IPC from the
+      // extension itself, and geometry as WKB that the frontend decodes for
+      // deck.gl (lib/wkb.ts): no community extensions needed.
       try {
         await query("INSTALL spatial; LOAD spatial;");
+        await query("INSTALL json; LOAD json;");
         // Cache parquet metadata across queries so remote reads (Overture on S3,
         // T-029) don't re-fetch file footers each scan — ~10x on repeat reads.
         await query("SET enable_object_cache=true;");
       } catch {
         // ignore; catalog still loads, spatial/arrow queries will report errors
+      }
+      // Unlike the extension loads above, a failure here is worth surfacing:
+      // scratch/new-layer writes silently land in the wrong catalog otherwise
+      // (#66) — see workspace.ts.
+      try {
+        await ensureWorkingCatalog();
+      } catch (e) {
+        setError(errMsg(e));
       }
       loadCatalog()
         .then(setDatabases)
@@ -218,6 +258,21 @@ export function App() {
         <span className="flex-1" />
         <Button variant="ghost" onClick={openProcessingMenu} title="Geoprocessing tools">
           Processing
+        </Button>
+        <Button
+          variant="ghost"
+          onClick={openProjectMenu}
+          title={dirty ? "Save or open a project file — unsaved changes" : "Save or open a project file"}
+        >
+          <span className="inline-flex items-center gap-1.5">
+            Project
+            {dirty && (
+              <span
+                className="w-1.5 h-1.5 rounded-full bg-amber-500"
+                aria-label="Unsaved changes"
+              />
+            )}
+          </span>
         </Button>
         <Button variant="ghost">Help</Button>
       </header>
@@ -438,6 +493,18 @@ export function App() {
             setNewLayerOpen(false);
             setTab("layers"); // surface the Layers panel so the new layer is visible
             editing.beginNewLayer({ name, geometryKind });
+          }}
+        />
+      )}
+
+      {saveProjectOpen && <SaveProjectModal onClose={() => setSaveProjectOpen(false)} />}
+
+      {openProjectOpen && (
+        <OpenProjectModal
+          onClose={() => setOpenProjectOpen(false)}
+          onOpened={(kind) => {
+            refreshCatalog();
+            if (kind === "project") setTab("layers"); // restored layers are what changed
           }}
         />
       )}

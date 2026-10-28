@@ -86,7 +86,9 @@ export interface ActiveLayer {
   /** Geometry family (T-039), resolved once at add time, so the Layers panel can
    *  draw a symbology glyph tinted from `style`. Absent while still loading. */
   geometryKind?: GeometryKind;
-  /** The query behind a `preview` layer, kept for re-inspection / future re-run. */
+  /** The query behind a `preview` or `query` layer, kept for re-inspection and
+   *  (for `query` layers) project-file round-tripping (#33 — Save persists it,
+   *  Open re-runs it). */
   sql?: string;
   /** Present for an Overture PMTiles layer (T-058): a native MapLibre vector-tile
    *  layer, not a deck layer, so visibility/removal route to `overtureTiles`.
@@ -296,7 +298,7 @@ export const layers = {
     if (existing && existing.status !== "error") return;
     if (existing) removeDeckLayer(id);
 
-    byId.set(id, { id, kind: "query", name, visible: true, status: "loading" });
+    byId.set(id, { id, kind: "query", name, sql, visible: true, status: "loading" });
     if (!existing) order = [id, ...order]; // keep position on retry
     syncDeckOrder();
     emit();
