@@ -19,6 +19,8 @@
 //     durable, ADR-0002) rather than the working catalog, but the in-progress
 //     drag/vertex-edit before that commit is exactly the same kind of
 //     lose-it-on-close risk, so it's covered the same way.
+//   - an undo/redo step in an edit session (`editing.ts` `restoreSnapshot`),
+//     which bypasses the `change` handler above but still alters the draft.
 //   - `createLayerFromSelection` (Overture "Create Layer from Selection"),
 //     the one other path that writes into the working catalog without going
 //     through an edit session first.

@@ -376,6 +376,11 @@ function restoreSnapshot(snap: GeoJSONStoreFeatures[]): void {
   for (const f of restored) {
     if (f.properties?.__rid != null) dirty.add(String(f.id));
   }
+  // The `restoring` guard above also skips the `change` handler's
+  // `markDirty()`, but an undo/redo is a real edit of the working set — e.g.
+  // undoing a delete after a project Save (which cleared the flag on an
+  // empty draft) brings back features that are now unsaved (#67).
+  unsavedChanges.markDirty();
   refresh();
 }
 
