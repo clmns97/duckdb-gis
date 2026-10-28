@@ -11,7 +11,7 @@ statement ok
 ATTACH '__TEST_DIR__/attach_readonly.db' AS src;
 
 statement ok
-CREATE TABLE src.t(a INT);
+CREATE OR REPLACE TABLE src.t(a INT);
 
 statement ok
 INSERT INTO src.t VALUES (1);
