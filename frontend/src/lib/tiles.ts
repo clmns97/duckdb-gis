@@ -1,6 +1,6 @@
 import maplibregl from "maplibre-gl";
 import { query, sqlLit } from "./duckdb";
-import { getMap } from "./mapBus";
+import { getMap, whenStyleReady } from "./mapBus";
 import { addFamilyLayers, removeFamilyLayers } from "./vectorStyle";
 
 // ---------------------------------------------------------------------------
@@ -132,9 +132,8 @@ export function installTileProtocol(): void {
     if (!spec) throw new Error(`unknown tile layer: ${id}`);
 
     const rows = await query(buildTileSql(spec, +zs, +xs, +ys));
-    // ST_AsMVT returns a BLOB; the client decodes it to a value carrying `bytes`.
-    const value = rows[0]?.tile as { bytes?: Uint8Array } | null | undefined;
-    const bytes = value?.bytes;
+    // ST_AsMVT returns a BLOB, which query() decodes to a Uint8Array.
+    const bytes = rows[0]?.tile as Uint8Array | null | undefined;
     if (!bytes || bytes.byteLength === 0) return { data: EMPTY_TILE };
 
     // Copy out of the (possibly shared) backing buffer into a tight ArrayBuffer.
@@ -184,8 +183,7 @@ export function addTileLayer(spec: TileLayerSpec): void {
     removeMapLayer(map, spec.id);
     addSourceAndLayers(map, spec);
   };
-  if (map.isStyleLoaded()) apply();
-  else map.once("load", apply);
+  void whenStyleReady(map, apply);
 }
 
 function removeMapLayer(map: maplibregl.Map, id: string): void {

@@ -1,11 +1,14 @@
 #
-# Builds and tests the `gis` extension against the DuckDB versions we support.
+# Builds and tests the `gis` extension.
+#
+# The extension targets DuckDB's stable C extension API (v1.2.0, see the
+# Makefile), so one build per platform serves every supported DuckDB version:
+# the distribution job builds and tests it against the latest DuckDB, and the
+# compatibility job runs the tests against each DuckDB version we support.
 #
 # There are deliberately no deploy jobs here. Distribution is handled by
 # duckdb/community-extensions: that repo builds, signs and publishes the
-# extension from the ref pinned in its extensions/gis/description.yml. Upstream
-# duckdb-ui deployed to DuckDB Labs' own extension repository, which we have
-# neither credentials nor cause to write to.
+# extension from the ref pinned in its extensions/gis/description.yml.
 #
 # wasm is excluded everywhere: the extension runs a threaded HTTP server, which
 # has no wasm equivalent. Keep this in sync with `excluded_platforms` in the
@@ -15,17 +18,13 @@ name: Main Extension Distribution Pipeline
 on:
   pull_request:
     paths-ignore:
-      - '.github/workflows/TypeScriptWorkspace.yml'
       - 'docs/**'
-      - 'ts/**'
       - 'README.md'
   push:
     branches:
       - 'main'
     paths-ignore:
-      - '.github/workflows/TypeScriptWorkspace.yml'
       - 'docs/**'
-      - 'ts/**'
       - 'README.md'
   workflow_dispatch:
 
@@ -34,49 +33,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  duckdb-main-build:
-    name: Build GIS extension for main branch
-    uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@main
+  duckdb-build:
+    name: Build GIS extension
+    uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v2.0-cyanoptera
     with:
-      ci_tools_version: main
-      duckdb_version: main
+      duckdb_version: v2.0.0
+      ci_tools_version: v2.0-cyanoptera
       exclude_archs: 'wasm_mvp;wasm_eh;wasm_threads'
       extension_name: gis
+      extra_toolchains: python3
 
-  duckdb-next-patch-build:
-    name: Build GIS extension for next patch (v1.5-variegata)
-    uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v1.5-variegata
-    with:
-      ci_tools_version: v1.5-variegata
-      duckdb_version: v1.5-variegata
-      exclude_archs: 'wasm_mvp;wasm_eh;wasm_threads'
-      extension_name: gis
-
-  duckdb-stable-build:
-    name: Build GIS extension for DuckDB v1.5.4
-    uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v1.5-variegata
-    with:
-      ci_tools_version: v1.5-variegata
-      duckdb_version: v1.5.4
-      exclude_archs: 'wasm_mvp;wasm_eh;wasm_threads'
-      extension_name: gis
-
-  duckdb-lts-next-patch-build:
-    name: Build GIS extension binaries for next LTS patch (v1.4-andium)
-    uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v1.4-andium
-    with:
-      ci_tools_version: v1.4-andium
-      duckdb_version: v1.4-andium
-      exclude_archs: 'wasm_mvp;wasm_eh;wasm_threads'
-      extension_name: gis
-      vcpkg_commit: '84bab45d415d22042bd0b9081aea57f362da3f35'
-
-  duckdb-lts-build:
-    name: Build GIS extension for DuckDB v1.4.5 (LTS)
-    uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v1.4-andium
-    with:
-      ci_tools_version: v1.4-andium
-      duckdb_version: v1.4.5
-      exclude_archs: 'wasm_mvp;wasm_eh;wasm_threads'
-      extension_name: gis
-      vcpkg_commit: '84bab45d415d22042bd0b9081aea57f362da3f35'
+  compatibility:
+    name: Test on DuckDB ${{ matrix.duckdb }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # The oldest supported release (1.4 LTS), the last 1.x, and the latest.
+        duckdb: ['1.4.5', '1.5.6', '2.0.0']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Build
+        run: make configure release DUCKDB_TEST_VERSION=${{ matrix.duckdb }}
+      - name: Test
+        run: make test_release DUCKDB_TEST_VERSION=${{ matrix.duckdb }}

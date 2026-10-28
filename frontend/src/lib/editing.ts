@@ -40,7 +40,7 @@ import {
   type GeoJSONStoreFeatures,
 } from "terra-draw";
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
-import { getMap } from "./mapBus";
+import { getMap, whenStyleReady } from "./mapBus";
 import { query, str, sqlLit } from "./duckdb";
 import { setDrawHooks, requestSync, setDeckLayerSuppressed } from "./deckRender";
 import { unsavedChanges } from "./unsavedChanges";
@@ -400,9 +400,7 @@ export const editing = {
       emit();
     });
 
-    const start = () => draw?.start();
-    if (map.isStyleLoaded()) start();
-    else map.once("load", start);
+    void whenStyleReady(map, () => draw?.start());
 
     // Inject the edit gate + z-order provider into the read-only render path.
     setDrawHooks({ isEditing: this.isEditing, beforeId: bottomLayerId });
