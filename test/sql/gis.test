@@ -7,8 +7,6 @@ require gis
 # Keep the test hermetic: bind to a non-default port and never open a browser.
 # Use the *_server verb (not start_gis, which tries to launch a browser via
 # the system() "open" command).
-statement ok
-SET gis_local_port = 42131;
 
 # Nothing running yet.
 query I
@@ -18,7 +16,7 @@ false
 
 # Start the server. The status string embeds the local URL on our chosen port.
 query I
-SELECT result LIKE 'duckdb-gis server %started at http://localhost:42131/' FROM start_gis_server();
+SELECT result LIKE 'duckdb-gis server %started at http://localhost:42131/' FROM start_gis_server(port := 42131);
 ----
 true
 
@@ -33,9 +31,10 @@ FROM get_gis_url();
 ----
 http://localhost:42131/
 
-# Starting again is idempotent: reports "already started", still one server.
+# Starting again is idempotent: reports "already started", still one server
+# (on its original port, whatever port is passed now).
 query I
-SELECT result LIKE 'duckdb-gis server already started at %' FROM start_gis_server();
+SELECT result LIKE 'duckdb-gis server already started at http://localhost:42131/' FROM start_gis_server(port := 42132);
 ----
 true
 
@@ -55,3 +54,15 @@ query I
 FROM stop_gis_server();
 ----
 duckdb-gis server already stopped
+
+# get_gis_url needs a running server.
+statement error
+FROM get_gis_url();
+----
+duckdb-gis server not started
+
+# The port must be a valid TCP port.
+statement error
+FROM start_gis_server(port := 70000);
+----
+port must be between 1 and 65535

@@ -185,14 +185,12 @@ export function App() {
 
   useEffect(() => {
     (async () => {
-      // Spatial is required for ST_* functions; the arrow extension powers the
-      // columnar Arrow-IPC render path (to_arrow_ipc); duck_geoarrow provides the
-      // st_asgeoarrow* encoders that feed the GeoArrow deck.gl layers; json backs
-      // the _gis.style column project files use (#33).
+      // Spatial is required for ST_* functions; json backs the _gis.style
+      // column project files use (#33). Results arrive as Arrow IPC from the
+      // extension itself, and geometry as WKB that the frontend decodes for
+      // deck.gl (lib/wkb.ts): no community extensions needed.
       try {
         await query("INSTALL spatial; LOAD spatial;");
-        await query("INSTALL arrow FROM community; LOAD arrow;");
-        await query("INSTALL duck_geoarrow FROM community; LOAD duck_geoarrow;");
         await query("INSTALL json; LOAD json;");
         // Cache parquet metadata across queries so remote reads (Overture on S3,
         // T-029) don't re-fetch file footers each scan — ~10x on repeat reads.

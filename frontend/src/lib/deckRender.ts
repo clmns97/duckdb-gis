@@ -6,23 +6,21 @@ import {
   GeoArrowPathLayer,
   GeoArrowPolygonLayer,
 } from "@geoarrow/deck.gl-geoarrow";
-import { tableFromIPC, type RecordBatch, type Table } from "apache-arrow";
-import { query, str } from "./duckdb";
+import { Table, makeVector, type RecordBatch } from "apache-arrow";
+import { query, queryArrow, str } from "./duckdb";
+import { wkbToGeoArrow } from "./wkb";
 import { getMap } from "./mapBus";
 import { selection, FID, fidTaggedRelation } from "./selection";
 import type { PickingInfo } from "@deck.gl/core";
 
 // ---------------------------------------------------------------------------
-// Unified GeoArrow render path. Geometry is encoded server-side by the
-// `duck_geoarrow` extension's `st_asgeoarrow*` functions into native GeoArrow
-// memory layout (STRUCT(x,y) coords nested by LIST), shipped as an Arrow-IPC
-// stream via `to_arrow_ipc`, and handed straight to the GeoArrow deck.gl layers
+// Unified GeoArrow render path. DuckDB returns geometry as WKB in an Arrow IPC
+// stream; lib/wkb.ts decodes it into native GeoArrow memory layout (STRUCT(x,y)
+// coords nested by LIST), handed straight to the GeoArrow deck.gl layers
 // — which triangulate/tesselate on the GPU with zero per-row JS objects. Run
 // probes the geometry type first and dispatches to the matching layer.
 // ---------------------------------------------------------------------------
 
-// The ui-client decodes a BLOB result to a value carrying `.bytes`; extract it.
-const wkbBytes = (v: unknown): Uint8Array => (v as { bytes: Uint8Array }).bytes;
 const clean = (sql: string) => sql.trim().replace(/;\s*$/, "");
 
 let overlay: MapboxOverlay | null = null;
@@ -231,7 +229,7 @@ selection.subscribe(() => {
 });
 
 export interface DeckTimings {
-  queryMs: number; // DuckDB round-trips (probe + st_asgeoarrow encode)
+  queryMs: number; // DuckDB round-trips (probe + geometry fetch) and WKB decoding
   parseMs: number; // Arrow-IPC → table + layer construction
   bytes: number; // geometry payload (IPC stream)
 }
@@ -251,11 +249,10 @@ interface Probe {
   bounds: [number, number, number, number] | null; // [xmin,ymin,xmax,ymax]
 }
 
-// Maps a DuckDB geometry type to the encoder function + a layer factory. Single
-// and Multi variants of a family share a layer (the GeoArrow layers accept both
+// Maps a DuckDB geometry type to its layer factories. Single and Multi variants
+// of a family share a layer (the GeoArrow layers accept both
 // PointData/MultiPointData, Polygon/MultiPolygon, …).
 interface GeomSpec {
-  fn: string; // duck_geoarrow encoder
   // Selection-aware builder for the editor's Run preview (highlights picks).
   layer: (batch: RecordBatch, geom: unknown, id: string, source: string) => Layer;
   // Builder for persistent added layers (T-024): base colours from the layer's
@@ -450,19 +447,19 @@ const POLYGON_STATIC = (
   });
 
 const SPECS: Record<string, GeomSpec> = {
-  POINT: { fn: "st_asgeoarrowpoint", layer: POINT, staticLayer: POINT_STATIC },
-  MULTIPOINT: { fn: "st_asgeoarrowmultipoint", layer: POINT, staticLayer: POINT_STATIC },
-  LINESTRING: { fn: "st_asgeoarrowlinestring", layer: PATH, staticLayer: PATH_STATIC },
-  MULTILINESTRING: { fn: "st_asgeoarrowmultilinestring", layer: PATH, staticLayer: PATH_STATIC },
-  POLYGON: { fn: "st_asgeoarrowpolygon", layer: POLYGON, staticLayer: POLYGON_STATIC },
-  MULTIPOLYGON: { fn: "st_asgeoarrowmultipolygon", layer: POLYGON, staticLayer: POLYGON_STATIC },
+  POINT: { layer: POINT, staticLayer: POINT_STATIC },
+  MULTIPOINT: { layer: POINT, staticLayer: POINT_STATIC },
+  LINESTRING: { layer: PATH, staticLayer: PATH_STATIC },
+  MULTILINESTRING: { layer: PATH, staticLayer: PATH_STATIC },
+  POLYGON: { layer: POLYGON, staticLayer: POLYGON_STATIC },
+  MULTIPOLYGON: { layer: POLYGON, staticLayer: POLYGON_STATIC },
 };
 
 // A result set can freely mix a family's simple and multi variants (e.g.
 // Overture buildings: mostly POLYGON with some MULTIPOLYGON) — real data isn't
 // guaranteed homogeneous just because `probeGeometry` samples one row's type.
-// Always encode through the family's multi spec over `ST_Multi(geom)` (a no-op
-// on already-multi rows), so a single query never depends on every row sharing
+// Always fetch the family's multi type over `ST_Multi(geom)` (a no-op on
+// already-multi rows), so a single query never depends on every row sharing
 // the exact type `any_value` happened to sample.
 const FAMILY_SPECS: Record<GeometryKind, GeomSpec> = {
   point: SPECS.MULTIPOINT,
@@ -480,7 +477,8 @@ export async function renderGeoArrow(userSql: string): Promise<DeckOutcome> {
 
   const t0 = performance.now();
   const probe = await probeGeometry(inner);
-  const spec = FAMILY_SPECS[geometryKindOf(probe.type)];
+  const kind = geometryKindOf(probe.type);
+  const spec = FAMILY_SPECS[kind];
   if (!spec) {
     throw new Error(`unsupported geometry type for rendering: ${probe.type}`);
   }
@@ -497,15 +495,7 @@ export async function renderGeoArrow(userSql: string): Promise<DeckOutcome> {
     };
   }
 
-  // Carry a deterministic `__fid` alongside the encoded geometry so picked
-  // features resolve back to source rows (see selection.ts). `fidTaggedRelation`
-  // is the single source of truth for how fids are assigned. `ST_Multi` folds
-  // a family's simple rows onto its multi variant (a no-op on already-multi
-  // ones) so a single query can freely mix POLYGON/MULTIPOLYGON etc. — see
-  // `FAMILY_SPECS`.
-  const encoded =
-    `SELECT ${FID}, ${spec.fn}(ST_Multi(geom)) AS geom FROM (${fidTaggedRelation(inner)}) _t`;
-  const { table, bytes } = await fetchArrow(encoded);
+  const { table, bytes } = await fetchGeoArrow(inner, kind);
   const t1 = performance.now();
 
   rendered = { table, spec, source: inner };
@@ -548,20 +538,25 @@ async function probeGeometry(innerSql: string): Promise<Probe> {
   return { type: str(r.gt).toUpperCase(), count, bounds };
 }
 
-// Fetch a query's result as an Arrow IPC stream. `to_arrow_ipc` returns the
-// stream split across a few BLOB rows (`ipc`), in order; concatenating them in
-// row order yields a parseable stream.
-async function fetchArrow(innerSql: string): Promise<{ table: Table; bytes: number }> {
-  const rows = await query(`SELECT ipc FROM to_arrow_ipc((${innerSql}))`);
-  const buffers = rows.map((r) => wkbBytes(r.ipc));
-  const bytes = buffers.reduce((s, b) => s + b.byteLength, 0);
-  const merged = new Uint8Array(bytes);
-  let off = 0;
-  for (const b of buffers) {
-    merged.set(b, off);
-    off += b.byteLength;
-  }
-  return { table: tableFromIPC(merged), bytes };
+// Fetch a relation's features as a deterministic `__fid` (so picked features
+// resolve back to source rows; `fidTaggedRelation` is the single source of
+// truth for how fids are assigned, and drops NULL geometries) plus native
+// GeoArrow geometry. DuckDB sends WKB (`ST_AsWKB`, from `spatial` on every
+// DuckDB we support) and lib/wkb.ts decodes it: no duck_geoarrow extension.
+// `ST_Multi` folds a family's simple rows onto its multi variant (a no-op on
+// already-multi ones) so a query can mix POLYGON/MULTIPOLYGON etc.
+async function fetchGeoArrow(
+  inner: string,
+  kind: GeometryKind,
+): Promise<{ table: Table; bytes: number }> {
+  const { table, bytes } = await queryArrow(
+    `SELECT ${FID}, ST_AsWKB(ST_Multi(geom)) AS geom FROM (${fidTaggedRelation(inner)}) _t`,
+  );
+  const geom = wkbToGeoArrow(table.getChild("geom")!, kind);
+  // One contiguous batch, so the overlay draws one layer per family rather than
+  // one per result batch (DuckDB returns batches of 2048 rows).
+  const fids = makeVector(table.getChild(FID)!.toArray() as BigInt64Array);
+  return { table: new Table({ [FID]: fids, geom }), bytes };
 }
 
 // Build one selection-aware deck.gl layer per non-empty Arrow batch from the
@@ -635,16 +630,13 @@ export interface AddedLayerOutcome {
 export async function addDeckLayer(id: string, sourceSql: string): Promise<AddedLayerOutcome> {
   const inner = clean(sourceSql);
   const probe = await probeGeometry(inner);
-  const spec = FAMILY_SPECS[geometryKindOf(probe.type)];
+  const kind = geometryKindOf(probe.type);
+  const spec = FAMILY_SPECS[kind];
   if (!spec) throw new Error(`unsupported geometry type for rendering: ${probe.type}`);
 
-  // Carry a deterministic `__fid` alongside the geometry (same tagging the Run
-  // preview uses) so features picked on this layer resolve back to source rows
-  // for downstream tools (T-041). `fidTaggedRelation` also applies the
-  // `geom IS NOT NULL` filter, so no extra WHERE is needed here. `ST_Multi`
-  // folds simple rows onto the family's multi variant — see `FAMILY_SPECS`.
-  const encoded = `SELECT ${FID}, ${spec.fn}(ST_Multi(geom)) AS geom FROM (${fidTaggedRelation(inner)}) _t`;
-  const { table } = await fetchArrow(encoded);
+  // Same `__fid` tagging as the Run preview, so features picked on this layer
+  // resolve back to source rows for downstream tools (T-041).
+  const { table } = await fetchGeoArrow(inner, kind);
   // Keep an existing layer's style on replace so its symbology stays stable.
   const style = added.get(id)?.style ?? nextStyle(probe.type);
   // Keep an existing layer's edit-suppression across a re-add (e.g. a commit

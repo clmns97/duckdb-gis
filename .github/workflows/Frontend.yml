@@ -3,14 +3,12 @@ on:
   pull_request:
     paths:
       - "frontend/**"
-      - "ts/**"
       - ".github/workflows/Frontend.yml"
   push:
     branches:
       - "main"
     paths:
       - "frontend/**"
-      - "ts/**"
       - ".github/workflows/Frontend.yml"
   workflow_dispatch:
 
@@ -32,10 +30,6 @@ jobs:
         with:
           cache: 'pnpm'
           cache-dependency-path: frontend/pnpm-lock.yaml
-
-      - name: Install ts workspace dependencies
-        working-directory: ts
-        run: pnpm install
 
       - name: Install frontend dependencies
         working-directory: frontend
