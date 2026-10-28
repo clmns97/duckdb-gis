@@ -6,6 +6,16 @@
 | **Date** | 2026-09-07 |
 | **Tracked by** | #29 (RFC), #33 (project-file implementation) |
 
+> **Partially superseded (2026-09-08).** The "attached databases and files are
+> read-only sources" clause below — and its consequence that write-back is
+> permanently out of scope — is replaced by
+> [ADR-0002](0002-edit-session-promotes-a-source-to-writable.md): a source is
+> read-only except for the span of an explicit edit session, which can write
+> back to it. The other two decisions here, an in-memory working database and
+> explicit project files, stand unchanged. Left as written below per this
+> repo's ADR convention (`docs/adr/README.md`) — the reasoning that led here
+> is exactly what stops it being repeated.
+
 ## Context
 
 A duckdb-gis session accumulates state from several unrelated directions: drawn

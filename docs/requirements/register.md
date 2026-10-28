@@ -209,32 +209,46 @@ to become a layer without a round-trip through a file.
 
 ---
 
-### REQ-F-006 — Attach external data sources read-only
+### REQ-F-006 — Attach external data sources read-only, editable only in an edit session
 
 | | |
 |---|---|
 | **Type** | Functional |
 | **Status** | Agreed (partly implemented) |
 | **Priority** | P1 |
-| **Stakeholder** | Data engineer |
-| **Source** | ADR-0001; #8, #9, #10 |
+| **Stakeholder** | Data engineer; GIS practitioner |
+| **Source** | ADR-0002 (supersedes the read-only clause of ADR-0001); #8, #9, #10, #66 |
 
 **Requirement.** The user shall be able to attach additional data sources —
 DuckDB files, object storage, folders of geo files, Postgres — and the system
-shall treat them as read-only, never writing edits back to them.
+shall treat them as read-only *except* for the span of an explicit edit
+session on one of their tables, during which edits write back to that source.
+Outside a session, no write of any kind — an edit, a geoprocessing result, an
+unrelated SQL statement — may reach an attached source.
 
 **Rationale.** Pointing the tool at data you already have is the main adoption
-path. Read-only is what makes that safe: a user must be able to attach their
-production database without fear that a stray edit rewrites it.
+path, and the QGIS workflow this project follows (`CLAUDE.md` "Vision";
+REQ-Q-002) is toggle-editing → edit → save back to the source. Read-only *by
+default* is what makes attaching safe — a stray edit or a bug elsewhere in the
+app can't silently rewrite a database the user only meant to browse — without
+permanently blocking the thing a data engineer actually wants to do with their
+own data: fix it. See ADR-0002 for the full reasoning, including why
+permanently read-only was reversed.
 
 **Acceptance criteria.**
 
 - [x] DuckDB database files can be attached and browsed.
 - [ ] Object storage and folders of geo files can be attached (#9).
 - [ ] Postgres can be attached (#10, exploratory).
-- [ ] Read-only is *enforced*, not merely conventional (ADR-0001, #66).
+- [x] A source attaches read-only, unconditionally — no opt-out (#66).
+- [x] Toggling editing on a source's layer promotes that source to writable;
+      Save/Cancel demotes it back (#66).
+- [x] No write reaches a source outside an active edit session on it (#66) —
+      enforced by DuckDB's own read-only attach, not a convention.
 
-**Traces to.** ADR-0001 · #8, #9, #10, #66 · `frontend/src/lib/attach.ts`
+**Traces to.** ADR-0002, ADR-0001 · #8, #9, #10, #66 ·
+`frontend/src/lib/attach.ts`, `frontend/src/lib/workspace.ts`,
+`frontend/src/lib/editing.ts`
 
 ---
 
@@ -259,7 +273,54 @@ that makes in-memory-by-default safe.
 
 ---
 
-### REQ-F-008 — Never render non-WGS84 geometry silently wrong
+### REQ-F-008 — Undo and redo digitizing edits
+
+| | |
+|---|---|
+| **Type** | Functional |
+| **Status** | Implemented |
+| **Priority** | P2 |
+| **Stakeholder** | GIS practitioner |
+| **Source** | UC-003 extension 3b; #68 |
+
+**Requirement.** While in edit mode, the user shall be able to undo and redo
+digitizing actions (draw, vertex edit, delete, merge, duplicate, paste,
+rotate, scale).
+
+**Decision (granularity, scope, boundaries — #68).**
+
+- **Granularity.** One undo step per discrete user action, not per low-level
+  event. A completed feature (a point placed, or a line/polygon finished) is
+  its own step immediately, regardless of how quickly it followed the last
+  one. A drag or a run of vertex edits, which has no equivalent "done" event,
+  coalesces into one step via a short (300ms) idle window — verified live that
+  a naive idle-window-only design was wrong here: two points placed in quick
+  succession (a normal fast workflow) would otherwise merge into one step,
+  silently undoing more than the user asked for.
+- **Scope.** Digitizing only — the current edit target's drawn/edited/deleted/
+  merged/duplicated/pasted/rotated/scaled features. Geoprocessing output and
+  SQL-created tables are explicitly out of scope: each is a whole new layer,
+  where "undo" is already just removing it.
+- **Boundaries.** Undo/redo history is scoped to the *current edit session*.
+  Entering edit mode (on a new or existing layer) starts it empty; leaving
+  edit mode — Commit or Cancel — clears it. History never crosses a session or
+  layer boundary; there is no undo *after* Commit.
+- **Redo.** Included. A new edit after an undo invalidates the redo stack (the
+  standard contract).
+
+**Rationale.** Editing without undo is editing you can't trust — REQ-F-004
+gives the user the tools to change geometry; this is what makes trying
+something safe. QGIS convention (REQ-Q-002) is the default tie-breaker absent
+a reason to diverge, and QGIS's own undo is per-edit-session scoped the same
+way.
+
+**Traces to.** REQ-F-004, REQ-Q-002 · #68 ·
+`frontend/src/lib/editing.ts` (`noteChange`, `settleGesture`, `restoreSnapshot`,
+`undo`, `redo`)
+
+---
+
+### REQ-F-009 — Never render non-WGS84 geometry silently wrong
 
 | | |
 |---|---|

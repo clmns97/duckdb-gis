@@ -44,7 +44,7 @@ at least one table with a geometry column.
     unstripped GeoParquet read), the system reprojects it to WGS84
     automatically. If the CRS is unknown and the layer's extent is outside
     the valid WGS84 range, the system refuses to render it and explains why.
-    Decided in ADR-0003 (REQ-F-008, #65).
+    Decided in ADR-0003 (REQ-F-009, #65).
 - **6a.** The layer is large enough that preparing it for rendering is slow.
   - **6a1.** The system shows the layer as loading and the map stays interactive.
     *Gap: not met today — see REQ-Q-001, #59.*
@@ -62,7 +62,7 @@ is untouched in every branch — nothing in this use case writes.
 ## Traces to
 
 **Requirements.** REQ-F-001 (geometry-type detection), REQ-F-002 (add as layer),
-REQ-F-006 (read-only sources), REQ-F-008 (CRS handling), REQ-Q-001
+REQ-F-006 (read-only sources), REQ-F-009 (CRS handling), REQ-Q-001
 (responsiveness), REQ-C-003 (in-process compute) — [`../register.md`](../register.md)
 **Decisions.** [ADR-0001](../../adr/0001-in-memory-working-database-and-project-files.md),
 [ADR-0003](../../adr/0003-crs-detection-reprojection-and-refusal.md)

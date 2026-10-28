@@ -200,6 +200,6 @@ to matter yet — revisit if it does.
   detection)
 - `docs/requirements/use-cases/UC-001-put-existing-data-on-the-map.md`,
   extension 4b
-- `docs/requirements/register.md` REQ-F-001, REQ-F-002, REQ-F-008 (this
+- `docs/requirements/register.md` REQ-F-001, REQ-F-002, REQ-F-009 (this
   decision)
 - Issue #65
