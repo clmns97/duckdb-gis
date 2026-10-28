@@ -1,12 +1,15 @@
 import { useState } from "react";
-import { openProject } from "../lib/project";
+import { openProject, UnsavedChangesError } from "../lib/project";
 import { Modal, Button, FieldLabel, ModalNote, INPUT } from "./Modal";
 
 // Open a project file, or attach a plain `.duckdb` (#33/#8) — a form over
 // `openProject`, which tells the two apart by the file's `_gis` schema.
 // Opening a project **replaces the current working session** (layers, edit
-// state, camera) — there's no merge. #67 (warn before discarding unsaved
-// state) is a separate ticket; this only documents the behaviour inline.
+// state, camera) — there's no merge. If that would discard unsaved changes
+// (#67), `openProject` throws `UnsavedChangesError` instead of proceeding;
+// confirm with the user and retry with `force: true` rather than silently
+// discarding. The plain-attach fallback never discards anything, so it's
+// never gated.
 
 export function OpenProjectModal({
   onClose,
@@ -21,15 +24,20 @@ export function OpenProjectModal({
 
   const canOpen = path.trim().length > 0 && !busy;
 
-  const submit = async () => {
+  const submit = async (force = false) => {
     if (!canOpen) return;
     setBusy(true);
     setError(null);
     try {
-      const kind = await openProject(path);
+      const kind = await openProject(path, { force });
       onOpened(kind);
       onClose();
     } catch (e) {
+      if (e instanceof UnsavedChangesError) {
+        setBusy(false);
+        if (window.confirm(`${e.message} Continue?`)) void submit(true);
+        return;
+      }
       setError(e instanceof Error ? e.message : String(e));
       setBusy(false);
     }
