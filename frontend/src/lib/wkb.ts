@@ -21,9 +21,9 @@ import {
 // that layout: no `duck_geoarrow` extension (not published for DuckDB 1.4
 // LTS, and an install at runtime), and no per-feature JS objects.
 //
-// Input rows are expected to be of one family, folded onto its multi type with
-// `ST_Multi` (a single point, line or polygon is also accepted). Z and M
-// values are skipped: the map is 2D.
+// Input rows are expected to be of one family, each either its single or its
+// multi type; a single geometry becomes a one-part multi. Z and M values are
+// skipped: the map is 2D.
 // ---------------------------------------------------------------------------
 
 export type GeometryFamily = "point" | "line" | "polygon";

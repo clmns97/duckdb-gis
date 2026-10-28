@@ -78,7 +78,7 @@ private:
 
   void Route(httplib::Server &server) {
     server.Get(".*", [](const httplib::Request &req, httplib::Response &res) {
-      ServeAsset(req.path, res);
+      ServeAsset(req, res);
     });
     server.Post("/ddb/run", [this](const httplib::Request &req, httplib::Response &res) {
       if (!FromUi(req)) {
@@ -121,7 +121,8 @@ private:
     return nullptr;
   }
 
-  static void ServeAsset(const std::string &request_path, httplib::Response &res) {
+  static void ServeAsset(const httplib::Request &req, httplib::Response &res) {
+    const auto &request_path = req.path;
     auto path = request_path == "/" ? "/index.html" : request_path;
     auto asset = FindAsset(path);
     if (!asset) {
@@ -135,6 +136,15 @@ private:
     if (!asset) {
       res.status = 404;
       res.set_content("Not found: " + request_path, "text/plain");
+      return;
+    }
+    // Asset names carry no content hash (frontend/vite.config.ts), so let the
+    // browser cache but revalidate every time: a reload of an unchanged asset
+    // is a 304 instead of re-sending it.
+    res.set_header("Cache-Control", "no-cache");
+    res.set_header("ETag", asset->etag);
+    if (req.get_header_value("If-None-Match") == asset->etag) {
+      res.status = 304;
       return;
     }
     // Assets are stored pre-gzipped; hand the browser the compressed bytes.
