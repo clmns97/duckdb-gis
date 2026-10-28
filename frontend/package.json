@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "packageManager": "pnpm@10.29.2+sha512.bef43fa759d91fd2da4b319a5a0d13ef7a45bb985a3d7342058470f9d2051a3ba8674e629672654686ef9443ad13a82da2beb9eeb3e0221c87b8154fff9d74b8",
-  "description": "duckdb-gis map-centered frontend (React) — served by the extension via gis_remote_url.",
+  "description": "duckdb-gis map-centered frontend (React) — embedded in and served by the extension.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -19,7 +19,6 @@
     "@deck.gl/geo-layers": "^9.3.6",
     "@deck.gl/layers": "^9.3.6",
     "@deck.gl/mapbox": "^9.3.6",
-    "@duckdb/ui-client": "link:../ts/pkgs/duckdb-ui-client",
     "@geoarrow/deck.gl-geoarrow": "^0.4.1",
     "@math.gl/polygon": "^4.1.0",
     "apache-arrow": "^21.1.0",

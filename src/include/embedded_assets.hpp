@@ -2,7 +2,7 @@
 
 #include <cstddef>
 
-namespace duckdb {
+
 namespace gis {
 
 // One entry per file under frontend/dist, generated at build time by
@@ -18,4 +18,4 @@ extern const EmbeddedAsset EMBEDDED_ASSETS[];
 extern const size_t EMBEDDED_ASSETS_COUNT;
 
 } // namespace gis
-} // namespace duckdb
+

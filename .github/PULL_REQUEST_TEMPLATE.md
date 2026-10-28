@@ -18,6 +18,5 @@ Fixes #
 
 - [ ] **Frontend** (`frontend/`): `pnpm --dir frontend typecheck` passes
 - [ ] **Frontend**: ran `make frontend` and **committed the updated `frontend/dist`** — CI fails if it's stale
-- [ ] **TypeScript workspace** (`ts/`): `pnpm check` and `pnpm test` pass
-- [ ] **C++ / build** (`src/`, `CMakeLists.txt`): `make` succeeds and `./build/release/test/unittest` passes
+- [ ] **C++ / build** (`src/`, `CMakeLists.txt`): `make` succeeds and `make test_release` passes
 - [ ] Commit messages use a [Conventional Commits](https://www.conventionalcommits.org/) prefix (`feat:`, `fix:`, `docs:`, `refactor:`, `chore:`)
