@@ -27,3 +27,7 @@ spike/
 # C-API build (extension-ci-tools/makefiles/c_api_extensions)
 configure/
 cmake_build/
+
+# Databases created by SQL tests (__TEST_DIR__ is test/sql/)
+test/sql/*.db
+test/sql/*.db.wal
