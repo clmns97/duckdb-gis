@@ -3,10 +3,12 @@ import { attach, aliasFromPath } from "../lib/attach";
 import { Modal, Button, FieldLabel, ModalNote, INPUT } from "./Modal";
 
 // Attach a DuckDB database file to the catalog (T-007). A form over
-// `attach.run`: a server-side file path, an optional alias (defaults to the
-// filename stem), and a read-only toggle (default on). Owns the async attach so
-// it can show inline errors and stay open on failure; on success it refreshes
-// the catalog via `onAttached` and closes.
+// `attach.run`: a server-side file path and an optional alias (defaults to the
+// filename stem). Always attaches read-only (#66) — there is no toggle for
+// this; a source becomes writable only for the span of an explicit edit
+// session on one of its tables. Owns the async attach so it can show inline
+// errors and stay open on failure; on success it refreshes the catalog via
+// `onAttached` and closes.
 
 export function AttachModal({
   onClose,
@@ -17,7 +19,6 @@ export function AttachModal({
 }) {
   const [path, setPath] = useState("");
   const [alias, setAlias] = useState("");
-  const [readOnly, setReadOnly] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,7 +29,7 @@ export function AttachModal({
     setBusy(true);
     setError(null);
     try {
-      await attach.run({ path, alias: alias.trim() || undefined, readOnly });
+      await attach.run({ path, alias: alias.trim() || undefined });
       onAttached();
       onClose();
     } catch (e) {
@@ -83,23 +84,16 @@ export function AttachModal({
         />
       </label>
 
-      <label className="flex items-center gap-2 text-editor cursor-pointer">
-        <input
-          type="checkbox"
-          className="accent-primary"
-          checked={readOnly}
-          onChange={(e) => setReadOnly(e.target.checked)}
-        />
-        <span>Read-only</span>
-      </label>
-
       {error && <ModalNote error>{error}</ModalNote>}
 
       <ModalNote>
         The path is on the server (the DuckDB extension host), not this browser —
         a file picker needs a server-side browse endpoint (not yet available).
-        Attaches with <code className="font-mono text-[0.95em]">ATTACH</code>; the
-        database and its tables appear in the Browser tree once attached.
+        Attaches read-only with{" "}
+        <code className="font-mono text-[0.95em]">ATTACH … (READ_ONLY)</code>; the
+        database and its tables appear in the Browser tree once attached. Toggle
+        editing on a layer from this source to edit it in place — the database
+        becomes writable only for that session, then goes back to read-only.
       </ModalNote>
     </Modal>
   );

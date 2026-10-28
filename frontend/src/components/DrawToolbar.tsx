@@ -32,6 +32,21 @@ export function DrawToolbar() {
     }
   };
 
+  // Cancel releases the source's write lock (#66) same as Commit does, so it
+  // can fail too — surface that rather than silently leaving the source
+  // writable.
+  const onCancel = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await editing.finishEdit();
+    } catch (e) {
+      setError(errMsg(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   // Advanced editing ops (T-045/046/048): run the store action, surfacing any
   // error (merge SQL, paste family mismatch) into the toolbar's error slot.
   const guard = (fn: () => void | Promise<void>) => () => {
@@ -79,7 +94,7 @@ export function DrawToolbar() {
       onPaste={guard(() => editing.paste())}
       onToggleSnap={() => editing.toggleSnapping()}
       onCommit={onCommit}
-      onCancel={() => editing.finishEdit()}
+      onCancel={() => void onCancel()}
     />
   );
 }

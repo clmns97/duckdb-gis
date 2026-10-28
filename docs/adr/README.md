@@ -16,7 +16,8 @@ is a decision.
 
 | ADR | Decision | Status |
 |---|---|---|
-| [0001](0001-in-memory-working-database-and-project-files.md) | In-memory working database, read-only sources, explicit project files | Accepted |
+| [0001](0001-in-memory-working-database-and-project-files.md) | In-memory working database, read-only sources, explicit project files | Accepted (read-only-sources clause superseded by 0002) |
+| [0002](0002-edit-session-promotes-a-source-to-writable.md) | Attached sources are read-only except for the span of an explicit edit session, which can write back | Accepted |
 
 ## Writing one
 
