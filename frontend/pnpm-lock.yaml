@@ -29,9 +29,6 @@ importers:
       '@deck.gl/mapbox':
         specifier: ^9.3.6
         version: 9.3.6(@deck.gl/core@9.3.6)(@luma.gl/core@9.3.6)(@math.gl/web-mercator@4.1.0)
-      '@duckdb/ui-client':
-        specifier: link:../ts/pkgs/duckdb-ui-client
-        version: link:../ts/pkgs/duckdb-ui-client
       '@geoarrow/deck.gl-geoarrow':
         specifier: ^0.4.1
         version: 0.4.1(fb1cb4fd1889158d60810448f634d9ee)

@@ -16,7 +16,9 @@ RUN_DIR="${TMPDIR:-/tmp}/duckdb-gis-preview"
 EXT_PID="$RUN_DIR/ext.pid"; EXT_LOG="$RUN_DIR/ext.log"
 VITE_PID="$RUN_DIR/vite.pid"; VITE_LOG="$RUN_DIR/vite.log"
 PORT_VITE=5173; PORT_EXT=4214
-DUCKDB="$REPO/build/release/duckdb"
+# Any DuckDB CLI >= 1.4.5 (the extension targets the stable C API).
+DUCKDB="${DUCKDB:-$(command -v duckdb || true)}"
+EXT="$REPO/build/release/gis.duckdb_extension"
 DEMO="$REPO/testdata/demo.duckdb"; WORK_DB="$RUN_DIR/demo.duckdb"
 mkdir -p "$RUN_DIR"
 
@@ -47,7 +49,7 @@ start() {
     cp "$DEMO" "$WORK_DB"
     # Keep duckdb alive after start_gis_server returns by holding stdin open
     # (sleep never closes the pipe -> duckdb blocks reading -> server thread lives).
-    setsid bash -c '{ printf "INSTALL spatial; LOAD spatial;\nCALL start_gis_server();\n"; sleep 2147483647; } | exec "'"$DUCKDB"'" "'"$WORK_DB"'"' \
+    setsid bash -c '{ printf "LOAD '"'"'%s'"'"';\nINSTALL spatial; LOAD spatial;\nCALL start_gis_server();\n" "'"$EXT"'"; sleep 2147483647; } | exec "'"$DUCKDB"'" -unsigned "'"$WORK_DB"'"' \
       >"$EXT_LOG" 2>&1 </dev/null &
     echo $! >"$EXT_PID"
     wait_for ext_up "extension server"

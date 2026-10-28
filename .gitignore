@@ -24,3 +24,6 @@ ds-bundle/
 # design captures and its own node_modules. Ignored to keep the repo lean.
 design-reference/
 spike/
+# C-API build (extension-ci-tools/makefiles/c_api_extensions)
+configure/
+cmake_build/

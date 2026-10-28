@@ -65,7 +65,9 @@ export function AttributesPanel(props: IDockviewPanelProps) {
     }
     let cancelled = false;
     setLoading(true);
-    const cols = columns.map((c) => ident(c.name)).join(", ");
+    // Cast to VARCHAR so every value displays exactly as DuckDB formats it
+    // (timestamps, decimals, nested types), rather than as its JS decoding.
+    const cols = columns.map((c) => `${ident(c.name)}::VARCHAR AS ${ident(c.name)}`).join(", ");
     const sql = `SELECT ${cols} FROM ${qualified(source)} LIMIT ${PAGE_SIZE} OFFSET ${offset}`;
     query(sql)
       .then((r) => {
