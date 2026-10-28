@@ -28,7 +28,7 @@ export const Default: Story = {
           label: "Choose basemap",
           children: [
             { label: "OpenStreetMap", checked: true, onSelect: () => {} },
-            { label: "Carto Light", onSelect: () => {} },
+            { label: "OpenFreeMap Positron", onSelect: () => {} },
             { label: "ESRI Satellite", onSelect: () => {} },
           ],
         },

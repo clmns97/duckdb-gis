@@ -18,7 +18,7 @@
 
 import maplibregl from "maplibre-gl";
 import { Protocol, PMTiles } from "pmtiles";
-import { getMap } from "./mapBus";
+import { getMap, whenStyleReady } from "./mapBus";
 import { addFamilyLayers, removeFamilyLayers } from "./vectorStyle";
 import { pmSelection, type PmPick } from "./pmtilesSelection";
 import type { OvertureTheme, Bbox } from "./overture";
@@ -57,27 +57,6 @@ function ensureProtocol(): Protocol {
 
 function sourceIdFor(layerId: string): string {
   return `ovt:${layerId}`;
-}
-
-// `map.isStyleLoaded()` flips back to false whenever a source has tiles in
-// flight — so a naive `map.once("load", …)` fallback would wait on a `load`
-// event that already fired (adding themes 2..6 while theme 1's tiles load hangs
-// them forever). Track that the *initial* style has loaded once, then apply
-// directly: adding sources/layers is safe any time after that first load.
-let styleReady = false;
-function whenStyleReady(map: maplibregl.Map, cb: () => void): Promise<void> {
-  if (styleReady || map.isStyleLoaded()) {
-    styleReady = true;
-    cb();
-    return Promise.resolve();
-  }
-  return new Promise((res) =>
-    map.once("load", () => {
-      styleReady = true;
-      cb();
-      res();
-    }),
-  );
 }
 
 interface VectorLayerMeta {
