@@ -6,7 +6,7 @@ import {
   GeoArrowPathLayer,
   GeoArrowPolygonLayer,
 } from "@geoarrow/deck.gl-geoarrow";
-import { Table, makeVector, type RecordBatch } from "apache-arrow";
+import { Table, makeVector, type RecordBatch, type Vector } from "apache-arrow";
 import { query, queryArrow, str } from "./duckdb";
 import { wkbToGeoArrow } from "./wkb";
 import { getMap } from "./mapBus";
@@ -129,8 +129,17 @@ interface FidInfo {
   index: number;
   data: { data: RecordBatch };
 }
-const fidAt = (info: FidInfo): number =>
-  Number(info.data.data.getChild(FID)?.get(info.index));
+// Each batch's `__fid` column, looked up once rather than by name per feature.
+const fidColumns = new WeakMap<RecordBatch, Vector>();
+const fidAt = (info: FidInfo): number => {
+  const batch = info.data.data;
+  let fids = fidColumns.get(batch);
+  if (!fids) {
+    fids = batch.getChild(FID)!;
+    fidColumns.set(batch, fids);
+  }
+  return Number(fids.get(info.index));
+};
 
 // A feature highlights only when it belongs to the active selection layer AND
 // its fid is selected. Selection is scoped to one source at a time (T-041), so
@@ -139,11 +148,21 @@ const fidAt = (info: FidInfo): number =>
 const isActiveSel = (source: string, fid: number): boolean =>
   selection.source() === source && selection.has(fid);
 
+// With nothing selected in this layer (always so right after a Run), hand deck.gl
+// the plain value: a constant attribute instead of an accessor called per
+// feature. Layers are rebuilt on every selection change, so this re-evaluates.
+const hasActiveSel = (source: string): boolean =>
+  selection.size > 0 && selection.source() === source;
+
 type Color = [number, number, number] | [number, number, number, number];
 const colorAcc = (source: string, base: Color, sel: Color) =>
-  ((info: FidInfo) => (isActiveSel(source, fidAt(info)) ? sel : base)) as never;
+  (hasActiveSel(source)
+    ? (info: FidInfo) => (isActiveSel(source, fidAt(info)) ? sel : base)
+    : base) as never;
 const numAcc = (source: string, base: number, sel: number) =>
-  ((info: FidInfo) => (isActiveSel(source, fidAt(info)) ? sel : base)) as never;
+  (hasActiveSel(source)
+    ? (info: FidInfo) => (isActiveSel(source, fidAt(info)) ? sel : base)
+    : base) as never;
 
 // `updateTriggers` value shared by every highlight accessor.
 const hiTriggers = () => {
