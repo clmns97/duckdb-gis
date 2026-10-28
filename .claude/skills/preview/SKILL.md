@@ -47,7 +47,7 @@ landing is the map + editor shell.
 
 ## Requirements / gotchas
 
-- Needs `make` to have built `build/release/duckdb` and `pnpm` on PATH.
+- Needs `make configure release` to have built `build/release/gis.duckdb_extension`, a DuckDB CLI (>= 1.4.5; or `DUCKDB=/path`) and `pnpm` on PATH.
 - Access via the **Tailscale IP** works out of the box. The MagicDNS hostname
   (`personal-vps.tail81936c.ts.net`) would be rejected by Vite 8's host check
   unless `allowedHosts` is added to `frontend/vite.config.ts` — prefer the IP.
