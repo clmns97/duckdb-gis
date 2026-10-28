@@ -1,6 +1,6 @@
 import maplibregl from "maplibre-gl";
 import { query, sqlLit } from "./duckdb";
-import { getMap } from "./mapBus";
+import { getMap, whenStyleReady } from "./mapBus";
 import { addFamilyLayers, removeFamilyLayers } from "./vectorStyle";
 
 // ---------------------------------------------------------------------------
@@ -183,8 +183,7 @@ export function addTileLayer(spec: TileLayerSpec): void {
     removeMapLayer(map, spec.id);
     addSourceAndLayers(map, spec);
   };
-  if (map.isStyleLoaded()) apply();
-  else map.once("load", apply);
+  void whenStyleReady(map, apply);
 }
 
 function removeMapLayer(map: maplibregl.Map, id: string): void {
