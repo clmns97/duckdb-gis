@@ -273,6 +273,53 @@ that makes in-memory-by-default safe.
 
 ---
 
+### REQ-F-008 — Undo and redo digitizing edits
+
+| | |
+|---|---|
+| **Type** | Functional |
+| **Status** | Implemented |
+| **Priority** | P2 |
+| **Stakeholder** | GIS practitioner |
+| **Source** | UC-003 extension 3b; #68 |
+
+**Requirement.** While in edit mode, the user shall be able to undo and redo
+digitizing actions (draw, vertex edit, delete, merge, duplicate, paste,
+rotate, scale).
+
+**Decision (granularity, scope, boundaries — #68).**
+
+- **Granularity.** One undo step per discrete user action, not per low-level
+  event. A completed feature (a point placed, or a line/polygon finished) is
+  its own step immediately, regardless of how quickly it followed the last
+  one. A drag or a run of vertex edits, which has no equivalent "done" event,
+  coalesces into one step via a short (300ms) idle window — verified live that
+  a naive idle-window-only design was wrong here: two points placed in quick
+  succession (a normal fast workflow) would otherwise merge into one step,
+  silently undoing more than the user asked for.
+- **Scope.** Digitizing only — the current edit target's drawn/edited/deleted/
+  merged/duplicated/pasted/rotated/scaled features. Geoprocessing output and
+  SQL-created tables are explicitly out of scope: each is a whole new layer,
+  where "undo" is already just removing it.
+- **Boundaries.** Undo/redo history is scoped to the *current edit session*.
+  Entering edit mode (on a new or existing layer) starts it empty; leaving
+  edit mode — Commit or Cancel — clears it. History never crosses a session or
+  layer boundary; there is no undo *after* Commit.
+- **Redo.** Included. A new edit after an undo invalidates the redo stack (the
+  standard contract).
+
+**Rationale.** Editing without undo is editing you can't trust — REQ-F-004
+gives the user the tools to change geometry; this is what makes trying
+something safe. QGIS convention (REQ-Q-002) is the default tie-breaker absent
+a reason to diverge, and QGIS's own undo is per-edit-session scoped the same
+way.
+
+**Traces to.** REQ-F-004, REQ-Q-002 · #68 ·
+`frontend/src/lib/editing.ts` (`noteChange`, `settleGesture`, `restoreSnapshot`,
+`undo`, `redo`)
+
+---
+
 ## Quality requirements
 
 ### REQ-Q-001 — Stay responsive on large layers

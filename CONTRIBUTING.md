@@ -28,9 +28,16 @@ discussions.
 Before proposing a design change, it's worth reading
 [`docs/requirements/vision.md`](docs/requirements/vision.md) for what is
 deliberately in and out of scope, and [`docs/adr/`](docs/adr/) for decisions
-already taken — ADR-0001 in particular explains why attached databases are
-read-only. If your change contradicts one of those, that's fine, but argue
-with the ADR rather than around it.
+already taken — ADR-0001 and ADR-0002 together explain why attached databases
+are read-only except for the span of an explicit edit session. If your change
+contradicts one of those, that's fine, but argue with the ADR rather than
+around it.
+
+**The project is currently in a milestone-gated phase** (see `CLAUDE.md` "Work
+tracking"): work is focused on hardening the core loop
+([v0.1.0](https://github.com/clmns97/duckdb-gis/milestone/1)) rather than
+adding new feature surface. Check the milestone before proposing something
+outside it.
 
 ## Getting set up
 

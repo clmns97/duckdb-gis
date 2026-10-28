@@ -150,6 +150,24 @@ function ScaleIcon({ size = ICON }: IconProps) {
   );
 }
 
+function UndoIcon({ size = ICON }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" {...svgProps}>
+      <path d="M9 7 4 12l5 5" />
+      <path d="M4 12h10a6 6 0 0 1 0 12h-1" />
+    </svg>
+  );
+}
+
+function RedoIcon({ size = ICON }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" {...svgProps}>
+      <path d="M15 7l5 5-5 5" />
+      <path d="M20 12H10a6 6 0 0 0 0 12h1" />
+    </svg>
+  );
+}
+
 function MergeIcon({ size = ICON }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" {...svgProps}>
@@ -292,9 +310,13 @@ export function DrawToolbarView({
   selectedCount,
   snapEnabled,
   canPaste,
+  canUndo,
+  canRedo,
   busy,
   error,
   onSetMode,
+  onUndo,
+  onRedo,
   onDelete,
   onRotate,
   onScale,
@@ -329,9 +351,14 @@ export function DrawToolbarView({
   snapEnabled: boolean;
   /** Whether the clipboard holds paste-compatible features (T-048). */
   canPaste: boolean;
+  /** Whether there is a step to undo/redo (T-068). */
+  canUndo: boolean;
+  canRedo: boolean;
   busy: boolean;
   error: string | null;
   onSetMode: (mode: EditMode) => void;
+  onUndo: () => void;
+  onRedo: () => void;
   onDelete: () => void;
   onRotate: () => void;
   onScale: () => void;
@@ -423,6 +450,17 @@ export function DrawToolbarView({
                   </>
                 );
               })()}
+
+            <Divider />
+
+            {/* Undo/redo (T-068): per-edit-session, scoped to the current
+                target; see editing.ts for the granularity/scope decision. */}
+            <ActionButton title="Undo (⌘/Ctrl+Z)" disabled={!canUndo} onClick={onUndo}>
+              <UndoIcon />
+            </ActionButton>
+            <ActionButton title="Redo (⌘/Ctrl+Shift+Z)" disabled={!canRedo} onClick={onRedo}>
+              <RedoIcon />
+            </ActionButton>
 
             <Divider />
 
