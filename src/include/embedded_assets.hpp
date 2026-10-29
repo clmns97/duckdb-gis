@@ -12,6 +12,7 @@ struct EmbeddedAsset {
   const char *path; // request path, e.g. "/index.html" (always leading "/")
   const unsigned char *gzip_data;
   size_t gzip_size;
+  const char *etag; // quoted content hash, e.g. "\"3f2a...\""
 };
 
 extern const EmbeddedAsset EMBEDDED_ASSETS[];

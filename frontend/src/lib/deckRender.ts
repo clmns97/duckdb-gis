@@ -477,9 +477,9 @@ const SPECS: Record<string, GeomSpec> = {
 // A result set can freely mix a family's simple and multi variants (e.g.
 // Overture buildings: mostly POLYGON with some MULTIPOLYGON) — real data isn't
 // guaranteed homogeneous just because `probeGeometry` samples one row's type.
-// Always fetch the family's multi type over `ST_Multi(geom)` (a no-op on
-// already-multi rows), so a single query never depends on every row sharing
-// the exact type `any_value` happened to sample.
+// Always render the family's multi type: lib/wkb.ts decodes a simple row as a
+// one-part multi, so a single query never depends on every row sharing the
+// exact type `any_value` happened to sample.
 const FAMILY_SPECS: Record<GeometryKind, GeomSpec> = {
   point: SPECS.MULTIPOINT,
   line: SPECS.MULTILINESTRING,
@@ -588,14 +588,15 @@ function assertPlausibleWgs84(bounds: [number, number, number, number] | null): 
 // truth for how fids are assigned, and drops NULL geometries) plus native
 // GeoArrow geometry. DuckDB sends WKB (`ST_AsWKB`, from `spatial` on every
 // DuckDB we support) and lib/wkb.ts decodes it: no duck_geoarrow extension.
-// `ST_Multi` folds a family's simple rows onto its multi variant (a no-op on
-// already-multi ones) so a query can mix POLYGON/MULTIPOLYGON etc.
+// A query can mix POLYGON/MULTIPOLYGON etc.: the decoder folds simple rows
+// onto the multi variant, so no `ST_Multi` here (which cost ~20% more bytes on
+// point layers, wrapping each point in a one-point MultiPoint).
 async function fetchGeoArrow(
   inner: string,
   kind: GeometryKind,
 ): Promise<{ table: Table; bytes: number }> {
   const { table, bytes } = await queryArrow(
-    `SELECT ${FID}, ST_AsWKB(ST_Multi(geom)) AS geom FROM (${fidTaggedRelation(inner)}) _t`,
+    `SELECT ${FID}, ST_AsWKB(geom) AS geom FROM (${fidTaggedRelation(inner)}) _t`,
   );
   const geom = wkbToGeoArrow(table.getChild("geom")!, kind);
   // One contiguous batch, so the overlay draws one layer per family rather than
