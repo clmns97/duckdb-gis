@@ -4,10 +4,12 @@
 Each file under --dist-dir is gzip-compressed and emitted as a
 `static const unsigned char[]` byte array (not a string literal, to avoid
 MSVC's 64 KB string-literal limit), keyed by its request path in the
-EMBEDDED_ASSETS[] table declared in src/include/embedded_assets.hpp.
+EMBEDDED_ASSETS[] table declared in src/include/embedded_assets.hpp, with an
+ETag derived from the uncompressed content.
 """
 import argparse
 import gzip
+import hashlib
 import os
 import sys
 
@@ -45,17 +47,20 @@ def main():
         out.write('#include "embedded_assets.hpp"\n\n')
         out.write("namespace gis {\n\n")
 
+        etags = []
         for i, (_rel, full) in enumerate(entries):
             with open(full, "rb") as f:
                 raw = f.read()
+            etags.append('"' + hashlib.sha256(raw).hexdigest()[:16] + '"')
             compressed = gzip.compress(raw, compresslevel=9, mtime=0)
             emit_byte_array(f"kEmbeddedAssetData{i}", compressed, out)
             out.write("\n")
 
         out.write("const EmbeddedAsset EMBEDDED_ASSETS[] = {\n")
         for i, (rel, _full) in enumerate(entries):
+            etag = etags[i].replace('"', '\\"')
             out.write(
-                f'  {{"{rel}", kEmbeddedAssetData{i}, sizeof(kEmbeddedAssetData{i})}},\n'
+                f'  {{"{rel}", kEmbeddedAssetData{i}, sizeof(kEmbeddedAssetData{i}), "{etag}"}},\n'
             )
         out.write("};\n\n")
         out.write(
