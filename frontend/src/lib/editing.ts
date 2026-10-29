@@ -250,7 +250,9 @@ const signal = changeSignal();
 //     or drawing one feature — not per pointer-move event. A burst of `change`
 //     events on the same working set collapses into one step: the pre-gesture
 //     state is checkpointed once, at the first change after a quiet period;
-//     further changes within GESTURE_IDLE_MS extend the same step.
+//     further changes within GESTURE_IDLE_MS extend the same step. A line or
+//     polygon still being drawn never settles on idle (a human pauses longer
+//     than that between vertices); its `finish` event closes the step.
 //   • Scope: digitizing only — drawn/edited/deleted/merged/duplicated/pasted/
 //     rotated/scaled features in the current edit target. Geoprocessing output
 //     and SQL-created tables are NOT covered: they are separate, coarser
@@ -335,7 +337,14 @@ function noteChange(): void {
     gestureOpen = true;
   }
   if (gestureTimer) clearTimeout(gestureTimer);
-  gestureTimer = setTimeout(settleGesture, GESTURE_IDLE_MS);
+  gestureTimer = setTimeout(settleIdle, GESTURE_IDLE_MS);
+}
+
+/** The idle timer's end of a gesture — except mid-drawing: each vertex of a
+ *  line/polygon is a `change`, and the feature isn't done until `finish`. */
+function settleIdle(): void {
+  gestureTimer = null;
+  if (draw?.getModeState() !== "drawing") settleGesture();
 }
 
 /** Close the current gesture immediately: cancel the idle timer and

@@ -1,2 +1,6 @@
 node_modules/
 *.png
+
+# Playwright (pnpm test:e2e)
+playwright-report/
+test-results/
