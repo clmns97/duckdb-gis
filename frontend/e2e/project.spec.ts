@@ -1,22 +1,4 @@
-import { test, expect, type App } from "./fixtures";
-
-async function saveProject(app: App, path: string, name = ""): Promise<void> {
-  await app.page.getByRole("button", { name: "Project" }).click();
-  await app.menuItem("Save project").click();
-  await app.page.getByPlaceholder("/data/my-project.duckdb").fill(path);
-  if (name) await app.page.getByPlaceholder("Untitled project").fill(name);
-  await app.page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(app.page.getByRole("dialog")).toHaveCount(0);
-}
-
-async function openProject(app: App, path: string): Promise<void> {
-  await app.page.getByRole("button", { name: "Project" }).click();
-  await app.menuItem("Open project").click();
-  await app.page.getByPlaceholder("/data/my-project.duckdb").fill(path);
-  await app.page.getByPlaceholder("/data/my-project.duckdb").press("Enter");
-  await expect(app.page.getByRole("dialog")).toHaveCount(0, { timeout: 30_000 });
-  await app.layersSettled();
-}
+import { test, expect } from "./fixtures";
 
 test("save then open restores layers, style, order and working tables", async ({ app, page }, info) => {
   const path = info.outputPath("project.duckdb");
@@ -33,7 +15,7 @@ test("save then open restores layers, style, order and working tables", async ({
   await app.layersSettled();
   const before = (await app.layers()).map((l) => l.name);
 
-  await saveProject(app, path, "e2e");
+  await app.saveProject(path, "e2e");
   await expect(page.getByLabel("Unsaved changes")).toHaveCount(0);
 
   // the file's _gis.layers rows
@@ -51,7 +33,7 @@ test("save then open restores layers, style, order and working tables", async ({
   // a fresh session (reload drops every layer), then open
   await page.evaluate(() => window.gisLayers.list().forEach((l: { id: string }) => window.gisLayers.remove(l.id)));
   await app.sql("DROP TABLE memory.main.local");
-  await openProject(app, path);
+  await app.openProject(path);
   expect((await app.layers()).map((l) => l.name)).toEqual(before);
   const fill = await page.evaluate(
     () => window.gisLayers.list().find((l: { name: string }) => l.name === "regions").style.fillColor,
@@ -63,10 +45,10 @@ test("save then open restores layers, style, order and working tables", async ({
 test("opening a project over unsaved work asks first", async ({ app, page }, info) => {
   const path = info.outputPath("project.duckdb");
   await app.addLayer("cities");
-  await saveProject(app, path);
+  await app.saveProject(path);
   await app.withModule("/src/lib/unsavedChanges.ts", (m) => m.unsavedChanges.markDirty());
   const asked = page.waitForEvent("dialog").then((d) => d.message());
-  await openProject(app, path);
+  await app.openProject(path);
   expect(await asked).toMatch(/unsaved changes/);
   expect((await app.layers()).map((l) => l.name)).toEqual(["cities"]);
 });
