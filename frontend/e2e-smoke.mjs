@@ -394,6 +394,18 @@ await step("rapid-fire: spam runs + layer toggles", async () => {
   expect((await layerList()).find((l) => l.name === "cities").visible === true, "toggle parity");
 });
 
+await step("overture: release listing failure is shown, Load stays disabled", async () => {
+  const p2 = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  await p2.route(/list-type=2/, (r) => r.abort());
+  await p2.goto(BASE, { waitUntil: "domcontentloaded" });
+  await p2.locator(".cm-editor").waitFor({ timeout: 20000 });
+  await p2.getByTitle(/Add Overture Maps data/).click();
+  await p2.getByLabel("Divisions").check();
+  await p2.getByText(/Couldn't list Overture releases/).waitFor({ timeout: 20000 });
+  expect(await p2.getByRole("button", { name: "Load", exact: true }).isDisabled(), "Load enabled without a release");
+  await p2.close();
+});
+
 const relevant = errs.filter((e) => !/Failed to load resource|net::ERR|tile|404|status of 400/i.test(e));
 console.log("\nconsole/page errors:", relevant.length ? relevant.slice(0, 10) : "none");
 console.log(failures.length ? `\n${failures.length} FAILED: ${failures.join(" | ")}` : "\nALL PASSED");

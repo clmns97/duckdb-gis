@@ -43,16 +43,6 @@ export const OVERTURE_THEMES: OvertureTheme[] = [
   { id: "divisions", label: "Divisions", type: "division_area" },
 ];
 
-// Fallback releases (latest first) if live-listing fails. `2026-08-19.0` is
-// current in both buckets as of 2026-09-08 (verified live) — but this is only
-// a fallback: `listOvertureReleases` normally supersedes it, and buckets
-// rotate their published releases over time, so this value *will* go stale
-// again. Its staleness silently broke quick-load once already (#30) because
-// live-listing itself was broken (see `listParquetReleases`) and always fell
-// through to here; that bug is fixed, so this constant going stale should no
-// longer be user-visible, only a slower first release-list round-trip.
-export const OVERTURE_RELEASES = ["2026-08-19.0", "2026-07-22.0"];
-
 export interface OvertureRequest {
   /** Selected theme ids (one PMTiles map layer each). */
   themes: string[];
@@ -67,8 +57,10 @@ let releasesPromise: Promise<string[]> | null = null;
 /**
  * Live-list Overture releases that can be *both* displayed and materialised:
  * the intersection of the hosted-tiles bucket (browser-listed over CORS) and the
- * GeoParquet bucket (globbed via DuckDB/httpfs). Sorted newest-first. Falls back
- * to {@link OVERTURE_RELEASES} on any failure so the modal always has options.
+ * GeoParquet bucket (globbed via DuckDB/httpfs). Sorted newest-first. Rejects
+ * when listing fails or finds nothing: there is no safe fallback, because the
+ * buckets rotate releases out — a pinned list aged out and silently broke
+ * quick-load before (#30).
  */
 export function listOvertureReleases(): Promise<string[]> {
   if (!releasesPromise) {
@@ -80,10 +72,13 @@ export function listOvertureReleases(): Promise<string[]> {
       ]);
       const both = tileReleases.filter((r) => parquetReleases.has(r));
       both.sort((a, b) => (a < b ? 1 : a > b ? -1 : 0)); // newest first
-      return both.length ? both : OVERTURE_RELEASES;
-    })().catch(() => {
+      if (both.length === 0) {
+        throw new Error("no Overture release is in both the tiles and GeoParquet buckets");
+      }
+      return both;
+    })().catch((e) => {
       releasesPromise = null; // let a later attempt retry
-      return OVERTURE_RELEASES;
+      throw e;
     });
   }
   return releasesPromise;
@@ -107,8 +102,8 @@ async function listTileReleases(origin: string): Promise<string[]> {
  * real object is `release/<version>/theme=.../type=.../*.parquet`). Verified
  * live against the bucket: this silently broke release discovery entirely,
  * so {@link listOvertureReleases}'s intersection was always empty and it
- * always fell back to the hardcoded {@link OVERTURE_RELEASES} default — which
- * then itself aged out of the bucket (#30).
+ * always fell back to a hardcoded release default — which then itself aged
+ * out of the bucket (#30).
  *
  * Fix: glob deep enough to hit real objects. Scoped to one theme/type
  * (`divisions`/`division_area`, the smallest — 8 files/release, verified) so

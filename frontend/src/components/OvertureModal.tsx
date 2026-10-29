@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import {
   OVERTURE_THEMES,
-  OVERTURE_RELEASES,
   listOvertureReleases,
   type OvertureRequest,
 } from "../lib/overture";
-import { FormModal, INPUT } from "./Modal";
+import { FormModal, ModalNote, INPUT } from "./Modal";
+import { errMsg } from "../lib/duckdb";
 import { OvertureLogo } from "./OvertureLogo";
 
 // Overture quick-load form (T-012, rebuilt on PMTiles in T-058), QuickOSM-style:
@@ -25,18 +25,22 @@ export function OvertureModal({
   onLoad: (request: OvertureRequest) => void;
 }) {
   const [themes, setThemes] = useState<Set<string>>(new Set());
-  const [releases, setReleases] = useState<string[]>(OVERTURE_RELEASES);
-  const [release, setRelease] = useState(OVERTURE_RELEASES[0]);
+  const [releases, setReleases] = useState<string[] | null>(null);
+  const [release, setRelease] = useState("");
+  const [listError, setListError] = useState<string | null>(null);
 
   // Live-list the releases available in *both* the tiles and GeoParquet buckets
-  // (T-058); fall back to the pinned default if listing fails.
+  // (T-058). Load stays disabled until they arrive: a guessed release may
+  // already have been rotated out of the buckets (#30).
   useEffect(() => {
     let alive = true;
-    void listOvertureReleases().then((list) => {
-      if (!alive || list.length === 0) return;
-      setReleases(list);
-      setRelease((cur) => (list.includes(cur) ? cur : list[0]));
-    });
+    listOvertureReleases()
+      .then((list) => {
+        if (!alive) return;
+        setReleases(list);
+        setRelease(list[0]);
+      })
+      .catch((e) => alive && setListError(`Couldn't list Overture releases: ${errMsg(e)}`));
     return () => {
       alive = false;
     };
@@ -60,7 +64,7 @@ export function OvertureModal({
         </span>
       }
       action="Load"
-      canSubmit={themes.size > 0}
+      canSubmit={themes.size > 0 && release !== ""}
       onSubmit={() => onLoad({ themes: [...themes], release })}
       onClose={onClose}
       note={
@@ -93,9 +97,11 @@ export function OvertureModal({
         <select
           className={INPUT}
           value={release}
+          disabled={!releases}
           onChange={(e) => setRelease(e.target.value)}
         >
-          {releases.map((r, i) => (
+          {!releases && <option value="">{listError ? "unavailable" : "Loading releases…"}</option>}
+          {releases?.map((r, i) => (
             <option key={r} value={r}>
               {r}
               {i === 0 ? " (latest)" : ""}
@@ -103,6 +109,7 @@ export function OvertureModal({
           ))}
         </select>
       </label>
+      {listError && <ModalNote error>{listError}</ModalNote>}
 
     </FormModal>
   );
