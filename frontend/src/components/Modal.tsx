@@ -1,5 +1,6 @@
-import { useEffect, useId, type ReactNode } from "react";
+import { useEffect, useId, useState, type InputHTMLAttributes, type ReactNode } from "react";
 import { Button } from "./Button";
+import { errMsg } from "../lib/duckdb";
 
 // Shared modal shell (backdrop + centred card + head/body/foot). Owns the two
 // dismissal gestures every dialog shared: Escape and a backdrop click. The head
@@ -76,6 +77,85 @@ export function Modal({
 // looks the same (one source of truth — T-044).
 export const INPUT =
   "text-editor text-gray-900 px-2 py-1.5 bg-white border border-gray-200 rounded-sm focus:outline-none focus:border-primary";
+
+// A labelled text input for a FormModal body.
+export function TextField({ label, ...input }: { label: string } & InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <label className="flex flex-col gap-2">
+      <FieldLabel>{label}</FieldLabel>
+      <input className={INPUT} type="text" spellCheck={false} {...input} />
+    </label>
+  );
+}
+
+// A dialog whose body is one small form with a single primary action (Attach,
+// Save/Open project, New layer). Owns the async submit: Enter in any field or
+// the primary button runs `onSubmit`; a throw shows its message inline and keeps
+// the dialog open for a retry, otherwise it closes — unless `onSubmit` returns
+// `false` (the user backed out of a follow-up confirm).
+export function FormModal({
+  title,
+  action,
+  busyAction = action,
+  canSubmit,
+  onSubmit,
+  onClose,
+  note,
+  children,
+}: {
+  title: ReactNode;
+  action: string;
+  busyAction?: string;
+  canSubmit: boolean;
+  onSubmit: () => unknown;
+  onClose: () => void;
+  note: ReactNode;
+  children: ReactNode;
+}) {
+  const formId = useId();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const submit = async () => {
+    if (!canSubmit || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if ((await onSubmit()) !== false) return onClose();
+    } catch (e) {
+      setError(errMsg(e));
+    }
+    setBusy(false);
+  };
+  return (
+    <Modal
+      title={title}
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" type="submit" form={formId} disabled={!canSubmit || busy}>
+            {busy ? busyAction : action}
+          </Button>
+        </>
+      }
+    >
+      <form
+        id={formId}
+        className="contents"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void submit();
+        }}
+      >
+        {children}
+      </form>
+      {error && <ModalNote error>{error}</ModalNote>}
+      <ModalNote>{note}</ModalNote>
+    </Modal>
+  );
+}
 
 // Small text primitives reused by dialogs and the sidebar tree/panels.
 export function FieldLabel({ children }: { children: ReactNode }) {

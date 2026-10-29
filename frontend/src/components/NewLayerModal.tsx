@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Modal, Button, FieldLabel, ModalNote, INPUT } from "./Modal";
+import { FormModal, TextField, FieldLabel } from "./Modal";
 import type { GeometryKind } from "../lib/layers";
 
 // Create a new, empty single-geometry layer and drop into edit mode on it
@@ -22,72 +22,47 @@ export function NewLayerModal({
 }) {
   const [name, setName] = useState("");
   const [kind, setKind] = useState<GeometryKind>("polygon");
-  const trimmed = name.trim();
-  const canCreate = trimmed.length > 0;
-
-  const submit = () => {
-    if (canCreate) onCreate(trimmed, kind);
-  };
-
   return (
-    <Modal
+    <FormModal
       title="New layer"
+      action="Create & edit"
+      canSubmit={name.trim().length > 0}
+      onSubmit={() => onCreate(name.trim(), kind)}
       onClose={onClose}
-      footer={
+      note={
         <>
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant="primary" disabled={!canCreate} onClick={submit}>
-            Create &amp; edit
-          </Button>
+          Creates an empty table in <code className="font-mono text-[0.95em]">main</code> and opens
+          it for drawing. The table is written on the first Save.
         </>
       }
     >
-      <label className="flex flex-col gap-2">
-        <FieldLabel>Name</FieldLabel>
-        <input
-          className={INPUT}
-          type="text"
-          value={name}
-          placeholder="new_layer"
-          spellCheck={false}
-          autoFocus
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") submit();
-          }}
-        />
-      </label>
-
+      <TextField
+        label="Name"
+        value={name}
+        placeholder="new_layer"
+        autoFocus
+        onChange={(e) => setName(e.target.value)}
+      />
       <div className="flex flex-col gap-2">
         <FieldLabel>Geometry type</FieldLabel>
         <div className="flex gap-2">
-          {KINDS.map(({ kind: k, label }) => {
-            const on = k === kind;
-            return (
-              <button
-                key={k}
-                type="button"
-                onClick={() => setKind(k)}
-                className={
-                  "flex-1 flex items-center justify-center h-9 rounded-sm border text-editor cursor-pointer " +
-                  (on
-                    ? "border-primary bg-subtle text-accent"
-                    : "border-gray-200 text-gray-600 hover:bg-gray-100")
-                }
-              >
-                {label}
-              </button>
-            );
-          })}
+          {KINDS.map(({ kind: k, label }) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setKind(k)}
+              className={
+                "flex-1 flex items-center justify-center h-9 rounded-sm border text-editor cursor-pointer " +
+                (k === kind
+                  ? "border-primary bg-subtle text-accent"
+                  : "border-gray-200 text-gray-600 hover:bg-gray-100")
+              }
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
-
-      <ModalNote>
-        Creates an empty table in <code className="font-mono text-[0.95em]">main</code> and opens
-        it for drawing. The table is written on the first Save.
-      </ModalNote>
-    </Modal>
+    </FormModal>
   );
 }

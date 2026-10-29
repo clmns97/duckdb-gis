@@ -190,7 +190,7 @@ await step("new layer: draw polygon, undo/redo, save", async () => {
   await page.getByRole("button", { name: "New layer" }).click();
   await page.getByPlaceholder("new_layer").fill(DRAWN);
   await page.getByRole("button", { name: "Polygon" }).click();
-  await page.getByRole("button", { name: "Create & edit" }).click();
+  await page.getByPlaceholder("new_layer").press("Enter"); // Enter submits the form
   await jump(10, 50, 6);
   const c = await mapPx(10, 50);
   const pts = [[-60, -40], [60, -40], [60, 40], [-60, 40]];
@@ -274,11 +274,16 @@ await step("project save + open restores layers and style", async () => {
   expect((await page.getByLabel("Unsaved changes").count()) === 0, "dirty cleared after save");
   const before = (await layerList()).filter((l) => l.kind !== "preview").map((l) => l.name).join(",");
   await page.evaluate(() => window.gisLayers.list().forEach((l) => window.gisLayers.remove(l.id)));
+  // Unsaved work → Open must ask first (the dialog handler accepts), then force.
+  await page.evaluate(() => import("/src/lib/unsavedChanges.ts").then((m) => m.unsavedChanges.markDirty()));
+  let asked = false;
+  page.once("dialog", (d) => (asked = /unsaved changes/.test(d.message())));
   await page.getByRole("button", { name: "Project" }).click();
   await menuItem("Open project").click();
   await page.getByPlaceholder("/data/my-project.duckdb").fill(path);
   await page.getByRole("button", { name: "Open", exact: true }).click();
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 20000 });
+  expect(asked, "no unsaved-changes confirm");
   await waitLayersReady();
   const after = (await layerList()).map((l) => l.name).join(",");
   expect(after === before, `layers ${before} -> ${after}`);
@@ -294,7 +299,8 @@ await step("attach + detach a database", async () => {
   await sidebarTab("Browser").click();
   await page.getByRole("button", { name: "Attach database" }).click();
   await page.getByPlaceholder("/data/example.duckdb").fill(path);
-  await page.getByRole("button", { name: "Attach", exact: true }).click();
+  await page.getByLabel("Alias (optional)").fill("e2e_attach");
+  await page.getByLabel("Alias (optional)").press("Enter"); // Enter in the 2nd field submits too
   await page.getByText("e2e_attach", { exact: true }).waitFor({ timeout: 10000 });
   await page.getByRole("button", { name: "Actions for e2e_attach" }).click();
   await menuItem("Detach").click();

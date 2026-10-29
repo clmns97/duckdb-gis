@@ -19,8 +19,8 @@
 // as its own layer without a MapLibre source or a materialised copy.
 // ---------------------------------------------------------------------------
 
-import { getMap } from "./mapBus";
-import { query, str, sqlLit, ident } from "./duckdb";
+import { fitBounds } from "./mapBus";
+import { query, str, sqlLit, ident, errMsg } from "./duckdb";
 import {
   addDeckLayer,
   removeDeckLayer,
@@ -199,21 +199,16 @@ function patch(id: string, changes: Partial<ActiveLayer>): void {
   emit();
 }
 
-// Frame the map on a freshly added layer so it is actually visible (the deck
-// overlay draws where the geometry is but does not move the camera). Bounds come
-// back from `addDeckLayer`'s geometry probe (lon/lat), feeding map.fitBounds
-// directly. A dedicated per-layer "zoom to" gesture is T-022; this is add-time framing.
-function fitTo(bounds: [number, number, number, number] | null): void {
-  const map = getMap();
-  if (!map || !bounds) return;
-  const [xmin, ymin, xmax, ymax] = bounds;
-  map.fitBounds(
-    [
-      [xmin, ymin],
-      [xmax, ymax],
-    ],
-    { padding: 60, maxZoom: 14, duration: 600 },
-  );
+// Render a layer's geometry onto the deck overlay and settle its status:
+// ready (optionally framing the map on it) or error with the message.
+async function render(id: string, sql: () => Promise<string>, fit: boolean): Promise<void> {
+  try {
+    const { bounds, style, geometryKind } = await addDeckLayer(id, await sql());
+    patch(id, { status: "ready", bounds, style, geometryKind });
+    if (fit) fitBounds(bounds);
+  } catch (e) {
+    patch(id, { status: "error", error: errMsg(e) });
+  }
 }
 
 export const layers = {
@@ -259,13 +254,7 @@ export const layers = {
     const layer = byId.get(id);
     if (!layer?.source) return;
     patch(id, { status: "loading" });
-    try {
-      const sql = await sourceSql(layer.source);
-      const { bounds, style, geometryKind } = await addDeckLayer(id, sql);
-      patch(id, { status: "ready", bounds, style, geometryKind });
-    } catch (e) {
-      patch(id, { status: "error", error: e instanceof Error ? e.message : String(e) });
-    }
+    await render(id, () => sourceSql(layer.source!), false);
   },
 
   /**
@@ -292,14 +281,7 @@ export const layers = {
     syncDeckOrder();
     emit();
 
-    try {
-      const sql = await sourceSql(source);
-      const { bounds, style, geometryKind } = await addDeckLayer(id, sql);
-      patch(id, { status: "ready", bounds, style, geometryKind });
-      fitTo(bounds);
-    } catch (e) {
-      patch(id, { status: "error", error: e instanceof Error ? e.message : String(e) });
-    }
+    await render(id, () => sourceSql(source), true);
   },
 
   /**
@@ -307,20 +289,9 @@ export const layers = {
    * the Overture quick-load (T-012), and later the SQL editor (T-005), use this.
    * The caller owns `id` (the dedupe key) and the display `name`; `sql` must
    * project a `geom` column. Same loading/ready/error lifecycle as `add`.
-   *
-   * `prepare` runs once, inside the same try, before the render query — the
-   * Overture path uses it to bring up httpfs/S3 access and materialise its
-   * remote read into a local temp table (a single S3 scan; see App.loadOverture).
-   * Any setup/materialise failure therefore surfaces on the layer row like any
-   * other error instead of being swallowed by the caller.
    */
-  async addQuery(opts: {
-    id: string;
-    name: string;
-    sql: string;
-    prepare?: () => Promise<void>;
-  }): Promise<void> {
-    const { id, name, sql, prepare } = opts;
+  async addQuery(opts: { id: string; name: string; sql: string }): Promise<void> {
+    const { id, name, sql } = opts;
     const existing = byId.get(id);
     // Dedupe, but let a previously-failed layer be retried (e.g. Overture after
     // zooming to a smaller extent or fixing access) — its row is replaced below.
@@ -332,14 +303,7 @@ export const layers = {
     syncDeckOrder();
     emit();
 
-    try {
-      if (prepare) await prepare();
-      const { bounds, style, geometryKind } = await addDeckLayer(id, sql);
-      patch(id, { status: "ready", bounds, style, geometryKind });
-      fitTo(bounds);
-    } catch (e) {
-      patch(id, { status: "error", error: e instanceof Error ? e.message : String(e) });
-    }
+    await render(id, async () => sql, true);
   },
 
   /**
@@ -371,7 +335,7 @@ export const layers = {
       await addOvertureTileLayer(id, theme, release);
       patch(id, { status: "ready", bounds: null });
     } catch (e) {
-      patch(id, { status: "error", error: e instanceof Error ? e.message : String(e) });
+      patch(id, { status: "error", error: errMsg(e) });
     }
   },
 
@@ -399,7 +363,7 @@ export const layers = {
   zoomTo(id: string): void {
     const layer = byId.get(id);
     if (!layer) return;
-    fitTo(layer.bounds ?? null);
+    fitBounds(layer.bounds ?? null);
   },
 
   /**

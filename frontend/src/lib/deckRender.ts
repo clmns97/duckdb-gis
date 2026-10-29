@@ -9,7 +9,7 @@ import {
 import { Table, makeVector, type RecordBatch, type Vector } from "apache-arrow";
 import { query, queryArrow, str } from "./duckdb";
 import { wkbToGeoArrow } from "./wkb";
-import { getMap } from "./mapBus";
+import { getMap, fitBounds } from "./mapBus";
 import { selection, FID, fidTaggedRelation } from "./selection";
 import type { PickingInfo } from "@deck.gl/core";
 
@@ -53,19 +53,19 @@ export function requestSync(): void {
 // The SQL editor's Run preview: the last query result, kept so selection changes
 // can rebuild its deck.gl layers (with updated highlight colors) without
 // re-querying DuckDB. Composed *over* the persistent added layers (see `added`).
-let rendered: { table: Table; spec: GeomSpec; source: string } | null = null;
+let rendered: { table: Table; kind: GeometryKind; source: string } | null = null;
 // Whether the Run preview is drawn. The SQL-result temp layer (T-027) toggles
 // this to hide/show without re-querying — selection and highlight state survive.
 let renderedVisible = true;
 
 // Persistent layers added from the catalog (T-024): each is an Arrow table +
-// its geometry spec + a user-editable style (T-010), drawn with static
+// its geometry family + a user-editable style (T-010), drawn with static
 // (non-selection) colours and not pickable. Insertion order = draw order
 // (oldest at the bottom), so a newly added layer stacks on top. Map insertion
 // order gives us that for free.
 interface AddedLayer {
   table: Table;
-  spec: GeomSpec;
+  kind: GeometryKind;
   style: LayerStyle;
   /** User-controlled visibility (the Layers-panel Eye toggle). */
   visible: boolean;
@@ -155,11 +155,7 @@ const hasActiveSel = (source: string): boolean =>
   selection.size > 0 && selection.source() === source;
 
 type Color = [number, number, number] | [number, number, number, number];
-const colorAcc = (source: string, base: Color, sel: Color) =>
-  (hasActiveSel(source)
-    ? (info: FidInfo) => (isActiveSel(source, fidAt(info)) ? sel : base)
-    : base) as never;
-const numAcc = (source: string, base: number, sel: number) =>
+const acc = <T extends Color | number>(source: string, base: T, sel: T) =>
   (hasActiveSel(source)
     ? (info: FidInfo) => (isActiveSel(source, fidAt(info)) ? sel : base)
     : base) as never;
@@ -271,21 +267,6 @@ interface Probe {
 // Maps a DuckDB geometry type to its layer factories. Single and Multi variants
 // of a family share a layer (the GeoArrow layers accept both
 // PointData/MultiPointData, Polygon/MultiPolygon, …).
-interface GeomSpec {
-  // Selection-aware builder for the editor's Run preview (highlights picks).
-  layer: (batch: RecordBatch, geom: unknown, id: string, source: string) => Layer;
-  // Builder for persistent added layers (T-024): base colours from the layer's
-  // user-editable style (T-010), but pickable and selection-aware (T-041) —
-  // selected features in the active layer highlight amber over the base style.
-  staticLayer: (
-    batch: RecordBatch,
-    geom: unknown,
-    id: string,
-    source: string,
-    s: LayerStyle,
-  ) => Layer;
-}
-
 // ---------------------------------------------------------------------------
 // Per-layer symbology (T-010). The single-symbol style the Layer Properties ▸
 // Symbology tab edits and the static layer factories below read. Colours are
@@ -348,143 +329,93 @@ const opaque = (c: [number, number, number]): Color => [c[0], c[1], c[2], 255];
 const SEL_FILL: Color = [255, 159, 28, 230];
 const SEL_LINE: Color = [217, 119, 6, 255];
 
-const POINT = (batch: RecordBatch, geom: unknown, id: string, source: string): Layer =>
-  new GeoArrowScatterplotLayer({
-    id,
-    data: batch,
-    getPosition: geom as never,
-    pickable: true,
-    getRadius: numAcc(source, 4, 6),
-    radiusUnits: "pixels",
-    getFillColor: colorAcc(source, [99, 102, 241, 200], SEL_FILL),
-    stroked: true,
-    getLineColor: colorAcc(source, [255, 255, 255, 255], SEL_LINE),
-    lineWidthUnits: "pixels",
-    getLineWidth: numAcc(source, 1, 2),
-    updateTriggers: hiTriggers(),
-  });
-
-const PATH = (batch: RecordBatch, geom: unknown, id: string, source: string): Layer =>
-  new GeoArrowPathLayer({
-    id,
-    data: batch,
-    getPath: geom as never,
-    pickable: true,
-    getColor: colorAcc(source, [73, 74, 185, 255], SEL_LINE),
-    widthUnits: "pixels",
-    getWidth: numAcc(source, 2, 4),
-    capRounded: true,
-    jointRounded: true,
-    updateTriggers: hiTriggers(),
-  });
-
-const POLYGON = (batch: RecordBatch, geom: unknown, id: string, source: string): Layer =>
-  new GeoArrowPolygonLayer({
-    id,
-    data: batch,
-    getPolygon: geom as never,
-    pickable: true,
-    filled: true,
-    getFillColor: colorAcc(source, [99, 102, 241, 90], [255, 159, 28, 120]),
-    stroked: true,
-    getLineColor: colorAcc(source, [73, 74, 185, 255], SEL_LINE),
-    getLineWidth: numAcc(source, 1, 2),
-    lineWidthUnits: "pixels",
-    // Triangulate on the main thread instead of fetching the earcut worker from
-    // a CDN — deterministic and offline-safe. (Revisit with a self-hosted worker
-    // if main-thread earcut becomes a bottleneck on very large polygon sets.)
-    earcutWorkerUrl: null,
-    updateTriggers: hiTriggers(),
-  });
-
-// Counterparts for persistent added layers (T-024): palette/style-coloured, and
-// — since T-041 — pickable and selection-aware. Base colours come from the
-// layer's editable style (T-010); a selected feature in the *active* layer draws
-// amber over that base (the `source`-scoped accessors above).
-const POINT_STATIC = (
+// One deck.gl layer factory per geometry family. Base colours come from a
+// LayerStyle; a selected feature in the active layer draws amber over it (the
+// `source`-scoped accessors above). Persistent added layers (T-024) pass their
+// editable style (T-010); the Run preview passes PREVIEW_STYLE.
+type LayerFactory = (
   batch: RecordBatch,
   geom: unknown,
   id: string,
   source: string,
   s: LayerStyle,
-): Layer =>
-  new GeoArrowScatterplotLayer({
-    id,
-    data: batch,
-    getPosition: geom as never,
-    pickable: true,
-    getRadius: numAcc(source, s.pointRadius, s.pointRadius + 2),
-    radiusUnits: "pixels",
-    getFillColor: colorAcc(source, rgba(s.fillColor, s.fillOpacity), SEL_FILL),
-    stroked: true,
-    getLineColor: colorAcc(source, opaque(s.lineColor), SEL_LINE),
-    lineWidthUnits: "pixels",
-    getLineWidth: numAcc(source, s.lineWidth, s.lineWidth + 1),
-    updateTriggers: hiTriggers(),
-  });
+  selFill?: Color,
+) => Layer;
 
-const PATH_STATIC = (
-  batch: RecordBatch,
-  geom: unknown,
-  id: string,
-  source: string,
-  s: LayerStyle,
-): Layer =>
-  new GeoArrowPathLayer({
-    id,
-    data: batch,
-    getPath: geom as never,
-    pickable: true,
-    getColor: colorAcc(source, rgba(s.lineColor, s.fillOpacity), SEL_LINE),
-    widthUnits: "pixels",
-    getWidth: numAcc(source, s.lineWidth, s.lineWidth + 2),
-    capRounded: true,
-    jointRounded: true,
-    updateTriggers: hiTriggers(),
-  });
-
-const POLYGON_STATIC = (
-  batch: RecordBatch,
-  geom: unknown,
-  id: string,
-  source: string,
-  s: LayerStyle,
-): Layer =>
-  new GeoArrowPolygonLayer({
-    id,
-    data: batch,
-    getPolygon: geom as never,
-    pickable: true,
-    filled: true,
-    getFillColor: colorAcc(source, rgba(s.fillColor, s.fillOpacity), SEL_FILL),
-    stroked: true,
-    getLineColor: colorAcc(source, opaque(s.lineColor), SEL_LINE),
-    getLineWidth: numAcc(source, s.lineWidth, s.lineWidth + 1),
-    lineWidthUnits: "pixels",
-    earcutWorkerUrl: null, // main-thread earcut; offline-safe (see POLYGON above)
-    updateTriggers: hiTriggers(),
-  });
-
-const SPECS: Record<string, GeomSpec> = {
-  POINT: { layer: POINT, staticLayer: POINT_STATIC },
-  MULTIPOINT: { layer: POINT, staticLayer: POINT_STATIC },
-  LINESTRING: { layer: PATH, staticLayer: PATH_STATIC },
-  MULTILINESTRING: { layer: PATH, staticLayer: PATH_STATIC },
-  POLYGON: { layer: POLYGON, staticLayer: POLYGON_STATIC },
-  MULTIPOLYGON: { layer: POLYGON, staticLayer: POLYGON_STATIC },
+const FACTORIES: Record<GeometryKind, LayerFactory> = {
+  point: (batch, geom, id, source, s, selFill = SEL_FILL) =>
+    new GeoArrowScatterplotLayer({
+      id,
+      data: batch,
+      getPosition: geom as never,
+      pickable: true,
+      getRadius: acc(source, s.pointRadius, s.pointRadius + 2),
+      radiusUnits: "pixels",
+      getFillColor: acc(source, rgba(s.fillColor, s.fillOpacity), selFill),
+      stroked: true,
+      getLineColor: acc(source, opaque(s.lineColor), SEL_LINE),
+      lineWidthUnits: "pixels",
+      getLineWidth: acc(source, s.lineWidth, s.lineWidth + 1),
+      updateTriggers: hiTriggers(),
+    }),
+  line: (batch, geom, id, source, s) =>
+    new GeoArrowPathLayer({
+      id,
+      data: batch,
+      getPath: geom as never,
+      pickable: true,
+      getColor: acc(source, rgba(s.lineColor, s.fillOpacity), SEL_LINE),
+      widthUnits: "pixels",
+      getWidth: acc(source, s.lineWidth, s.lineWidth + 2),
+      capRounded: true,
+      jointRounded: true,
+      updateTriggers: hiTriggers(),
+    }),
+  polygon: (batch, geom, id, source, s, selFill = SEL_FILL) =>
+    new GeoArrowPolygonLayer({
+      id,
+      data: batch,
+      getPolygon: geom as never,
+      pickable: true,
+      filled: true,
+      getFillColor: acc(source, rgba(s.fillColor, s.fillOpacity), selFill),
+      stroked: true,
+      getLineColor: acc(source, opaque(s.lineColor), SEL_LINE),
+      getLineWidth: acc(source, s.lineWidth, s.lineWidth + 1),
+      lineWidthUnits: "pixels",
+      // Triangulate on the main thread instead of fetching the earcut worker from
+      // a CDN — deterministic and offline-safe. (Revisit with a self-hosted worker
+      // if main-thread earcut becomes a bottleneck on very large polygon sets.)
+      earcutWorkerUrl: null,
+      updateTriggers: hiTriggers(),
+    }),
 };
 
-// A result set can freely mix a family's simple and multi variants (e.g.
-// Overture buildings: mostly POLYGON with some MULTIPOLYGON) — real data isn't
-// guaranteed homogeneous just because `probeGeometry` samples one row's type.
-// Always fetch the family's multi type over `ST_Multi(geom)` (a no-op on
-// already-multi rows), so a single query never depends on every row sharing
-// the exact type `any_value` happened to sample.
-const FAMILY_SPECS: Record<GeometryKind, GeomSpec> = {
-  point: SPECS.MULTIPOINT,
-  line: SPECS.MULTILINESTRING,
-  polygon: SPECS.MULTIPOLYGON,
+// The Run preview's fixed look, per family: indigo, white-ringed points, and a
+// lighter amber when a preview polygon is selected (PREVIEW_POLYGON_SEL_FILL).
+const INDIGO: [number, number, number] = [99, 102, 241];
+const INDIGO_DARK: [number, number, number] = [73, 74, 185];
+const PREVIEW_STYLE: Record<GeometryKind, LayerStyle> = {
+  point: { fillColor: INDIGO, lineColor: [255, 255, 255], fillOpacity: 200 / 255, lineWidth: 1, pointRadius: 4 },
+  line: { fillColor: INDIGO, lineColor: INDIGO_DARK, fillOpacity: 1, lineWidth: 2, pointRadius: 4 },
+  polygon: { fillColor: INDIGO, lineColor: INDIGO_DARK, fillOpacity: 90 / 255, lineWidth: 1, pointRadius: 4 },
 };
+const PREVIEW_POLYGON_SEL_FILL: Color = [255, 159, 28, 120];
+
+// One layer per non-empty Arrow batch of a GeoArrow table. `idPrefix` + batch
+// index is what resolvePick parses back (`geoarrow-<i>` / `added-<id>-<i>`).
+function batchLayers(
+  table: Table,
+  idPrefix: string,
+  make: (batch: RecordBatch, geom: unknown, id: string) => Layer,
+): Layer[] {
+  const out: Layer[] = [];
+  table.batches.forEach((batch, i) => {
+    const geom = batch.numRows > 0 ? batch.getChild("geom")?.data[0] : undefined;
+    if (geom) out.push(make(batch, geom, `${idPrefix}${i}`));
+  });
+  return out;
+}
 
 /**
  * Run a user query and render its geometry through the matching GeoArrow layer.
@@ -497,10 +428,6 @@ export async function renderGeoArrow(userSql: string): Promise<DeckOutcome> {
   const t0 = performance.now();
   const probe = await probeGeometry(inner);
   const kind = geometryKindOf(probe.type);
-  const spec = FAMILY_SPECS[kind];
-  if (!spec) {
-    throw new Error(`unsupported geometry type for rendering: ${probe.type}`);
-  }
   // New render → new feature-id space; drop any stale selection and record the
   // source query so a downstream tool can rebuild these exact features.
   selection.setSource(inner);
@@ -517,13 +444,13 @@ export async function renderGeoArrow(userSql: string): Promise<DeckOutcome> {
   const { table, bytes } = await fetchGeoArrow(inner, kind);
   const t1 = performance.now();
 
-  rendered = { table, spec, source: inner };
+  rendered = { table, kind, source: inner };
   renderedVisible = true; // a fresh Run is always shown, even if the last was hidden
 
   const map = getMap();
   if (map) {
     syncOverlay();
-    fitToBounds(map, probe.bounds);
+    fitBounds(probe.bounds);
   }
   const t2 = performance.now();
 
@@ -604,19 +531,6 @@ async function fetchGeoArrow(
   return { table: new Table({ [FID]: fids, geom }), bytes };
 }
 
-// Build one selection-aware deck.gl layer per non-empty Arrow batch from the
-// editor's Run-preview result. The `geoarrow-<i>` ids are matched by pickFid.
-function buildLayers({ table, spec, source }: { table: Table; spec: GeomSpec; source: string }): Layer[] {
-  const layers: Layer[] = [];
-  table.batches.forEach((batch, i) => {
-    if (batch.numRows === 0) return;
-    const geom = batch.getChild("geom")?.data[0];
-    if (!geom) return;
-    layers.push(spec.layer(batch, geom, `geoarrow-${i}`, source));
-  });
-  return layers;
-}
-
 // Compose the overlay's layer array: every persistent added layer (bottom,
 // insertion order) then the editor's Run preview (top, pickable/highlighted).
 // The single place layers reach the overlay, so both paths always coexist.
@@ -636,14 +550,16 @@ function syncOverlay(): void {
   for (const id of ids) {
     const al = added.get(id)!;
     if (!al.visible || al.suppressed) continue;
-    al.table.batches.forEach((batch, i) => {
-      if (batch.numRows === 0) return;
-      const geom = batch.getChild("geom")?.data[0];
-      if (!geom) return;
-      layers.push(al.spec.staticLayer(batch, geom, `added-${id}-${i}`, al.source, al.style));
-    });
+    const make = FACTORIES[al.kind];
+    layers.push(...batchLayers(al.table, `added-${id}-`, (b, g, lid) => make(b, g, lid, al.source, al.style)));
   }
-  if (rendered && renderedVisible) layers.push(...buildLayers(rendered));
+  if (rendered && renderedVisible) {
+    const { table, kind, source } = rendered;
+    const selFill = kind === "polygon" ? PREVIEW_POLYGON_SEL_FILL : undefined;
+    layers.push(
+      ...batchLayers(table, "geoarrow-", (b, g, lid) => FACTORIES[kind](b, g, lid, source, PREVIEW_STYLE[kind], selFill)),
+    );
+  }
   // Render deck geometry beneath the editable working set when one exists, so
   // drawn/edited features stay visible on top (T-025). No-op otherwise.
   // `beforeId` is honoured by MapboxOverlay in interleaved mode but isn't in
@@ -676,8 +592,6 @@ export async function addDeckLayer(id: string, sourceSql: string): Promise<Added
   const inner = clean(sourceSql);
   const probe = await probeGeometry(inner);
   const kind = geometryKindOf(probe.type);
-  const spec = FAMILY_SPECS[kind];
-  if (!spec) throw new Error(`unsupported geometry type for rendering: ${probe.type}`);
 
   // Same `__fid` tagging as the Run preview, so features picked on this layer
   // resolve back to source rows for downstream tools (T-041).
@@ -687,13 +601,13 @@ export async function addDeckLayer(id: string, sourceSql: string): Promise<Added
   // Keep an existing layer's edit-suppression across a re-add (e.g. a commit
   // that re-renders the layer while still editing); default false on first add.
   const suppressed = added.get(id)?.suppressed ?? false;
-  added.set(id, { table, spec, style, visible: true, suppressed, source: inner });
+  added.set(id, { table, kind, style, visible: true, suppressed, source: inner });
   syncOverlay();
   return {
     featureCount: probe.count,
     bounds: probe.bounds,
     style,
-    geometryKind: geometryKindOf(probe.type),
+    geometryKind: kind,
   };
 }
 
@@ -744,16 +658,4 @@ export function setPreviewVisible(visible: boolean): void {
   if (renderedVisible === visible) return;
   renderedVisible = visible;
   syncOverlay();
-}
-
-function fitToBounds(map: maplibregl.Map, bounds: [number, number, number, number] | null): void {
-  if (!bounds) return;
-  const [xmin, ymin, xmax, ymax] = bounds;
-  map.fitBounds(
-    [
-      [xmin, ymin],
-      [xmax, ymax],
-    ],
-    { padding: 60, maxZoom: 14, duration: 600 },
-  );
 }
