@@ -175,7 +175,23 @@ await step("layer properties: info + symbology", async () => {
   });
   const fill = await page.evaluate(() => window.gisLayers.list().find((l) => l.name === "regions").style.fillColor.join(","));
   expect(fill === "255,0,0", `fill ${fill}`);
+  await page.getByRole("tab", { name: "Information" }).click();
+  await page.getByText("Not declared (assumed EPSG:4326)").waitFor({ timeout: 10000 });
   await page.getByRole("button", { name: "Close", exact: true }).last().click();
+});
+
+await step("layer properties: a declared, projected CRS shows as reprojected", async () => {
+  await sql(`CREATE OR REPLACE TABLE memory.main.crs_3857 AS
+    SELECT ST_Transform(ST_Point(8.54, 47.37), 'EPSG:4326', 'EPSG:3857', always_xy := true)::GEOMETRY('EPSG:3857') AS geom`);
+  await page.evaluate(() => window.gisLayers.add({ db: "memory", schema: "main", table: "crs_3857", geomColumn: "geom" }));
+  await waitLayersReady();
+  const l = (await layerList()).find((x) => x.name === "crs_3857");
+  expect(l?.status === "ready", `crs layer ${JSON.stringify(l)}`);
+  await page.getByRole("button", { name: "Actions for crs_3857" }).click();
+  await menuItem("Layer properties").click();
+  await page.getByText("EPSG:3857 (reprojected to WGS84 for display)").waitFor({ timeout: 10000 });
+  await page.getByRole("button", { name: "Close", exact: true }).last().click();
+  await page.evaluate(() => window.gisLayers.remove(window.gisLayers.list().find((x) => x.name === "crs_3857").id));
 });
 
 await step("attribute table opens and pages", async () => {

@@ -130,7 +130,9 @@ function InformationTab({ layer }: { layer: ActiveLayer }) {
         {error ? "—" : info ? (info.featureCount ?? "—").toLocaleString() : "…"}
       </Row>
       <Row label="Extent">{extent}</Row>
-      <Row label="CRS">EPSG:4326 (assumed)</Row>
+      <Row label="CRS">
+        {error ? "—" : info ? info.crs ?? "Not declared (assumed EPSG:4326)" : "…"}
+      </Row>
 
       <dt className="col-span-full mt-2 pt-2 border-t border-gray-200 font-medium text-gray-500">
         Attributes
