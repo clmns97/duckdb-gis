@@ -1,7 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { IDockviewPanelProps } from "dockview";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { layers, loadLayerInfo, qualified, type LayerColumn } from "../../lib/layers";
+import { layers, loadLayerInfo, qualified, readOptions, type LayerColumn } from "../../lib/layers";
 import { query, str, ident, errMsg } from "../../lib/duckdb";
 import { Button } from "../Button";
 import { TypeGlyph } from "../TypeGlyph";
@@ -66,7 +66,7 @@ export function AttributesPanel(props: IDockviewPanelProps) {
     // (timestamps, decimals, nested types), rather than as its JS decoding.
     const cols = columns.map((c) => `${ident(c.name)}::VARCHAR AS ${ident(c.name)}`).join(", ");
     const sql = `SELECT ${cols} FROM ${qualified(source)} LIMIT ${PAGE_SIZE} OFFSET ${offset}`;
-    query(sql)
+    query(sql, readOptions(source))
       .then((r) => {
         if (cancelled) return;
         setRows(r);

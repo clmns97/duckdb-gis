@@ -7,7 +7,7 @@ import {
   GeoArrowPolygonLayer,
 } from "@geoarrow/deck.gl-geoarrow";
 import { Table, makeVector, type RecordBatch, type Vector } from "apache-arrow";
-import { query, queryArrow, str } from "./duckdb";
+import { query, queryArrow, str, type QueryOptions } from "./duckdb";
 import { wkbToGeoArrow } from "./wkb";
 import { getMap, fitBounds } from "./mapBus";
 import { selection, FID, fidTaggedRelation, cleanSql } from "./selection";
@@ -492,12 +492,13 @@ export async function renderGeoArrow(userSql: string): Promise<DeckOutcome> {
 // `any_value(geom)` with `ST_Extent_Agg(geom)` over the same column throws a
 // spurious "Only little-endian WKB is supported" in spatial for some geometries
 // (hit by Overture buildings/polygons; the encoder decodes the same rows fine).
-async function probeGeometry(innerSql: string): Promise<Probe> {
+async function probeGeometry(innerSql: string, options?: QueryOptions): Promise<Probe> {
   const rows = await query(
     `SELECT any_value(ST_GeometryType(geom)) AS gt, COUNT(*) AS n,
             min(ST_XMin(geom)) AS xmin, min(ST_YMin(geom)) AS ymin,
             max(ST_XMax(geom)) AS xmax, max(ST_YMax(geom)) AS ymax
      FROM (${innerSql}) _q WHERE geom IS NOT NULL`,
+    options,
   );
   const r = rows[0] ?? {};
   const count = Number(r.n ?? 0);
@@ -545,9 +546,11 @@ function assertPlausibleWgs84(bounds: [number, number, number, number] | null): 
 async function fetchGeoArrow(
   inner: string,
   kind: GeometryKind,
+  options?: QueryOptions,
 ): Promise<{ table: Table; bytes: number }> {
   const { table, bytes } = await queryArrow(
     `SELECT ${FID}, ST_AsWKB(geom) AS geom FROM (${fidTaggedRelation(inner)}) _t`,
+    options,
   );
   const geom = wkbToGeoArrow(table.getChild("geom")!, kind);
   // One contiguous batch, so the overlay draws one layer per family rather than
@@ -624,14 +627,18 @@ export interface AddedLayerOutcome {
  * count + extent so the caller can frame the map. Re-adding the same `id`
  * replaces it. Not selection-coupled — see `renderGeoArrow` for the pickable path.
  */
-export async function addDeckLayer(id: string, sourceSql: string): Promise<AddedLayerOutcome> {
+export async function addDeckLayer(
+  id: string,
+  sourceSql: string,
+  options?: QueryOptions,
+): Promise<AddedLayerOutcome> {
   const inner = cleanSql(sourceSql);
-  const probe = await probeGeometry(inner);
+  const probe = await probeGeometry(inner, options);
   const kind = geometryKindOf(probe.type);
 
   // Same `__fid` tagging as the Run preview, so features picked on this layer
   // resolve back to source rows for downstream tools (T-041).
-  const { table } = await fetchGeoArrow(inner, kind);
+  const { table } = await fetchGeoArrow(inner, kind, options);
   // Keep an existing layer's style on replace so its symbology stays stable.
   const style = added.get(id)?.style ?? nextStyle(probe.type);
   // Keep an existing layer's edit-suppression across a re-add (e.g. a commit

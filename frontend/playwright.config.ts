@@ -12,7 +12,7 @@ const python = process.env.GIS_PYTHON ?? repo("configure/venv/bin/python");
 
 export default defineConfig({
   testDir: "e2e",
-  // One shared extension server (one DuckDB connection), so tests run one at a
+  // One shared extension server (one DuckDB session), so tests run one at a
   // time; the `app` fixture resets its working catalog between tests.
   workers: 1,
   fullyParallel: false,

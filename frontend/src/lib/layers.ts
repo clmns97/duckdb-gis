@@ -21,7 +21,7 @@
 
 import { fitBounds } from "./mapBus";
 import { changeSignal } from "./store";
-import { query, str, sqlLit, ident, errMsg } from "./duckdb";
+import { query, str, sqlLit, ident, errMsg, type QueryOptions } from "./duckdb";
 import {
   addDeckLayer,
   removeDeckLayer,
@@ -136,6 +136,12 @@ export function qualified(s: LayerSource): string {
   return `${ident(s.db)}.${ident(s.schema)}.${ident(s.table)}`;
 }
 
+/** Reads of a catalog table run on a pooled connection (lib/duckdb.ts), except
+ *  a TEMP table's: those exist only on the session connection. */
+export function readOptions(s: LayerSource): QueryOptions {
+  return { pooled: s.db !== "temp" };
+}
+
 // A CRS-annotated DuckDB type prints as `GEOMETRY('EPSG:32633')`/`GEOMETRY('OGC:CRS84')`
 // etc.; unannotated `GEOMETRY` carries none. Matches `catalog.ts`'s detection.
 const CRS_ANNOTATION = /^GEOMETRY\('([^']+)'\)$/;
@@ -153,6 +159,7 @@ async function columnCrs(s: LayerSource): Promise<string | null> {
     `SELECT data_type AS t FROM duckdb_columns()
       WHERE database_name = '${sqlLit(s.db)}' AND schema_name = '${sqlLit(s.schema)}'
         AND table_name = '${sqlLit(s.table)}' AND column_name = '${sqlLit(s.geomColumn)}'`,
+    readOptions(s),
   );
   const m = CRS_ANNOTATION.exec(str(rows[0]?.t ?? "").trim());
   return m ? m[1] : null;
@@ -196,9 +203,14 @@ function patch(id: string, changes: Partial<ActiveLayer>): void {
 
 // Render a layer's geometry onto the deck overlay and settle its status:
 // ready (optionally framing the map on it) or error with the message.
-async function render(id: string, sql: () => Promise<string>, fit: boolean): Promise<void> {
+async function render(
+  id: string,
+  sql: () => Promise<string>,
+  fit: boolean,
+  options?: QueryOptions,
+): Promise<void> {
   try {
-    const { bounds, style, geometryKind } = await addDeckLayer(id, await sql());
+    const { bounds, style, geometryKind } = await addDeckLayer(id, await sql(), options);
     patch(id, { status: "ready", bounds, style, geometryKind });
     if (fit) fitBounds(bounds);
   } catch (e) {
@@ -246,7 +258,7 @@ export const layers = {
     const layer = byId.get(id);
     if (!layer?.source) return;
     patch(id, { status: "loading" });
-    await render(id, () => sourceSql(layer.source!), false);
+    await render(id, () => sourceSql(layer.source!), false, readOptions(layer.source!));
   },
 
   /**
@@ -273,7 +285,7 @@ export const layers = {
     syncDeckOrder();
     signal.emit();
 
-    await render(id, () => sourceSql(source), true);
+    await render(id, () => sourceSql(source), true, readOptions(source));
   },
 
   /**
@@ -520,12 +532,14 @@ export async function loadLayerInfo(layer: ActiveLayer): Promise<LayerInfo> {
           AND schema_name = '${sqlLit(s.schema)}'
           AND table_name = '${sqlLit(s.table)}'
         ORDER BY column_index`,
+      readOptions(s),
     ),
     query(
       `SELECT count(*) AS n,
               ST_GeometryType(any_value(${ident(s.geomColumn)})
                 FILTER (WHERE ${ident(s.geomColumn)} IS NOT NULL)) AS gt
          FROM ${qualified(s)}`,
+      readOptions(s),
     ),
   ]);
 

@@ -7,15 +7,28 @@ import { DataType, tableFromIPC, type Field, type Table } from "apache-arrow";
 // requests go to the Vite proxy, which forwards them to the running
 // `start_gis_server`.
 //
-// All requests share one DuckDB connection on the server, so session state
-// (SET, LOAD, an open transaction) carries over between calls.
+// By default requests run one at a time on the server's session connection,
+// so connection state (USE, SET, TEMP tables, an open transaction) carries
+// over between calls. `{ pooled: true }` runs a request on one of the server's
+// pooled connections instead: in parallel with everything else, after a `USE`
+// of the session's current database/schema, but without the rest of that
+// state. Use it for the UI's own reads of real tables, so they don't queue
+// behind a slow query.
+
+export interface QueryOptions {
+  pooled?: boolean;
+}
 
 /** A result row: column name → plain JS value (see `plainValue`). */
 export type Row = Record<string, unknown>;
 
 /** Run SQL and return the last statement's result as an Arrow table. */
-export async function queryArrow(sql: string): Promise<{ table: Table; bytes: number }> {
-  const res = await fetch("/ddb/run", { method: "POST", body: sql });
+export async function queryArrow(
+  sql: string,
+  { pooled = false }: QueryOptions = {},
+): Promise<{ table: Table; bytes: number }> {
+  const headers = pooled ? { "X-GIS-Connection": "pool" } : undefined;
+  const res = await fetch("/ddb/run", { method: "POST", body: sql, headers });
   if (!res.ok) {
     const message = await res.text();
     throw new Error(message || `query failed (HTTP ${res.status})`);
@@ -25,8 +38,8 @@ export async function queryArrow(sql: string): Promise<{ table: Table; bytes: nu
 }
 
 /** Run SQL and return the last statement's rows as objects keyed by column name. */
-export async function query(sql: string): Promise<Row[]> {
-  const { table } = await queryArrow(sql);
+export async function query(sql: string, options?: QueryOptions): Promise<Row[]> {
+  const { table } = await queryArrow(sql, options);
   const fields = table.schema.fields;
   const columns = fields.map((_, i) => table.getChildAt(i));
   const rows: Row[] = [];
