@@ -16,7 +16,7 @@ Our code:
   re-export from `frontend/src`; the frontend is the source of truth.
 - `test/sql/` — SQL-level extension tests.
 - `testdata/` — deterministic demo fixture (`seed.sql` → `build.sh` → a
-  gitignored `demo.duckdb`) and `serve.sh` for e2e runs.
+  gitignored `demo.duckdb`); `serve.py` serves it for the e2e suite.
 - `scripts/` — build helpers, notably `generate_embedded_assets.py`.
 
 Gitignored, so **not present in a fresh clone** — they exist only on a machine
@@ -34,6 +34,30 @@ duckdb -unsigned -cmd "LOAD 'build/release/gis.duckdb_extension'; FROM start_gis
 ```
 
 `make` uses `extension-ci-tools/makefiles/c_api_extensions/`. Extension name is `gis`; it targets C API `TARGET_DUCKDB_VERSION=v1.2.0` (Makefile), i.e. one binary for DuckDB 1.4 LTS and later. Only call DuckDB through `duckdb_*` C functions available in that band (see `duckdb_capi/duckdb_extension.h`).
+
+## Testing
+
+Three layers; see `test/README.md` for details.
+
+- **C++ / SQL:** `make test_release` (`test/sql/*.test`). Runs in CI on every push.
+- **Frontend static:** `cd frontend && pnpm typecheck` (plus `pnpm build`). CI
+  (`Frontend.yml`) on every push.
+- **End-to-end (Playwright, `frontend/e2e/`):** `cd frontend && pnpm test:e2e`
+  (or `pnpm test:e2e editing` for one spec file). Needs a built extension
+  (`make release`) and `make configure`'s venv. It starts its own extension
+  server (`testdata/serve.py` on port 4215, over a throwaway copy of
+  `demo.duckdb`) and Vite on 5174, so it runs beside a normal dev setup.
+  ~3–4 min. Tests read app state through the DEV-only `window.gis*` seam
+  (`App.tsx`) via the `app` fixture (`e2e/fixtures.ts`), which resets the
+  server between tests and fails a test on any unexpected console error.
+  `@network` tests hit live Overture S3 and are skipped in CI.
+
+**When to run e2e:** after major changes (refactors, rendering/editing/store
+changes, dependency bumps) — not on every small edit. It is opt-in in CI
+(`.github/workflows/E2E.yml`, no cron): add the `run-e2e` label to a PR (it
+then re-runs on each push until removed) or use "Run workflow" in Actions.
+A bug the suite finds but that isn't fixed yet gets pinned with `test.fail()`
+plus a comment, so the suite stays green and flags the fix.
 
 ## Work tracking
 

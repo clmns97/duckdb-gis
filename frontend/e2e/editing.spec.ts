@@ -36,12 +36,7 @@ test("a new layer is drawn and saved as a table", async ({ app, page }) => {
   expect((await app.layer("drawn"))?.status).toBe("ready");
 });
 
-// Known bug: undo steps split on a 300 ms idle timer, so at a human clicking
-// pace every vertex becomes its own step and undo walks back through half-drawn
-// polygons — the documented rule (editing.ts, T-068) is one step per drawn
-// feature. Remove `test.fail` once that's fixed.
 test("undo removes a just-drawn feature in one step; redo restores it", async ({ app, page }) => {
-  test.fail();
   await drawSquare(app, "drawn");
   await page.keyboard.press("Control+z");
   await expect.poll(() => featureCount(app), { timeout: 3_000 }).toBe(0);
