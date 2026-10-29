@@ -10,8 +10,8 @@
 // lib/remote.ts). Bucket layout, verified live:
 //   - `release/<version>/theme=<t>/type=<ty>/*.parquet`, each row with a
 //     native `geometry` column (GEOMETRY, crs84) and a `bbox` struct;
-//   - `registry/*.parquet`: the GERS registry, one row per feature id with the
-//     data file (`path`) it lives in as of the latest release (`last_seen`).
+//   - Overture's STAC catalog publishes, per release, one small
+//     `collections.parquet` (~150 KB) listing every data file with its bbox.
 // ---------------------------------------------------------------------------
 
 import { query, sqlLit, str, ident } from "./duckdb";
@@ -140,27 +140,35 @@ function bboxOverlapClause(bbox: Bbox): string {
   );
 }
 
+const STAC_BASE = "https://stac.overturemaps.org";
+
 /**
- * The data files holding `ids` in `release`, from the GERS registry — or null
- * when any id isn't registered for that release. The registry only knows the
- * latest release's files (`last_seen`), so an older release falls back to the
- * full theme glob. Globbing a large theme costs one footer read per file —
- * ~2 min for one building (513 files) vs ~20 s via the registry (#13).
+ * The data files of `theme` in `release` whose extent overlaps `bbox`, from the
+ * release's STAC index — or null when the index can't be read (the caller then
+ * globs the whole theme). Globbing costs one footer read per file before any
+ * pruning: ~2 min for one building (513 files) vs ~4 s via the index (#13).
  */
-async function registryFiles(release: string, ids: string[]): Promise<string[] | null> {
-  const rows = await query(
-    `SELECT id, path FROM read_parquet('${OVERTURE_BUCKET}/registry/*.parquet') ` +
-      `WHERE last_seen = '${sqlLit(release)}' AND id IN (${idList(ids)})`,
-  );
-  if (new Set(rows.map((r) => r.id)).size < ids.length) return null;
-  return [...new Set(rows.map((r) => `${OVERTURE_BUCKET}/release/${release}/${str(r.path)}`))];
+async function stacFiles(theme: OvertureTheme, release: string, bbox: Bbox): Promise<string[] | null> {
+  try {
+    const rows = await query(
+      `SELECT assets.aws.alternate.s3.href AS f ` +
+        `FROM read_parquet('${STAC_BASE}/${sqlLit(release)}/collections.parquet') ` +
+        `WHERE contains(assets.aws.alternate.s3.href, '/theme=${sqlLit(theme.id)}/') ` +
+        `AND bbox.xmin <= ${bbox.xmax} AND bbox.xmax >= ${bbox.xmin} ` +
+        `AND bbox.ymin <= ${bbox.ymax} AND bbox.ymax >= ${bbox.ymin}`,
+    );
+    const files = rows.map((r) => str(r.f));
+    return files.length ? files : null;
+  } catch {
+    return null;
+  }
 }
 
 const idList = (ids: string[]) => ids.map((id) => `'${sqlLit(id)}'`).join(",");
 
 /**
  * Materialise the *selected* features of an Overture theme from GeoParquet — the
- * "Create Layer from Selection" path (T-058). Reads `files` (from the registry)
+ * "Create Layer from Selection" path (T-058). Reads `files` (from the STAC index)
  * or else every `type` partition of the theme (a source-layer's features can live
  * in more than one, so `union_by_name` reconciles the differing schemas), prunes
  * row-groups with the selection's bbox, and filters to the picked GERS `id`s —
@@ -229,7 +237,7 @@ export async function createLayerFromSelection(theme: OvertureTheme, release: st
   await ensureOvertureAccess();
   const stamp = Date.now().toString(36);
   const table = `${sanitizeIdent(theme.label)}_selection_${stamp}`;
-  const files = await registryFiles(release, ids);
+  const files = await stacFiles(theme, release, bbox);
   await query(
     `CREATE TABLE main.${ident(table)} AS ${buildOvertureSelectionQuery(theme, release, bbox, ids, files)}`,
   );
