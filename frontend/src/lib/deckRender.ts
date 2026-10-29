@@ -187,17 +187,17 @@ function fidFrom(info: PickingInfo, table: Table, batchIdx: number): number | nu
 
 // Resolve a pick to its `__fid` *and* the source query of the layer it hit
 // (T-041), so the selection can scope itself to that layer. The layer id encodes
-// which render path was hit: `geoarrow-<i>` is the Run preview; `added-<id>-<i>`
-// is a persistent added layer (ids are word-char only, so the trailing `-<i>`
-// batch index is unambiguous).
+// which render path was hit: `geoarrow-<t>-<i>` is the Run preview;
+// `added-<id>-<t>-<i>` is a persistent added layer (ids are word-char only, so
+// the trailing `-<t>-<i>` is unambiguous). See batchLayers for `<t>`.
 function resolvePick(info: PickingInfo): { fid: number; source: string } | null {
   const id = info.layer?.id ?? "";
-  const prev = /^geoarrow-(\d+)$/.exec(id);
+  const prev = /^geoarrow-\d+-(\d+)$/.exec(id);
   if (prev && rendered) {
     const fid = fidFrom(info, rendered.table, Number(prev[1]));
     return fid == null ? null : { fid, source: rendered.source };
   }
-  const add = /^added-(.+)-(\d+)$/.exec(id);
+  const add = /^added-(.+)-\d+-(\d+)$/.exec(id);
   if (add) {
     const al = added.get(add[1]);
     if (al) {
@@ -413,8 +413,21 @@ const PREVIEW_STYLE: Record<GeometryKind, LayerStyle> = {
 };
 const PREVIEW_POLYGON_SEL_FILL: Color = [255, 159, 28, 120];
 
-// One layer per non-empty Arrow batch of a GeoArrow table. `idPrefix` + batch
-// index is what resolvePick parses back (`geoarrow-<i>` / `added-<id>-<i>`).
+// A per-table number in each deck layer id, so new data (a re-Run, a layer
+// refreshed after an edit commit) gets a fresh layer instead of updating the old
+// one: GeoArrowSolidPolygonLayer re-triangulates asynchronously, and until it
+// finishes it validates the *new* geometry against its *old* batch, which
+// fails deck.gl's length assertion whenever the row count changed.
+const tableIds = new WeakMap<Table, number>();
+let nextTableId = 0;
+function tableId(table: Table): number {
+  let id = tableIds.get(table);
+  if (id === undefined) tableIds.set(table, (id = nextTableId++));
+  return id;
+}
+
+// One layer per non-empty Arrow batch of a GeoArrow table, with ids
+// `<idPrefix><table>-<batch>` — what resolvePick parses back.
 function batchLayers(
   table: Table,
   idPrefix: string,
@@ -423,7 +436,7 @@ function batchLayers(
   const out: Layer[] = [];
   table.batches.forEach((batch, i) => {
     const geom = batch.numRows > 0 ? batch.getChild("geom")?.data[0] : undefined;
-    if (geom) out.push(make(batch, geom, `${idPrefix}${i}`));
+    if (geom) out.push(make(batch, geom, `${idPrefix}${tableId(table)}-${i}`));
   });
   return out;
 }
