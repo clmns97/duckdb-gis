@@ -20,6 +20,7 @@
 // ---------------------------------------------------------------------------
 
 import { fitBounds } from "./mapBus";
+import { changeSignal } from "./store";
 import { query, str, sqlLit, ident, errMsg } from "./duckdb";
 import {
   addDeckLayer,
@@ -100,7 +101,6 @@ export interface ActiveLayer {
  *  replaces this row rather than accumulating new ones. */
 export const PREVIEW_ID = "L_sql_preview";
 
-type Listener = () => void;
 
 const byId = new Map<string, ActiveLayer>();
 let order: string[] = []; // newest first — mirrors map draw order (last added on top)
@@ -108,13 +108,8 @@ let order: string[] = []; // newest first — mirrors map draw order (last added
 // the Layers panel and the target of layer-scoped actions like the map's Edit
 // button (T-038). Null when nothing is selected or the active layer is removed.
 let activeId: string | null = null;
-let version = 0;
-const listeners = new Set<Listener>();
+const signal = changeSignal();
 
-function emit(): void {
-  version += 1;
-  listeners.forEach((l) => l());
-}
 
 // Push the list order down to the deck overlay as its z-order (T-031). `order`
 // is newest-first (index 0 = top of list = drawn in front); deck draws
@@ -196,7 +191,7 @@ function patch(id: string, changes: Partial<ActiveLayer>): void {
   const layer = byId.get(id);
   if (!layer) return;
   byId.set(id, { ...layer, ...changes });
-  emit();
+  signal.emit();
 }
 
 // Render a layer's geometry onto the deck overlay and settle its status:
@@ -215,12 +210,9 @@ export const layers = {
   list: snapshot,
   /** Scalar snapshot for `useSyncExternalStore`. */
   get version(): number {
-    return version;
+    return signal.version;
   },
-  subscribe(l: Listener): () => void {
-    listeners.add(l);
-    return () => listeners.delete(l);
-  },
+  subscribe: signal.subscribe,
 
   /** Look up a layer by id (used by the editing store, T-038). */
   get(id: string): ActiveLayer | undefined {
@@ -241,7 +233,7 @@ export const layers = {
     if (id === activeId) return;
     if (id !== null && !byId.has(id)) return;
     activeId = id;
-    emit();
+    signal.emit();
   },
 
   /**
@@ -279,7 +271,7 @@ export const layers = {
     });
     order = [id, ...order];
     syncDeckOrder();
-    emit();
+    signal.emit();
 
     await render(id, () => sourceSql(source), true);
   },
@@ -301,7 +293,7 @@ export const layers = {
     byId.set(id, { id, kind: "query", name, sql, visible: true, status: "loading" });
     if (!existing) order = [id, ...order]; // keep position on retry
     syncDeckOrder();
-    emit();
+    signal.emit();
 
     await render(id, async () => sql, true);
   },
@@ -325,7 +317,7 @@ export const layers = {
       pmtiles: { theme, release },
     });
     order = [id, ...order];
-    emit();
+    signal.emit();
 
     try {
       // PMTiles cover the whole planet — the archive's bounds are global, so
@@ -386,7 +378,7 @@ export const layers = {
       bounds: existing?.bounds ?? null,
     });
     if (!existing) order = [PREVIEW_ID, ...order]; // newest-first / on top
-    emit();
+    signal.emit();
   },
 
   /** Settle the Run-result temp layer as ready with its extent (T-027). */
@@ -443,7 +435,7 @@ export const layers = {
     next.splice(insertAt, 0, id);
     order = next;
     syncDeckOrder();
-    emit();
+    signal.emit();
   },
 
   /** Remove a layer from the map (drops it from the deck overlay). The temp
@@ -469,7 +461,7 @@ export const layers = {
     order = order.filter((x) => x !== id);
     if (activeId === id) activeId = null; // active layer went away
     syncDeckOrder();
-    emit();
+    signal.emit();
   },
 };
 

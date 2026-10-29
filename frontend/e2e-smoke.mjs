@@ -236,6 +236,12 @@ await step("edit existing layer: select, duplicate, rotate, scale, copy/paste, d
   await page.waitForTimeout(400);
   const n = await page.evaluate(() => window.gisEditing.featureCount);
   expect(n === 3, `features after dup+paste ${n}`);
+  await page.waitForTimeout(400); // let the paste gesture settle into its own undo step
+  const count = () => page.evaluate(() => window.gisEditing.featureCount);
+  await page.keyboard.press("Control+z");
+  expect((await count()) === 2, `undo paste -> ${await count()}`);
+  await page.keyboard.press("Control+y");
+  expect((await count()) === 3, `redo paste -> ${await count()}`);
   await page.getByTitle("Save edits back to the layer's table").click();
   await page.waitForFunction(() => !window.gisEditing.isEditing(), null, { timeout: 10000 });
   const rows = await sql(`SELECT count(*) AS n FROM memory.main.${DRAWN}`);
@@ -275,7 +281,11 @@ await step("project save + open restores layers and style", async () => {
   const before = (await layerList()).filter((l) => l.kind !== "preview").map((l) => l.name).join(",");
   await page.evaluate(() => window.gisLayers.list().forEach((l) => window.gisLayers.remove(l.id)));
   // Unsaved work → Open must ask first (the dialog handler accepts), then force.
-  await page.evaluate(() => import("/src/lib/unsavedChanges.ts").then((m) => m.unsavedChanges.markDirty()));
+  await page.evaluate(() => {
+    // the URL the app loaded (vite adds ?t= after a hot update), so we share its instance
+    const url = performance.getEntriesByType("resource").map((e) => e.name).find((n) => n.includes("/src/lib/unsavedChanges.ts"));
+    return import(url).then((m) => m.unsavedChanges.markDirty());
+  });
   let asked = false;
   page.once("dialog", (d) => (asked = /unsaved changes/.test(d.message())));
   await page.getByRole("button", { name: "Project" }).click();
@@ -322,7 +332,7 @@ await step("overture modal opens/closes", async () => {
 });
 
 await step("overture PMTiles layer: load, style layers, hide, remove", async () => {
-  const release = (await page.evaluate(() => import("/src/lib/overture.ts").then((m) => m.listOvertureReleases()).then((r) => r[0])));
+  const release = (await page.evaluate(() => import(performance.getEntriesByType("resource").map((e) => e.name).find((n) => n.includes("/src/lib/overture.ts"))).then((m) => m.listOvertureReleases()).then((r) => r[0])));
   await page.evaluate((r) => window.gisOverture.addOvertureLayers({ themes: ["divisions"], release: r }), release);
   await page.waitForFunction(() => window.gisLayers.list().some((l) => l.kind === "pmtiles" && l.status !== "loading"), null, { timeout: 30000 });
   const l = (await layerList()).find((x) => x.kind === "pmtiles");

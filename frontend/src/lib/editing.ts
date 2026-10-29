@@ -39,6 +39,7 @@ import {
   TerraDrawSelectMode,
   type GeoJSONStoreFeatures,
 } from "terra-draw";
+import { changeSignal } from "./store";
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
 import { getMap, whenStyleReady } from "./mapBus";
 import { query, str, sqlLit, ident } from "./duckdb";
@@ -232,7 +233,6 @@ function selectedFeatures(): GeoJSONStoreFeatures[] {
     .filter((f) => selectedIds.has(String(f.id)));
 }
 
-type Listener = () => void;
 
 let draw: TerraDraw | null = null;
 let mode: EditMode = "static";
@@ -256,8 +256,7 @@ let snapEnabled = false;
 // A small on-screen nudge so a duplicated/pasted clone is visibly offset from its
 // original (degrees; just enough to grab and drag).
 const CLONE_OFFSET = 0.0002;
-let version = 0;
-const listeners = new Set<Listener>();
+const signal = changeSignal();
 
 // --- Undo / redo (T-068) -----------------------------------------------------
 //
@@ -311,12 +310,31 @@ function workingSnapshot(): GeoJSONStoreFeatures[] {
 function resetHistory(): void {
   undoStack = [];
   redoStack = [];
-  settled = cloneFeatures(workingSnapshot());
-  gestureOpen = false;
-  if (gestureTimer) {
-    clearTimeout(gestureTimer);
-    gestureTimer = null;
-  }
+  settleGesture();
+}
+
+/** Empty the working set and everything keyed to it (selection, loaded rows,
+ *  dirty ids, undo/redo) — the shared start/end of every edit session. */
+function clearWorkingSet(): void {
+  draw?.clear();
+  selectedIds.clear();
+  loadedRids.clear();
+  dirty.clear();
+  resetHistory();
+}
+
+/** Undo (undo → redo) or redo (redo → undo): park the current working set on
+ *  `to` and restore the newest snapshot from `from` (T-068). Closes any
+ *  in-progress gesture first so the step being moved can't keep absorbing
+ *  further changes after the fact. */
+function stepHistory(from: GeoJSONStoreFeatures[][], to: GeoJSONStoreFeatures[][]): void {
+  if (!draw || from.length === 0) return;
+  settleGesture(); // `settled` is now a clone of the current working set
+  to.push(settled);
+  if (to.length > UNDO_CAP) to.shift();
+  const snap = from.pop()!;
+  settled = cloneFeatures(snap);
+  restoreSnapshot(snap);
 }
 
 /** Called on every Terra Draw `change` (both interactive — drag, vertex edit —
@@ -383,10 +401,6 @@ function restoreSnapshot(snap: GeoJSONStoreFeatures[]): void {
   refresh();
 }
 
-function emit(): void {
-  version += 1;
-  listeners.forEach((l) => l());
-}
 
 // Recount the working set (drawn features only) and notify. Called on every
 // Terra Draw change/finish so the toolbar's Commit affordance + count stay live.
@@ -404,7 +418,7 @@ function refresh(countUnchanged = false): void {
       requestSync();
     }
   }
-  emit();
+  signal.emit();
 }
 
 // The lowest Terra Draw layer id currently in the map style, so the deck overlay
@@ -431,12 +445,9 @@ export function canEditInPlace(layer: ActiveLayer | null | undefined): boolean {
 export const editing = {
   /** Scalar snapshot for `useSyncExternalStore`. */
   get version(): number {
-    return version;
+    return signal.version;
   },
-  subscribe(l: Listener): () => void {
-    listeners.add(l);
-    return () => listeners.delete(l);
-  },
+  subscribe: signal.subscribe,
 
   get mode(): EditMode {
     return mode;
@@ -527,11 +538,11 @@ export const editing = {
     });
     draw.on("select", (id) => {
       selectedIds.add(String(id));
-      emit();
+      signal.emit();
     });
     draw.on("deselect", () => {
       selectedIds.clear();
-      emit();
+      signal.emit();
     });
 
     void whenStyleReady(map, () => draw?.start());
@@ -559,11 +570,7 @@ export const editing = {
     if (!draw) return;
     boxSelect.set(false); // digitizing and box-select are mutually exclusive
     selection.clear(); // processing selection is meaningless while digitizing
-    draw.clear();
-    loadedRids.clear();
-    dirty.clear();
-    selectedIds.clear();
-    resetHistory(); // fresh undo/redo scope for this session (T-068)
+    clearWorkingSet(); // fresh undo/redo scope for this session (T-068)
     target = { kind: "new", name: opts.name, geometryKind: opts.geometryKind };
     this.setMode(opts.geometryKind); // drop straight into drawing
     refresh(); // recount even if setMode short-circuited (mode already matched)
@@ -618,9 +625,7 @@ export const editing = {
     }
 
     selection.clear();
-    draw.clear();
-    loadedRids.clear();
-    selectedIds.clear();
+    clearWorkingSet();
 
     const tmode = MODE_NAME[kind];
     const feats = rows.map((r) => {
@@ -673,7 +678,7 @@ export const editing = {
       // is recorded so a later start()/re-invoke reflects it. Swallow.
     }
     if (m !== "select") selectedIds.clear();
-    emit();
+    signal.emit();
   },
 
   /** Delete the feature(s) currently selected in select mode. */
@@ -707,7 +712,7 @@ export const editing = {
   toggleSnapping(): void {
     snapEnabled = !snapEnabled;
     applySnapping();
-    emit();
+    signal.emit();
   },
 
   /** Whether there is a step to undo (T-068). */
@@ -723,18 +728,7 @@ export const editing = {
    *  undo. Closes any in-progress gesture first so the step being undone
    *  can't keep absorbing further changes after the fact. */
   undo(): void {
-    if (!draw || undoStack.length === 0) return;
-    if (gestureTimer) {
-      clearTimeout(gestureTimer);
-      gestureTimer = null;
-    }
-    gestureOpen = false;
-    const current = cloneFeatures(workingSnapshot());
-    const prev = undoStack.pop()!;
-    redoStack.push(current);
-    if (redoStack.length > UNDO_CAP) redoStack.shift();
-    settled = cloneFeatures(prev);
-    restoreSnapshot(prev);
+    stepHistory(undoStack, redoStack);
   },
 
   /** Step the working set forward one gesture (T-068). No-op with nothing to
@@ -742,18 +736,7 @@ export const editing = {
    *  undo/redo contract — a fresh gesture clears `redoStack`, see
    *  `noteChange`). */
   redo(): void {
-    if (!draw || redoStack.length === 0) return;
-    if (gestureTimer) {
-      clearTimeout(gestureTimer);
-      gestureTimer = null;
-    }
-    gestureOpen = false;
-    const current = cloneFeatures(workingSnapshot());
-    const next = redoStack.pop()!;
-    undoStack.push(current);
-    if (undoStack.length > UNDO_CAP) undoStack.shift();
-    settled = cloneFeatures(next);
-    restoreSnapshot(next);
+    stepHistory(redoStack, undoStack);
   },
 
   /**
@@ -829,7 +812,7 @@ export const editing = {
     clipboard = feats.map(
       (f) => ({ ...f, geometry: JSON.parse(JSON.stringify(f.geometry)) }) as GeoJSONStoreFeatures,
     );
-    emit();
+    signal.emit();
   },
 
   /** Paste clipboard features into the current target as new features (T-048).
@@ -858,16 +841,12 @@ export const editing = {
     const t = target;
     target = null;
     mode = "static";
-    selectedIds.clear();
-    loadedRids.clear();
-    dirty.clear();
-    draw?.clear();
-    resetHistory(); // undo/redo never survives leaving edit mode (T-068)
+    clearWorkingSet(); // undo/redo never survives leaving edit mode (T-068)
     if (t?.kind === "existing" && layers.get(t.layerId)) {
       setDeckLayerSuppressed(t.layerId, false);
     }
     featureCount = 0;
-    emit();
+    signal.emit();
     if (t?.kind === "existing") {
       await releaseWriteLock(t.source);
     }
@@ -985,11 +964,8 @@ export const editing = {
     target = null;
     featureCount = 0;
     lastBottomId = undefined;
-    selectedIds.clear();
-    loadedRids.clear();
-    dirty.clear();
-    resetHistory(); // undo/redo never survives a torn-down draw instance (T-068)
-    emit();
+    clearWorkingSet(); // undo/redo never survives a torn-down draw instance (T-068)
+    signal.emit();
   },
 };
 

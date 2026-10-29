@@ -25,6 +25,8 @@
 // to a real rowid/PK; keeping the id behind this module localises that change.
 // ---------------------------------------------------------------------------
 
+import { changeSignal } from "./store";
+
 /** Column name carrying the per-render stable feature id. */
 export const FID = "__fid";
 
@@ -38,17 +40,11 @@ export function fidTaggedRelation(sourceSql: string): string {
   return `SELECT *, row_number() OVER () AS ${FID} FROM (${inner}) _q WHERE geom IS NOT NULL`;
 }
 
-type Listener = () => void;
 
 const selected = new Set<number>();
 let sourceSql = "";
-let version = 0;
-const listeners = new Set<Listener>();
+const signal = changeSignal();
 
-function emit(): void {
-  version += 1;
-  listeners.forEach((l) => l());
-}
 
 export const selection = {
   has: (fid: number): boolean => selected.has(fid),
@@ -57,7 +53,7 @@ export const selection = {
   },
   /** Bump on every mutation; use as a deck.gl `updateTriggers` value. */
   get version(): number {
-    return version;
+    return signal.version;
   },
 
   /**
@@ -79,12 +75,12 @@ export const selection = {
       selected.clear();
       selected.add(fid);
     }
-    emit();
+    signal.emit();
   },
   clear(): void {
     if (selected.size === 0) return;
     selected.clear();
-    emit();
+    signal.emit();
   },
 
   /**
@@ -94,7 +90,7 @@ export const selection = {
   setSource(sql: string): void {
     sourceSql = sql.trim().replace(/;\s*$/, "");
     selected.clear();
-    emit();
+    signal.emit();
   },
   source: (): string => sourceSql,
 
@@ -108,8 +104,5 @@ export const selection = {
     return { sql: sourceSql, fids: [...selected] };
   },
 
-  subscribe(l: Listener): () => void {
-    listeners.add(l);
-    return () => listeners.delete(l);
-  },
+  subscribe: signal.subscribe,
 };

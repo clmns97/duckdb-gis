@@ -17,6 +17,7 @@
 // ---------------------------------------------------------------------------
 
 import maplibregl from "maplibre-gl";
+import { changeSignal } from "./store";
 import { Protocol, PMTiles } from "pmtiles";
 import { getMap, whenStyleReady } from "./mapBus";
 import { pmSelection, type PmPick } from "./pmtilesSelection";
@@ -208,24 +209,21 @@ function picksByLayer(features: maplibregl.MapGeoJSONFeature[]): Map<string, PmP
 // Box-select mode: while on, a drag paints a rectangle and selects everything
 // under it (QGIS "Select Features by Area"). Off, the map pans normally.
 let selectMode = false;
-const modeListeners = new Set<() => void>();
+const modeChanges = changeSignal();
 export const boxSelect = {
   get active(): boolean {
     return selectMode;
   },
   toggle(): void {
     selectMode = !selectMode;
-    modeListeners.forEach((l) => l());
+    modeChanges.emit();
   },
   set(on: boolean): void {
     if (on === selectMode) return;
     selectMode = on;
-    modeListeners.forEach((l) => l());
+    modeChanges.emit();
   },
-  subscribe(l: () => void): () => void {
-    modeListeners.add(l);
-    return () => modeListeners.delete(l);
-  },
+  subscribe: modeChanges.subscribe,
 };
 
 function applyPicks(layerHits: Map<string, PmPick[]>, additive: boolean): void {

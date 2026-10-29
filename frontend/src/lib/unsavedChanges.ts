@@ -28,12 +28,11 @@
 // baseline where the working catalog and disk agree.
 // ---------------------------------------------------------------------------
 
-let dirty = false;
-const listeners = new Set<() => void>();
+import { changeSignal } from "./store";
 
-function emit(): void {
-  listeners.forEach((l) => l());
-}
+let dirty = false;
+const signal = changeSignal();
+
 
 export const unsavedChanges = {
   get isDirty(): boolean {
@@ -42,15 +41,12 @@ export const unsavedChanges = {
   markDirty(): void {
     if (dirty) return;
     dirty = true;
-    emit();
+    signal.emit();
   },
   clear(): void {
     if (!dirty) return;
     dirty = false;
-    emit();
+    signal.emit();
   },
-  subscribe(l: () => void): () => void {
-    listeners.add(l);
-    return () => listeners.delete(l);
-  },
+  subscribe: signal.subscribe,
 };

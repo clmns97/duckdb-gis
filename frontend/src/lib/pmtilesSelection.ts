@@ -11,20 +11,15 @@
 // ---------------------------------------------------------------------------
 
 import type { Bbox } from "./overture";
+import { changeSignal } from "./store";
 
-type Listener = () => void;
 
 // id -> the feature's tile-geometry bbox (used to prune the materialise query's
 // row-groups and to size the "large selection" warning; never for geometry).
 const selected = new Map<string, Bbox>();
 let layerId: string | null = null;
-let version = 0;
-const listeners = new Set<Listener>();
+const signal = changeSignal();
 
-function emit(): void {
-  version += 1;
-  listeners.forEach((l) => l());
-}
 
 /** Union bbox of every selected feature, or null when nothing is selected. */
 export function selectionBounds(): Bbox | null {
@@ -50,7 +45,7 @@ export interface PmPick {
 export const pmSelection = {
   /** Bump on every mutation; drives useSyncExternalStore / updateTriggers. */
   get version(): number {
-    return version;
+    return signal.version;
   },
   /** The PMTiles layer the current selection belongs to, or null. */
   get layerId(): string | null {
@@ -76,7 +71,7 @@ export const pmSelection = {
       if (additive && selected.has(p.id)) selected.delete(p.id);
       else selected.set(p.id, p.bbox);
     }
-    emit();
+    signal.emit();
   },
 
   /** Clear the selection (e.g. clicking empty map, or the layer was removed). */
@@ -85,11 +80,8 @@ export const pmSelection = {
     if (selected.size === 0 && layerId === null) return;
     selected.clear();
     layerId = null;
-    emit();
+    signal.emit();
   },
 
-  subscribe(l: Listener): () => void {
-    listeners.add(l);
-    return () => listeners.delete(l);
-  },
+  subscribe: signal.subscribe,
 };
