@@ -1,21 +1,17 @@
 // ---------------------------------------------------------------------------
-// Overture Maps quick-load (T-012) — data model + query seam.
+// Overture Maps quick-load (T-012, #13) — theme/release model and data paths.
 //
 // QGIS parallel: QuickOSM / Overpass Turbo, but for Overture. The user picks
-// theme(s), a release, and an extent; each selected theme is loaded onto the
-// map as its own layer via `layers.addQuery`.
-//
-// DATA PATH: direct read of Overture's public GeoParquet-on-S3 (no community
-// extension needed) — verified against the live bucket on 2026-07-10. The
-// httpfs load + anonymous S3 access are handled by `ensureOvertureAccess`
-// (lib/remote.ts, T-008); this module owns the theme/release model and the
-// query builder. Confirmed by inspection of the bucket:
-//   - partition layout `theme=<t>/type=<ty>/` under `release/<version>/`;
-//   - each row has a native `geometry` column (GEOMETRY, crs84) and a
-//     `bbox` struct(xmin, xmax, ymin, ymax) used for the clip predicate.
-// Note: small themes (places) read interactively; the largest themes
-// (buildings/transportation) are slow over the network because the whole-planet
-// file glob must be listed/pruned — acceptable for now, revisit for large extents.
+// theme(s) and a release; each theme is shown from Overture's hosted PMTiles
+// (T-058, `addOvertureLayers`), so the whole planet is available by panning.
+// Editing works on a copy: "Create Layer from Selection" materialises the
+// picked features from Overture's public GeoParquet-on-S3 (no community
+// extension needed; httpfs + anonymous S3 via `ensureOvertureAccess`,
+// lib/remote.ts). Bucket layout, verified live:
+//   - `release/<version>/theme=<t>/type=<ty>/*.parquet`, each row with a
+//     native `geometry` column (GEOMETRY, crs84) and a `bbox` struct;
+//   - `registry/*.parquet`: the GERS registry, one row per feature id with the
+//     data file (`path`) it lives in as of the latest release (`last_seen`).
 // ---------------------------------------------------------------------------
 
 import { query, sqlLit, str, ident } from "./duckdb";
@@ -145,12 +141,31 @@ function bboxOverlapClause(bbox: Bbox): string {
 }
 
 /**
+ * The data files holding `ids` in `release`, from the GERS registry — or null
+ * when any id isn't registered for that release. The registry only knows the
+ * latest release's files (`last_seen`), so an older release falls back to the
+ * full theme glob. Globbing a large theme costs one footer read per file —
+ * ~2 min for one building (513 files) vs ~20 s via the registry (#13).
+ */
+async function registryFiles(release: string, ids: string[]): Promise<string[] | null> {
+  const rows = await query(
+    `SELECT id, path FROM read_parquet('${OVERTURE_BUCKET}/registry/*.parquet') ` +
+      `WHERE last_seen = '${sqlLit(release)}' AND id IN (${idList(ids)})`,
+  );
+  if (new Set(rows.map((r) => r.id)).size < ids.length) return null;
+  return [...new Set(rows.map((r) => `${OVERTURE_BUCKET}/release/${release}/${str(r.path)}`))];
+}
+
+const idList = (ids: string[]) => ids.map((id) => `'${sqlLit(id)}'`).join(",");
+
+/**
  * Materialise the *selected* features of an Overture theme from GeoParquet — the
- * "Create Layer from Selection" path (T-058). Globs every `type` partition of the
- * theme (a source-layer's features can live in more than one, so `union_by_name`
- * reconciles the differing schemas), prunes row-groups with the selection's bbox,
- * and filters to the picked GERS `id`s — real, full-resolution geometry, not the
- * simplified tile geometry the user selected on.
+ * "Create Layer from Selection" path (T-058). Reads `files` (from the registry)
+ * or else every `type` partition of the theme (a source-layer's features can live
+ * in more than one, so `union_by_name` reconciles the differing schemas), prunes
+ * row-groups with the selection's bbox, and filters to the picked GERS `id`s —
+ * real, full-resolution geometry, not the simplified tile geometry the user
+ * selected on.
  *
  * The `::GEOMETRY` cast strips the CRS annotation that `read_parquet` attaches
  * to GeoParquet geometry (`GEOMETRY('OGC:CRS84')`): spatial's aggregate
@@ -159,18 +174,20 @@ function bboxOverlapClause(bbox: Bbox): string {
  * polygon themes (buildings/base/divisions), while plain `GEOMETRY` (what every
  * other layer uses) works.
  */
-export function buildOvertureSelectionQuery(
+function buildOvertureSelectionQuery(
   theme: OvertureTheme,
   release: string,
   bbox: Bbox,
   ids: string[],
+  files: string[] | null,
 ): string {
-  const path = `${OVERTURE_BUCKET}/release/${release}/theme=${theme.id}/type=*/*`;
-  const idList = ids.map((id) => `'${sqlLit(id)}'`).join(",");
+  const src = files
+    ? `[${files.map((f) => `'${sqlLit(f)}'`).join(",")}]`
+    : `'${OVERTURE_BUCKET}/release/${release}/theme=${theme.id}/type=*/*'`;
   return (
     `SELECT geometry::GEOMETRY AS geom, * EXCLUDE (geometry) ` +
-    `FROM read_parquet('${path}', hive_partitioning=1, union_by_name=1) ` +
-    `WHERE ${bboxOverlapClause(bbox)} AND id IN (${idList})`
+    `FROM read_parquet(${src}, hive_partitioning=1, union_by_name=1) ` +
+    `WHERE ${bboxOverlapClause(bbox)} AND id IN (${idList(ids)})`
   );
 }
 
@@ -212,8 +229,9 @@ export async function createLayerFromSelection(theme: OvertureTheme, release: st
   await ensureOvertureAccess();
   const stamp = Date.now().toString(36);
   const table = `${sanitizeIdent(theme.label)}_selection_${stamp}`;
+  const files = await registryFiles(release, ids);
   await query(
-    `CREATE TABLE main.${ident(table)} AS ${buildOvertureSelectionQuery(theme, release, bbox, ids)}`,
+    `CREATE TABLE main.${ident(table)} AS ${buildOvertureSelectionQuery(theme, release, bbox, ids, files)}`,
   );
   unsavedChanges.markDirty(); // wrote a new working-catalog table outside any edit session (#67)
   const dbRows = await query(`SELECT current_database() AS db`);
