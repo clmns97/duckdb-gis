@@ -278,6 +278,11 @@ await step("project save + open restores layers and style", async () => {
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 15000 });
   expect((await page.getByLabel("Unsaved changes").count()) === 0, "dirty cleared after save");
+  await sql(`ATTACH '${path}' AS e2e_saved (READ_ONLY)`);
+  const saved = await sql("SELECT name, source_kind, z_order, visible, external, source_table, sql IS NOT NULL AS has_sql FROM e2e_saved._gis.layers ORDER BY z_order");
+  await sql("DETACH e2e_saved");
+  expect(saved.length >= 4 && saved.every((r) => r.external === (r.source_kind === "table" && !r.name.startsWith("drawn_"))), `saved rows ${JSON.stringify(saved)}`);
+  expect(saved.some((r) => r.source_kind === "query" && r.has_sql) && saved.some((r) => r.source_table === "regions"), "saved kinds");
   const before = (await layerList()).filter((l) => l.kind !== "preview").map((l) => l.name).join(",");
   await page.evaluate(() => window.gisLayers.list().forEach((l) => window.gisLayers.remove(l.id)));
   // Unsaved work → Open must ask first (the dialog handler accepts), then force.
@@ -348,6 +353,20 @@ await step("overture PMTiles layer: load, style layers, hide, remove", async () 
   await page.waitForTimeout(300);
   const sel = await page.evaluate(() => ({ n: window.gisPmSelection.size, b: window.gisPmSelection.bounds() }));
   expect(sel.n > 0 && Number.isFinite(sel.b.xmin) && sel.b.xmin <= 10.4 && sel.b.xmax >= 10.4, `pm selection ${JSON.stringify(sel)}`);
+  // project round-trip of a PMTiles layer
+  const proj = `${SCRATCH}/e2e-pm-${Date.now()}.duckdb`;
+  await page.getByRole("button", { name: "Project" }).click();
+  await menuItem("Save project").click();
+  await page.getByPlaceholder("/data/my-project.duckdb").fill(proj);
+  await page.getByPlaceholder("/data/my-project.duckdb").press("Enter");
+  await page.getByRole("dialog").waitFor({ state: "detached", timeout: 15000 });
+  await page.getByRole("button", { name: "Project" }).click();
+  await menuItem("Open project").click();
+  await page.getByPlaceholder("/data/my-project.duckdb").fill(proj);
+  await page.getByPlaceholder("/data/my-project.duckdb").press("Enter");
+  await page.getByRole("dialog").waitFor({ state: "detached", timeout: 30000 });
+  await waitLayersReady();
+  expect((await layerList()).some((x) => x.kind === "pmtiles" && x.status === "ready" && x.name === l.name), "pmtiles restored");
   await sidebarTab("Layers").click();
   await page.getByRole("button", { name: `Hide ${l.name}` }).click();
   expect((await ids()).every((i) => i.endsWith(":none")), "hidden");
