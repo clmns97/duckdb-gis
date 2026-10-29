@@ -109,6 +109,7 @@ async function listParquetReleases(): Promise<Set<string>> {
   await ensureOvertureAccess();
   const rows = await query(
     `SELECT file FROM glob('${OVERTURE_BUCKET}/release/*/theme=divisions/type=division_area/*')`,
+    { pooled: true },
   );
   const set = new Set<string>();
   for (const r of rows) {
@@ -143,6 +144,7 @@ async function stacFiles(theme: OvertureTheme, release: string, bbox: Bbox): Pro
         `FROM read_parquet('${STAC_BASE}/${sqlLit(release)}/collections.parquet') ` +
         `WHERE contains(assets.aws.alternate.s3.href, '/theme=${sqlLit(theme.id)}/') ` +
         `AND ${bboxOverlapClause(bbox)}`,
+      { pooled: true },
     );
     const files = rows.map((r) => str(r.f));
     return files.length ? files : null;
@@ -230,11 +232,15 @@ export async function createLayerFromSelection(theme: OvertureTheme, release: st
   const stamp = Date.now().toString(36);
   const table = `${sanitizeIdent(theme.label)}_selection_${stamp}`;
   const files = await stacFiles(theme, release, bbox);
+  // Pooled: the S3 read takes seconds and shouldn't hold up the rest of the UI.
+  // The pooled connection runs in the session's current database, so `main`
+  // and current_database() resolve as they would there.
   await query(
     `CREATE TABLE main.${ident(table)} AS ${buildOvertureSelectionQuery(theme, release, bbox, ids, files)}`,
+    { pooled: true },
   );
   unsavedChanges.markDirty(); // wrote a new working-catalog table outside any edit session (#67)
-  const dbRows = await query(`SELECT current_database() AS db`);
+  const dbRows = await query(`SELECT current_database() AS db`, { pooled: true });
   const db = str(dbRows[0]?.db ?? "memory");
   await layers.add({ db, schema: "main", table, geomColumn: "geom" });
 }

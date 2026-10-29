@@ -5,10 +5,12 @@
 #include "query.hpp"
 
 #include <atomic>
+#include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
 #include <thread>
+#include <vector>
 
 DUCKDB_EXTENSION_EXTERN
 
@@ -16,14 +18,44 @@ namespace gis {
 
 namespace {
 
+// Run one statement for its first value, as a string ("" on error or NULL).
+std::string QueryString(duckdb_connection connection, const char *sql) {
+  duckdb_result result;
+  std::string value;
+  if (duckdb_query(connection, sql, &result) == DuckDBSuccess) {
+    if (char *text = duckdb_value_varchar(&result, 0, 0)) {
+      value = text;
+      duckdb_free(text);
+    }
+  }
+  duckdb_destroy_result(&result);
+  return value;
+}
+
+// A `USE` statement for the connection's current database and schema.
+constexpr const char *CURRENT_CATALOG_SQL =
+    "SELECT 'USE \"' || replace(current_database(), '\"', '\"\"') || '\".\"' || "
+    "replace(current_schema(), '\"', '\"\"') || '\"'";
+
 class Server {
 public:
-  void SetConnection(duckdb_connection new_connection) {
-    std::lock_guard<std::mutex> guard(query_mutex);
-    duckdb_connection old = connection.exchange(new_connection);
-    if (old) {
+  void SetConnections(duckdb_connection new_session, std::vector<duckdb_connection> new_pool) {
+    {
+      std::lock_guard<std::mutex> guard(query_mutex);
+      duckdb_connection old = session.exchange(new_session);
+      if (old) {
+        duckdb_disconnect(&old);
+      }
+      RecordSessionCatalog(new_session);
+    }
+    std::unique_lock<std::mutex> lock(pool_mutex);
+    // Wait out pooled queries still running on the old connections.
+    pool_idle.wait(lock, [this] { return idle.size() == pool.size(); });
+    for (auto &old : pool) {
       duckdb_disconnect(&old);
     }
+    pool = std::move(new_pool);
+    idle = pool;
   }
 
   void Start(uint16_t port, bool &already_started) {
@@ -86,13 +118,9 @@ private:
         return;
       }
       std::string body;
-      std::string error;
-      {
-        std::lock_guard<std::mutex> guard(query_mutex);
-        auto current = connection.load();
-        error = current ? RunToArrowIpc(current, req.body, body)
-                        : "duckdb-gis: no database connection";
-      }
+      std::string error = req.get_header_value("X-GIS-Connection") == "pool"
+                              ? RunPooled(req.body, body)
+                              : RunOnSession(req.body, body);
       if (!error.empty()) {
         res.status = 400;
         res.set_content(error, "text/plain; charset=utf-8");
@@ -105,11 +133,65 @@ private:
         res.status = 401;
         return;
       }
-      // Not under query_mutex: the query holds it while running.
-      if (auto current = connection.load()) {
+      // Cancels the session's query (the SQL editor's); pooled background
+      // reads aren't interruptible. Not under query_mutex: the query holds it.
+      if (auto current = session.load()) {
         duckdb_interrupt(current);
       }
     });
+  }
+
+  // The session connection runs everything that depends on connection state:
+  // SQL the user types, USE, transactions (BEGIN ... COMMIT spans requests).
+  // One query at a time, in arrival order.
+  std::string RunOnSession(const std::string &sql, std::string &out) {
+    std::lock_guard<std::mutex> guard(query_mutex);
+    auto current = session.load();
+    if (!current) {
+      return "duckdb-gis: no database connection";
+    }
+    auto error = RunToArrowIpc(current, sql, out);
+    RecordSessionCatalog(current);
+    return error;
+  }
+
+  // Pooled connections run the UI's own background reads (layer data, the
+  // catalog tree, ...) in parallel with the session and each other, so a slow
+  // query doesn't stall the rest of the UI. Each query first switches to the
+  // session's current database and schema, so unqualified names resolve the
+  // same way; this also repairs a pooled connection whose current database
+  // was detached and re-attached in the meantime.
+  std::string RunPooled(const std::string &sql, std::string &out) {
+    std::string use;
+    {
+      std::lock_guard<std::mutex> guard(catalog_mutex);
+      use = session_catalog;
+    }
+    duckdb_connection connection = nullptr;
+    {
+      std::unique_lock<std::mutex> lock(pool_mutex);
+      if (pool.empty()) {
+        lock.unlock();
+        return RunOnSession(sql, out);
+      }
+      pool_idle.wait(lock, [this] { return !idle.empty(); });
+      connection = idle.back();
+      idle.pop_back();
+    }
+    auto error = RunToArrowIpc(connection, use.empty() ? sql : use + ";\n" + sql, out);
+    {
+      std::lock_guard<std::mutex> guard(pool_mutex);
+      idle.push_back(connection);
+    }
+    pool_idle.notify_all();
+    return error;
+  }
+
+  // Called with query_mutex held, after anything that may have run USE.
+  void RecordSessionCatalog(duckdb_connection connection) {
+    auto use = connection ? QueryString(connection, CURRENT_CATALOG_SQL) : "";
+    std::lock_guard<std::mutex> guard(catalog_mutex);
+    session_catalog = use;
   }
 
   static const EmbeddedAsset *FindAsset(const std::string &path) {
@@ -160,9 +242,17 @@ private:
   std::string origin;
   std::string url;
 
-  std::mutex query_mutex; // one query at a time on the shared connection
+  std::mutex query_mutex; // one query at a time on the session connection
   // Atomic so /ddb/interrupt can read it while a query holds query_mutex.
-  std::atomic<duckdb_connection> connection{nullptr};
+  std::atomic<duckdb_connection> session{nullptr};
+
+  std::mutex catalog_mutex;
+  std::string session_catalog; // e.g. USE "memory"."main"; "" if unknown
+
+  std::mutex pool_mutex; // pool, idle
+  std::condition_variable pool_idle;
+  std::vector<duckdb_connection> pool;
+  std::vector<duckdb_connection> idle;
 };
 
 // Never destroyed: a static destructor would race the server thread at exit.
@@ -173,8 +263,8 @@ Server &Instance() {
 
 } // namespace
 
-void SetServerConnection(duckdb_connection connection) {
-  Instance().SetConnection(connection);
+void SetServerConnections(duckdb_connection session, std::vector<duckdb_connection> pool) {
+  Instance().SetConnections(session, std::move(pool));
 }
 
 void StartServer(uint16_t port, bool &already_started) {

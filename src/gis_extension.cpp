@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <exception>
 #include <string>
+#include <vector>
 
 DUCKDB_EXTENSION_EXTERN
 
@@ -16,6 +17,10 @@ namespace gis {
 namespace {
 
 constexpr uint16_t DEFAULT_PORT = 4214;
+// Pooled connections for the UI's background reads (see SetServerConnections).
+// Each query already runs multi-threaded; the pool is about not making a
+// quick read wait behind a slow one (e.g. a remote S3 scan).
+constexpr size_t POOL_SIZE = 4;
 // Before the C-API port this was the gis_local_port setting (and its
 // GIS_LOCAL_PORT environment variable). Custom settings need a newer C API
 // than we target, so the port is a named parameter, with the variable as
@@ -161,13 +166,20 @@ bool Register(duckdb_connection connection, const char *name, Verb verb) {
 
 DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection connection, duckdb_extension_info info,
                             struct duckdb_extension_access *access) {
-  // The server's own connection: see SetServerConnection.
-  duckdb_connection server_connection = nullptr;
-  if (duckdb_connect(*access->get_database(info), &server_connection) == DuckDBError) {
-    access->set_error(info, "duckdb-gis: could not open a connection for the UI server");
-    return false;
+  // The server's own connections: see SetServerConnections.
+  std::vector<duckdb_connection> connections(1 + gis::POOL_SIZE, nullptr);
+  for (auto &c : connections) {
+    if (duckdb_connect(*access->get_database(info), &c) == DuckDBError) {
+      for (auto &opened : connections) {
+        if (opened) {
+          duckdb_disconnect(&opened);
+        }
+      }
+      access->set_error(info, "duckdb-gis: could not open connections for the UI server");
+      return false;
+    }
   }
-  gis::SetServerConnection(server_connection);
+  gis::SetServerConnections(connections[0], {connections.begin() + 1, connections.end()});
 
   using gis::Verb;
   if (!gis::Register(connection, "start_gis", Verb::START_AND_OPEN) ||

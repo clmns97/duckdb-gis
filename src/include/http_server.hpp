@@ -4,20 +4,23 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace gis {
 
 // The UI server: serves the embedded frontend and runs the SQL it sends.
-// There is one per process. It runs queries on a connection the extension
-// opens while loading (see SetServerConnection).
+// There is one per process. It runs queries on connections the extension
+// opens while loading (see SetServerConnections).
 //
 // All functions are thread-safe.
 
-// Hands the server the connection to run queries on, replacing (and closing)
-// any previous one. Called while the extension loads, because the database
-// handle DuckDB passes to the entrypoint may not be kept: the connection
-// keeps the database alive instead.
-void SetServerConnection(duckdb_connection connection);
+// Hands the server the connections to run queries on, replacing (and closing)
+// any previous ones: `session` for the UI's stateful SQL, one query at a time,
+// and `pool` for its background reads, which run in parallel (requests opt in
+// with the header `X-GIS-Connection: pool`). Called while the extension
+// loads, because the database handle DuckDB passes to the entrypoint may not
+// be kept: the connections keep the database alive instead.
+void SetServerConnections(duckdb_connection session, std::vector<duckdb_connection> pool);
 
 // Starts the server on localhost:`port`. Sets `already_started` if it was
 // running already (on whatever port it was started with). Throws

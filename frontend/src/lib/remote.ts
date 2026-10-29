@@ -6,10 +6,10 @@
 // + the render extensions load eagerly; see the bootstrap in `App.tsx`) and
 // network extensions load the first time a remote source is actually used.
 //
-// State persists across `query()` calls: the UI client talks to the extension
-// over a singleton connection, and loaded extensions + DuckDB secrets are
-// database-wide anyway — so the ensure* helpers memoise a single successful
-// setup and clear the memo on failure so a later attempt can retry.
+// State persists across `query()` calls: loaded extensions and DuckDB secrets
+// are database-wide, so they apply to the server's session and pooled
+// connections alike — the ensure* helpers memoise a single successful setup
+// and clear the memo on failure so a later attempt can retry.
 // ---------------------------------------------------------------------------
 
 import { query } from "./duckdb";
