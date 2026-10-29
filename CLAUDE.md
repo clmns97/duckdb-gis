@@ -39,7 +39,10 @@ duckdb -unsigned -cmd "LOAD 'build/release/gis.duckdb_extension'; FROM start_gis
 
 Three layers; see `test/README.md` for details.
 
-- **C++ / SQL:** `make test_release` (`test/sql/*.test`). Runs in CI on every push.
+- **C++ / SQL:** `make test_release` (`test/sql/*.test`). CI runs it on every
+  push against DuckDB 1.4 / 1.5 / 2.0 (`Compatibility.yml`, ~1 min). The full
+  per-platform build (`MainDistributionPipeline.yml`, ~10 min) runs on PRs
+  only when native code or build files change, and on every push to `main`.
 - **Frontend static:** `cd frontend && pnpm typecheck` (plus `pnpm build`). CI
   (`Frontend.yml`) on every push.
 - **End-to-end (Playwright, `frontend/e2e/`):** `cd frontend && pnpm test:e2e`
