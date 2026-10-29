@@ -572,20 +572,27 @@ function syncOverlay(): void {
         ...[...added.keys()].filter((id) => !drawOrder!.includes(id)),
       ]
     : [...added.keys()];
+  // Hidden layers stay in the list with `visible: false` rather than being
+  // dropped: deck then keeps their GPU buffers and polygon triangulation, so
+  // re-showing a large polygon layer is instant instead of re-triangulating.
   for (const id of ids) {
     const al = added.get(id)!;
-    if (!al.visible || al.suppressed) continue;
+    const visible = al.visible && !al.suppressed;
     const make = FACTORIES[al.kind];
     layers.push(
-      ...batchLayers(al.table, `added-${id}-`, (b, g, lid) => make(b, g, lid, al.source, al.style)),
+      ...batchLayers(al.table, `added-${id}-`, (b, g, lid) =>
+        make(b, g, lid, al.source, al.style).clone({ visible }),
+      ),
     );
   }
-  if (rendered && renderedVisible) {
+  if (rendered) {
     const { table, kind, source } = rendered;
     const selFill = kind === "polygon" ? PREVIEW_POLYGON_SEL_FILL : undefined;
     layers.push(
       ...batchLayers(table, "geoarrow-", (b, g, lid) =>
-        FACTORIES[kind](b, g, lid, source, PREVIEW_STYLE[kind], selFill),
+        FACTORIES[kind](b, g, lid, source, PREVIEW_STYLE[kind], selFill).clone({
+          visible: renderedVisible,
+        }),
       ),
     );
   }
