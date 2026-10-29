@@ -3,7 +3,7 @@
 # so the frontend dev server (vite proxy -> /ddb) has real layers to render.
 #
 # The server runs against a THROWAWAY COPY of demo.duckdb, so tests that write
-# to it (e.g. tile-check.mjs creating pts_tiles) never dirty the committed
+# to it (e.g. e2e-smoke.mjs drawing a new layer) never dirty the committed
 # fixture. Kill with:  pkill -9 -f release/duckdb
 #
 # Usage:  testdata/serve.sh [port]     (default port 4214)

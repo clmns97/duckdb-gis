@@ -13,8 +13,8 @@
 // That matches "Open restores a session", not "merge a session in".
 // ---------------------------------------------------------------------------
 
-import { query, str, sqlLit, errMsg } from "./duckdb";
-import { ident, layers, type ActiveLayer, type LayerStyle } from "./layers";
+import { query, str, sqlLit, errMsg, ident } from "./duckdb";
+import { layers, type ActiveLayer, type LayerStyle } from "./layers";
 import type { OvertureTheme } from "./overture";
 import { WORKING_CATALOG } from "./workspace";
 import { basemap } from "./basemaps";

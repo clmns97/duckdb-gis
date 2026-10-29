@@ -20,7 +20,7 @@
 // ---------------------------------------------------------------------------
 
 import { getMap } from "./mapBus";
-import { query, str, sqlLit } from "./duckdb";
+import { query, str, sqlLit, ident } from "./duckdb";
 import {
   addDeckLayer,
   removeDeckLayer,
@@ -130,11 +130,6 @@ function assertNever(x: never): never {
   throw new Error(`unreachable: ${JSON.stringify(x)}`);
 }
 
-/** Quote a DuckDB identifier (double-quote, doubling embedded quotes). */
-export function ident(name: string): string {
-  return `"${name.replace(/"/g, '""')}"`;
-}
-
 /** Word-char-only id derived from `s` — safe as a MapLibre layer/source id, an
  *  unquoted table name fragment, or a URL path segment. */
 export function sanitizeIdent(s: string): string {
@@ -172,7 +167,7 @@ async function columnCrs(s: LayerSource): Promise<string | null> {
  *  WGS84 when the column's CRS is known and isn't already WGS84-equivalent,
  *  otherwise pass the column through unchanged (see `columnCrs` for why an
  *  unknown CRS can't be reprojected — there's nothing to reproject *from*).
- *  `always_xy` matches this codebase's one other `ST_Transform` use (`tiles.ts`). */
+ *  `always_xy` makes the transform take and return lon/lat (x/y) order. */
 async function geomExpr(s: LayerSource): Promise<string> {
   const crs = await columnCrs(s);
   if (!crs || WGS84_EQUIVALENT.has(crs.toUpperCase())) return ident(s.geomColumn);
@@ -513,8 +508,6 @@ export const layers = {
     emit();
   },
 };
-
-export type Layers = typeof layers;
 
 // ---------------------------------------------------------------------------
 // Layer information (T-011). The read-only "Information / Metadata" side of

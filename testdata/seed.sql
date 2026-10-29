@@ -41,8 +41,7 @@ SELECT * FROM (VALUES
 ) AS t(name, geom);
 
 -- 4) Dense POINT layer — ~60k points in a Zürich-area bbox (8.3–8.8 lon,
---    47.2–47.5 lat). Feeds the ST_AsMVT tile path (tile-check.mjs jumps to
---    [8.5, 47.25] z10) and the Arrow render/benchmark. `id` + `name` props.
+--    47.2–47.5 lat). Feeds the Arrow render/benchmark. `id` + `name` props.
 CREATE OR REPLACE TABLE pts AS
 SELECT
   i                                   AS id,

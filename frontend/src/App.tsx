@@ -28,7 +28,6 @@ import { ROW_BASE, LEAD_SLOT, KEBAB_SLOT } from "./components/rowSlots";
 import { loadCatalog, type CatalogDatabase, type CatalogTable } from "./lib/catalog";
 import { query, errMsg } from "./lib/duckdb";
 import { getMap } from "./lib/mapBus";
-import { addTileLayer, removeTileLayer, prepareTileLayer } from "./lib/tiles";
 import { renderGeoArrow, clearDeck } from "./lib/deckRender";
 import { selection } from "./lib/selection";
 import { layers } from "./lib/layers";
@@ -229,12 +228,11 @@ export function App() {
     })();
   }, []);
 
-  // Dev seam for the ST_AsMVT tile renderer until a Layers UI lands: drive it
-  // from the console / e2e as `gisTiles.prepareTileLayer(...)` + `addTileLayer(...)`.
+  // Dev seam: drive the stores from the console / e2e-smoke.mjs.
   useEffect(() => {
     if (!import.meta.env.DEV) return;
     Object.assign(window, {
-      gisTiles: { addTileLayer, removeTileLayer, prepareTileLayer, getMap },
+      gisMap: getMap,
       gisDeck: { renderGeoArrow, clearDeck },
       gisSelection: selection,
       gisEditing: editing,

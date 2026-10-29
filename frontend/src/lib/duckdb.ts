@@ -98,6 +98,11 @@ export function errMsg(e: unknown): string {
 }
 
 /** Escape a value for use inside a single-quoted SQL string literal. */
+/** Quote a DuckDB identifier (double-quote, doubling embedded quotes). */
+export function ident(name: string): string {
+  return `"${name.replace(/"/g, '""')}"`;
+}
+
 export function sqlLit(v: string): string {
   return v.replace(/'/g, "''");
 }

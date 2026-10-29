@@ -41,12 +41,11 @@ import {
 } from "terra-draw";
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
 import { getMap, whenStyleReady } from "./mapBus";
-import { query, str, sqlLit } from "./duckdb";
+import { query, str, sqlLit, ident } from "./duckdb";
 import { setDrawHooks, requestSync, setDeckLayerSuppressed } from "./deckRender";
 import { unsavedChanges } from "./unsavedChanges";
 import {
   layers,
-  ident,
   qualified,
   type ActiveLayer,
   type GeometryKind,
@@ -993,8 +992,6 @@ export const editing = {
     emit();
   },
 };
-
-export type Editing = typeof editing;
 
 // A v4 UUID for Terra Draw feature ids. `crypto.randomUUID` only exists in a
 // secure context (HTTPS / localhost); the Tailscale preview is plain HTTP, so

@@ -18,8 +18,8 @@
 // file glob must be listed/pruned — acceptable for now, revisit for large extents.
 // ---------------------------------------------------------------------------
 
-import { query, sqlLit, str } from "./duckdb";
-import { layers, ident, sanitizeIdent } from "./layers";
+import { query, sqlLit, str, ident } from "./duckdb";
+import { layers, sanitizeIdent } from "./layers";
 import { OVERTURE_BUCKET, ensureOvertureAccess } from "./remote";
 import { OVERTURE_TILES_BASE } from "./overtureTiles";
 import { pmSelection } from "./pmtilesSelection";
@@ -146,33 +146,11 @@ export function isLargeExtent(b: Bbox): boolean {
 
 /** Standard bbox-overlap predicate against a partition's `bbox` struct column
  *  (the `bbox` columns carry parquet statistics, so this prunes row groups
- *  server-side). Shared by both query builders below. */
+ *  server-side). */
 function bboxOverlapClause(bbox: Bbox): string {
   return (
     `bbox.xmin <= ${bbox.xmax} AND bbox.xmax >= ${bbox.xmin} ` +
     `AND bbox.ymin <= ${bbox.ymax} AND bbox.ymax >= ${bbox.ymin}`
-  );
-}
-
-/**
- * Build the geometry query for one theme, clipped to `bbox`. Reads Overture's
- * public GeoParquet on S3 (caller must have run `ensureOvertureAccess` first),
- * projecting `geometry` → `geom` for the render path and filtering on the
- * partition's `bbox` struct with a standard bbox-overlap predicate.
- *
- * The `::GEOMETRY` cast strips the CRS annotation that `read_parquet` attaches
- * to GeoParquet geometry (`GEOMETRY('OGC:CRS84')`): spatial's aggregate
- * functions (`any_value`, `ST_Extent_Agg`) — which the render probe uses — throw
- * a spurious "Only little-endian WKB is supported" on that CRS-tagged type for
- * polygon themes (buildings/base/divisions), while plain `GEOMETRY` (what every
- * other layer uses) works. The cast is a no-op for themes that already worked.
- */
-export function buildOvertureQuery(theme: OvertureTheme, release: string, bbox: Bbox): string {
-  const path = `${OVERTURE_BUCKET}/release/${release}/theme=${theme.id}/type=${theme.type}/*`;
-  return (
-    `SELECT geometry::GEOMETRY AS geom ` +
-    `FROM read_parquet('${path}', hive_partitioning=1) ` +
-    `WHERE ${bboxOverlapClause(bbox)}`
   );
 }
 
@@ -182,8 +160,14 @@ export function buildOvertureQuery(theme: OvertureTheme, release: string, bbox: 
  * theme (a source-layer's features can live in more than one, so `union_by_name`
  * reconciles the differing schemas), prunes row-groups with the selection's bbox,
  * and filters to the picked GERS `id`s — real, full-resolution geometry, not the
- * simplified tile geometry the user selected on. See `buildOvertureQuery` for the
- * `::GEOMETRY` cast rationale.
+ * simplified tile geometry the user selected on.
+ *
+ * The `::GEOMETRY` cast strips the CRS annotation that `read_parquet` attaches
+ * to GeoParquet geometry (`GEOMETRY('OGC:CRS84')`): spatial's aggregate
+ * functions (`any_value`, `ST_Extent_Agg`) — which the render probe uses — throw
+ * a spurious "Only little-endian WKB is supported" on that CRS-tagged type for
+ * polygon themes (buildings/base/divisions), while plain `GEOMETRY` (what every
+ * other layer uses) works.
  */
 export function buildOvertureSelectionQuery(
   theme: OvertureTheme,

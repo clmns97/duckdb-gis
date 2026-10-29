@@ -1,8 +1,8 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { IDockviewPanelProps } from "dockview";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { layers, loadLayerInfo, qualified, ident, type LayerColumn } from "../../lib/layers";
-import { query, str } from "../../lib/duckdb";
+import { layers, loadLayerInfo, qualified, type LayerColumn } from "../../lib/layers";
+import { query, str, ident } from "../../lib/duckdb";
 import { Button } from "../Button";
 import { TypeGlyph } from "../TypeGlyph";
 import { typeKind, isNumeric } from "../../lib/columnTypes";

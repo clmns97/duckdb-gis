@@ -55,16 +55,9 @@ export const selection = {
   get size(): number {
     return selected.size;
   },
-  fids: (): number[] => [...selected],
   /** Bump on every mutation; use as a deck.gl `updateTriggers` value. */
   get version(): number {
     return version;
-  },
-
-  toggle(fid: number): void {
-    if (selected.has(fid)) selected.delete(fid);
-    else selected.add(fid);
-    emit();
   },
 
   /**
@@ -86,11 +79,6 @@ export const selection = {
       selected.clear();
       selected.add(fid);
     }
-    emit();
-  },
-  set(fids: number[]): void {
-    selected.clear();
-    for (const f of fids) selected.add(f);
     emit();
   },
   clear(): void {
@@ -125,5 +113,3 @@ export const selection = {
     return () => listeners.delete(l);
   },
 };
-
-export type Selection = typeof selection;

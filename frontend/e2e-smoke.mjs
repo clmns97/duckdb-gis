@@ -49,7 +49,7 @@ async function runSql(text) {
 
 async function mapPx(lng, lat) {
   return page.evaluate(([lng, lat]) => {
-    const map = window.gisTiles.getMap();
+    const map = window.gisMap();
     const p = map.project([lng, lat]);
     const r = map.getContainer().getBoundingClientRect();
     return { x: r.left + p.x, y: r.top + p.y };
@@ -63,13 +63,13 @@ async function tap(x, y) {
   await page.waitForTimeout(150);
 }
 async function jump(lng, lat, zoom) {
-  await page.evaluate(([lng, lat, zoom]) => window.gisTiles.getMap().jumpTo({ center: [lng, lat], zoom }), [lng, lat, zoom]);
+  await page.evaluate(([lng, lat, zoom]) => window.gisMap().jumpTo({ center: [lng, lat], zoom }), [lng, lat, zoom]);
   await page.waitForTimeout(400);
 }
 
 await page.goto(BASE, { waitUntil: "domcontentloaded", timeout: 30000 });
 await page.locator(".cm-editor").waitFor({ timeout: 20000 });
-await page.waitForFunction(() => window.gisTiles?.getMap()?.isStyleLoaded(), null, { timeout: 20000 });
+await page.waitForFunction(() => window.gisMap?.()?.isStyleLoaded(), null, { timeout: 20000 });
 
 await step("catalog lists demo tables", async () => {
   await page.getByText("cities", { exact: true }).waitFor({ timeout: 15000 });
@@ -197,7 +197,7 @@ await step("new layer: draw polygon, undo/redo, save", async () => {
   for (const [dx, dy] of [...pts, pts[0]]) await tap(c.x + dx, c.y + dy); // last tap closes the ring
   await page.waitForTimeout(500);
   let n = await page.evaluate(() => window.gisEditing.featureCount);
-  if (n !== 1) console.log("  debug:", await page.evaluate(([x, y]) => ({ mode: window.gisEditing.mode, editing: window.gisEditing.isEditing(), hit: document.elementFromPoint(x, y)?.className, map: window.gisTiles.getMap().getContainer().getBoundingClientRect() }), [c.x, c.y]), c);
+  if (n !== 1) console.log("  debug:", await page.evaluate(([x, y]) => ({ mode: window.gisEditing.mode, editing: window.gisEditing.isEditing(), hit: document.elementFromPoint(x, y)?.className, map: window.gisMap().getContainer().getBoundingClientRect() }), [c.x, c.y]), c);
   expect(n === 1, `drawn features ${n}`);
   await page.keyboard.press("Control+z");
   await page.waitForTimeout(200);
@@ -257,7 +257,7 @@ await step("basemap switch persists", async () => {
   await page.getByTitle("Switch the map basemap").click();
   await menuItem("Dark (offline)").click();
   await page.waitForTimeout(500);
-  const layersOk = await page.evaluate(() => window.gisTiles.getMap().getStyle().layers.some((l) => l.id.startsWith("gis-basemap:")));
+  const layersOk = await page.evaluate(() => window.gisMap().getStyle().layers.some((l) => l.id.startsWith("gis-basemap:")));
   expect(layersOk, "basemap layers present");
   await page.getByTitle("Switch the map basemap").click();
   await menuItem("Light (offline)").click();
@@ -313,6 +313,22 @@ await step("overture modal opens/closes", async () => {
   await page.getByRole("dialog").waitFor();
   await page.keyboard.press("Escape");
   await page.getByRole("dialog").waitFor({ state: "detached" });
+});
+
+await step("overture PMTiles layer: load, style layers, hide, remove", async () => {
+  const release = (await page.evaluate(() => import("/src/lib/overture.ts").then((m) => m.listOvertureReleases()).then((r) => r[0])));
+  await page.evaluate((r) => window.gisOverture.addOvertureLayers({ themes: ["divisions"], release: r }), release);
+  await page.waitForFunction(() => window.gisLayers.list().some((l) => l.kind === "pmtiles" && l.status !== "loading"), null, { timeout: 30000 });
+  const l = (await layerList()).find((x) => x.kind === "pmtiles");
+  expect(l.status === "ready", `pmtiles ${l.status} ${l.error ?? ""}`);
+  const ids = () => page.evaluate(() => window.gisMap().getStyle().layers.filter((x) => x.id.startsWith("L_ovt_")).map((x) => `${x.id}:${x.layout?.visibility ?? "visible"}`));
+  const shown = await ids();
+  expect(shown.length >= 3 && shown.some((i) => i.endsWith("-fill:visible")), `style layers ${shown}`);
+  await sidebarTab("Layers").click();
+  await page.getByRole("button", { name: `Hide ${l.name}` }).click();
+  expect((await ids()).every((i) => i.endsWith(":none")), "hidden");
+  await page.getByRole("button", { name: `Remove ${l.name}` }).click({ force: true });
+  expect((await ids()).length === 0, "removed");
 });
 
 await step("rapid-fire: spam runs + layer toggles", async () => {
