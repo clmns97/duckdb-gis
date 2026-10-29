@@ -110,6 +110,24 @@ export class App {
     return (await this.editorStatus.textContent()) ?? "";
   }
 
+  async saveProject(path: string, name = ""): Promise<void> {
+    await this.page.getByRole("button", { name: "Project" }).click();
+    await this.menuItem("Save project").click();
+    await this.page.getByPlaceholder("/data/my-project.duckdb").fill(path);
+    if (name) await this.page.getByPlaceholder("Untitled project").fill(name);
+    await this.page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(this.page.getByRole("dialog")).toHaveCount(0);
+  }
+
+  async openProject(path: string): Promise<void> {
+    await this.page.getByRole("button", { name: "Project" }).click();
+    await this.menuItem("Open project").click();
+    await this.page.getByPlaceholder("/data/my-project.duckdb").fill(path);
+    await this.page.getByPlaceholder("/data/my-project.duckdb").press("Enter");
+    await expect(this.page.getByRole("dialog")).toHaveCount(0, { timeout: 30_000 });
+    await this.layersSettled();
+  }
+
   /** Page coordinates of a lon/lat on the map. */
   mapPx(lng: number, lat: number): Promise<{ x: number; y: number }> {
     return this.page.evaluate(

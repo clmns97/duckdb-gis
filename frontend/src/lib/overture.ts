@@ -118,21 +118,9 @@ async function listParquetReleases(): Promise<Set<string>> {
   return set;
 }
 
-
-/** Above this span (degrees, in either dimension) the direct GeoParquet-on-S3
- *  read globs too many whole-planet files to load interactively — the Overture
- *  modal warns and nudges the user to zoom in (T-029). A metro-area viewport is
- *  well under this; the default world/continent view is far over it. */
-export const LARGE_EXTENT_DEGREES = 5;
-
-/** Whether a bbox is too large for the interactive direct-read path (T-029). */
-export function isLargeExtent(b: Bbox): boolean {
-  return b.xmax - b.xmin > LARGE_EXTENT_DEGREES || b.ymax - b.ymin > LARGE_EXTENT_DEGREES;
-}
-
-/** Standard bbox-overlap predicate against a partition's `bbox` struct column
- *  (the `bbox` columns carry parquet statistics, so this prunes row groups
- *  server-side). */
+/** Bbox-overlap predicate on a `bbox` struct column — Overture's feature rows
+ *  and its STAC file index both have one. On the GeoParquet side the column
+ *  carries parquet statistics, so this prunes row groups server-side. */
 function bboxOverlapClause(bbox: Bbox): string {
   return (
     `bbox.xmin <= ${bbox.xmax} AND bbox.xmax >= ${bbox.xmin} ` +
@@ -154,8 +142,7 @@ async function stacFiles(theme: OvertureTheme, release: string, bbox: Bbox): Pro
       `SELECT assets.aws.alternate.s3.href AS f ` +
         `FROM read_parquet('${STAC_BASE}/${sqlLit(release)}/collections.parquet') ` +
         `WHERE contains(assets.aws.alternate.s3.href, '/theme=${sqlLit(theme.id)}/') ` +
-        `AND bbox.xmin <= ${bbox.xmax} AND bbox.xmax >= ${bbox.xmin} ` +
-        `AND bbox.ymin <= ${bbox.ymax} AND bbox.ymax >= ${bbox.ymin}`,
+        `AND ${bboxOverlapClause(bbox)}`,
     );
     const files = rows.map((r) => str(r.f));
     return files.length ? files : null;
@@ -214,11 +201,16 @@ export function addOvertureLayers(req: OvertureRequest): void {
   }
 }
 
-/** A selection large enough to risk reintroducing T-029's freeze when
- *  materialised (mirrors {@link isLargeExtent} on the union bbox). */
+/** Above this span (degrees, either axis) a selection's bbox gets a confirm
+ *  before it's materialised: it can mean many full-resolution features to
+ *  read and render (T-029). A city is well under this; a country is over it. */
+const LARGE_EXTENT_DEGREES = 5;
+
 export function isLargePmSelection(): boolean {
   const b = pmSelection.bounds();
-  return b != null && isLargeExtent(b);
+  return (
+    b != null && (b.xmax - b.xmin > LARGE_EXTENT_DEGREES || b.ymax - b.ymin > LARGE_EXTENT_DEGREES)
+  );
 }
 
 /**
