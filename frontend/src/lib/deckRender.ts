@@ -395,9 +395,21 @@ const FACTORIES: Record<GeometryKind, LayerFactory> = {
 const INDIGO: [number, number, number] = [99, 102, 241];
 const INDIGO_DARK: [number, number, number] = [73, 74, 185];
 const PREVIEW_STYLE: Record<GeometryKind, LayerStyle> = {
-  point: { fillColor: INDIGO, lineColor: [255, 255, 255], fillOpacity: 200 / 255, lineWidth: 1, pointRadius: 4 },
+  point: {
+    fillColor: INDIGO,
+    lineColor: [255, 255, 255],
+    fillOpacity: 200 / 255,
+    lineWidth: 1,
+    pointRadius: 4,
+  },
   line: { fillColor: INDIGO, lineColor: INDIGO_DARK, fillOpacity: 1, lineWidth: 2, pointRadius: 4 },
-  polygon: { fillColor: INDIGO, lineColor: INDIGO_DARK, fillOpacity: 90 / 255, lineWidth: 1, pointRadius: 4 },
+  polygon: {
+    fillColor: INDIGO,
+    lineColor: INDIGO_DARK,
+    fillOpacity: 90 / 255,
+    lineWidth: 1,
+    pointRadius: 4,
+  },
 };
 const PREVIEW_POLYGON_SEL_FILL: Color = [255, 159, 28, 120];
 
@@ -550,13 +562,17 @@ function syncOverlay(): void {
     const al = added.get(id)!;
     if (!al.visible || al.suppressed) continue;
     const make = FACTORIES[al.kind];
-    layers.push(...batchLayers(al.table, `added-${id}-`, (b, g, lid) => make(b, g, lid, al.source, al.style)));
+    layers.push(
+      ...batchLayers(al.table, `added-${id}-`, (b, g, lid) => make(b, g, lid, al.source, al.style)),
+    );
   }
   if (rendered && renderedVisible) {
     const { table, kind, source } = rendered;
     const selFill = kind === "polygon" ? PREVIEW_POLYGON_SEL_FILL : undefined;
     layers.push(
-      ...batchLayers(table, "geoarrow-", (b, g, lid) => FACTORIES[kind](b, g, lid, source, PREVIEW_STYLE[kind], selFill)),
+      ...batchLayers(table, "geoarrow-", (b, g, lid) =>
+        FACTORIES[kind](b, g, lid, source, PREVIEW_STYLE[kind], selFill),
+      ),
     );
   }
   // Render deck geometry beneath the editable working set when one exists, so

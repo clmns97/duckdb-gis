@@ -180,7 +180,10 @@ function picksByLayer(features: maplibregl.MapGeoJSONFeature[]): Map<string, PmP
     const key = String(id);
     let picks = byLayer.get(layerId);
     if (!picks) byLayer.set(layerId, (picks = new Map()));
-    if (!picks.has(key)) picks.set(key, { id: key, bbox: bboxOf("coordinates" in f.geometry ? f.geometry.coordinates : []) });
+    if (!picks.has(key)) {
+      const coords = "coordinates" in f.geometry ? f.geometry.coordinates : [];
+      picks.set(key, { id: key, bbox: bboxOf(coords) });
+    }
   }
   const out = new Map<string, PmPick[]>();
   for (const [layerId, picks] of byLayer) out.set(layerId, [...picks.values()]);

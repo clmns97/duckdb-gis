@@ -184,7 +184,14 @@ async function writeMetadata(
     const row = layerRow(layer, data.dbPaths);
     if (!row) continue; // nothing persistable (e.g. a query layer that never resolved its SQL)
 
-    const cols = { id: layer.id, name: layer.name, z_order: i, visible: layer.visible, external: false, ...row };
+    const cols = {
+      id: layer.id,
+      name: layer.name,
+      z_order: i,
+      visible: layer.visible,
+      external: false,
+      ...row,
+    };
     await query(
       `INSERT INTO ${g(alias, "layers")} (${Object.keys(cols).join(", ")}) ` +
         `VALUES (${Object.values(cols).map(sqlValue).join(", ")})`,
