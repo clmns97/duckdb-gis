@@ -10,7 +10,7 @@
 // time (its `layerId`); picking on a different layer switches scope.
 // ---------------------------------------------------------------------------
 
-import type { Bbox } from "./overture";
+import { bboxOf, type Bbox } from "./bbox";
 import { changeSignal } from "./store";
 
 
@@ -20,21 +20,10 @@ const selected = new Map<string, Bbox>();
 let layerId: string | null = null;
 const signal = changeSignal();
 
-
 /** Union bbox of every selected feature, or null when nothing is selected. */
 export function selectionBounds(): Bbox | null {
   if (selected.size === 0) return null;
-  let xmin = Infinity,
-    ymin = Infinity,
-    xmax = -Infinity,
-    ymax = -Infinity;
-  for (const b of selected.values()) {
-    xmin = Math.min(xmin, b.xmin);
-    ymin = Math.min(ymin, b.ymin);
-    xmax = Math.max(xmax, b.xmax);
-    ymax = Math.max(ymax, b.ymax);
-  }
-  return { xmin, ymin, xmax, ymax };
+  return bboxOf([...selected.values()].map((b) => [[b.xmin, b.ymin], [b.xmax, b.ymax]]));
 }
 
 export interface PmPick {

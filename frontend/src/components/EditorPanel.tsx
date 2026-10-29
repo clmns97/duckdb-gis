@@ -4,6 +4,7 @@ import { keymap } from "@codemirror/view";
 import { sql, PostgreSQL } from "@codemirror/lang-sql";
 import { renderGeoArrow } from "../lib/deckRender";
 import { layers } from "../lib/layers";
+import { errMsg } from "../lib/duckdb";
 
 const DEFAULT_SQL = `SELECT 'Zürich' AS name, ST_Point(8.54, 47.37) AS geom
 UNION ALL SELECT 'Bern', ST_Point(7.45, 46.95)
@@ -31,7 +32,7 @@ export function EditorPanel() {
       layers.readyPreview(bounds);
       setStatus({ kind: "ok", msg: `${featureCount} feature${featureCount === 1 ? "" : "s"} · ${ms} ms` });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = errMsg(e);
       layers.errorPreview(msg);
       setStatus({ kind: "err", msg });
     }

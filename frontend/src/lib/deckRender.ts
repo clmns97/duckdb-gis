@@ -10,7 +10,7 @@ import { Table, makeVector, type RecordBatch, type Vector } from "apache-arrow";
 import { query, queryArrow, str } from "./duckdb";
 import { wkbToGeoArrow } from "./wkb";
 import { getMap, fitBounds } from "./mapBus";
-import { selection, FID, fidTaggedRelation } from "./selection";
+import { selection, FID, fidTaggedRelation, cleanSql } from "./selection";
 import type { PickingInfo } from "@deck.gl/core";
 
 // ---------------------------------------------------------------------------
@@ -21,7 +21,6 @@ import type { PickingInfo } from "@deck.gl/core";
 // probes the geometry type first and dispatches to the matching layer.
 // ---------------------------------------------------------------------------
 
-const clean = (sql: string) => sql.trim().replace(/;\s*$/, "");
 
 let overlay: MapboxOverlay | null = null;
 let overlayMap: maplibregl.Map | null = null;
@@ -423,7 +422,7 @@ function batchLayers(
  * polygon → Polygon).
  */
 export async function renderGeoArrow(userSql: string): Promise<DeckOutcome> {
-  const inner = clean(userSql);
+  const inner = cleanSql(userSql);
 
   const t0 = performance.now();
   const probe = await probeGeometry(inner);
@@ -589,7 +588,7 @@ export interface AddedLayerOutcome {
  * replaces it. Not selection-coupled — see `renderGeoArrow` for the pickable path.
  */
 export async function addDeckLayer(id: string, sourceSql: string): Promise<AddedLayerOutcome> {
-  const inner = clean(sourceSql);
+  const inner = cleanSql(sourceSql);
   const probe = await probeGeometry(inner);
   const kind = geometryKindOf(probe.type);
 

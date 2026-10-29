@@ -21,7 +21,8 @@ import { changeSignal } from "./store";
 import { Protocol, PMTiles } from "pmtiles";
 import { getMap, whenStyleReady } from "./mapBus";
 import { pmSelection, type PmPick } from "./pmtilesSelection";
-import type { OvertureTheme, Bbox } from "./overture";
+import type { OvertureTheme } from "./overture";
+import { bboxOf } from "./bbox";
 
 export const OVERTURE_TILES_BASE =
   "https://overturemaps-extras-us-west-2.s3.us-west-2.amazonaws.com/tiles";
@@ -169,26 +170,6 @@ function visibleStyleLayerIds(): string[] {
 
 // --- Selection -------------------------------------------------------------
 
-function bboxOfGeometry(geom: GeoJSON.Geometry): Bbox {
-  let xmin = Infinity,
-    ymin = Infinity,
-    xmax = -Infinity,
-    ymax = -Infinity;
-  const walk = (c: unknown): void => {
-    if (typeof (c as number[])[0] === "number") {
-      const [x, y] = c as number[];
-      xmin = Math.min(xmin, x);
-      ymin = Math.min(ymin, y);
-      xmax = Math.max(xmax, x);
-      ymax = Math.max(ymax, y);
-    } else {
-      for (const child of c as unknown[]) walk(child);
-    }
-  };
-  if (geom.type !== "GeometryCollection" && "coordinates" in geom) walk(geom.coordinates);
-  return { xmin, ymin, xmax, ymax };
-}
-
 // Group rendered-feature hits by owning app layer, de-duped on GERS id.
 function picksByLayer(features: maplibregl.MapGeoJSONFeature[]): Map<string, PmPick[]> {
   const byLayer = new Map<string, Map<string, PmPick>>();
@@ -199,7 +180,7 @@ function picksByLayer(features: maplibregl.MapGeoJSONFeature[]): Map<string, PmP
     const key = String(id);
     let picks = byLayer.get(layerId);
     if (!picks) byLayer.set(layerId, (picks = new Map()));
-    if (!picks.has(key)) picks.set(key, { id: key, bbox: bboxOfGeometry(f.geometry) });
+    if (!picks.has(key)) picks.set(key, { id: key, bbox: bboxOf("coordinates" in f.geometry ? f.geometry.coordinates : []) });
   }
   const out = new Map<string, PmPick[]>();
   for (const [layerId, picks] of byLayer) out.set(layerId, [...picks.values()]);

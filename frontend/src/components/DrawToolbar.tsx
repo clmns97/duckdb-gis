@@ -50,40 +50,17 @@ export function DrawToolbar() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const onCommit = async () => {
-    setBusy(true);
+  // Run a store action, surfacing any error (merge SQL, paste family mismatch,
+  // a failed save) in the toolbar's error slot. `busyWhile` disables the
+  // toolbar for the duration — Save and Stop editing (which releases the
+  // source's write lock, #66, so it can fail too).
+  const guard = (fn: () => unknown, busyWhile = false) => () => {
     setError(null);
-    try {
-      await editing.commit();
-    } catch (e) {
-      setError(errMsg(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  // Cancel releases the source's write lock (#66) same as Commit does, so it
-  // can fail too — surface that rather than silently leaving the source
-  // writable.
-  const onCancel = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      await editing.finishEdit();
-    } catch (e) {
-      setError(errMsg(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  // Advanced editing ops (T-045/046/048): run the store action, surfacing any
-  // error (merge SQL, paste family mismatch) into the toolbar's error slot.
-  const guard = (fn: () => void | Promise<void>) => () => {
-    setError(null);
+    if (busyWhile) setBusy(true);
     Promise.resolve()
       .then(fn)
-      .catch((e) => setError(errMsg(e)));
+      .catch((e) => setError(errMsg(e)))
+      .finally(() => busyWhile && setBusy(false));
   };
 
   // Collapsed: the active layer is the Edit button's target. Only catalog-table
@@ -92,18 +69,13 @@ export function DrawToolbar() {
   // surfaces its own errors into the same `error` slot.
   const active = layers.active();
   const canBeginEdit = canEditInPlace(active);
-  const onBeginEdit = () => {
-    if (!active) return;
-    setError(null);
-    editing.beginEdit(active).catch((e) => setError(errMsg(e)));
-  };
 
   return (
     <DrawToolbarView
       expanded={isEditing}
       canBeginEdit={canBeginEdit}
       activeLayerName={active?.name ?? null}
-      onBeginEdit={onBeginEdit}
+      onBeginEdit={guard(() => active && editing.beginEdit(active))}
       active={editing.mode}
       allowedMode={editing.allowedDrawMode}
       targetName={editing.target?.name ?? ""}
@@ -127,8 +99,8 @@ export function DrawToolbar() {
       onCopy={guard(() => editing.copySelected())}
       onPaste={guard(() => editing.paste())}
       onToggleSnap={() => editing.toggleSnapping()}
-      onCommit={onCommit}
-      onCancel={() => void onCancel()}
+      onCommit={guard(() => editing.commit(), true)}
+      onCancel={guard(() => editing.finishEdit(), true)}
     />
   );
 }

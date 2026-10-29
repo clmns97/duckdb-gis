@@ -40,6 +40,7 @@ import {
   type GeoJSONStoreFeatures,
 } from "terra-draw";
 import { changeSignal } from "./store";
+import { bboxOf } from "./bbox";
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
 import { getMap, whenStyleReady } from "./mapBus";
 import { query, str, sqlLit, ident } from "./duckdb";
@@ -128,27 +129,11 @@ function transformGeometry(geom: AnyGeom, fn: (p: number[]) => number[]): AnyGeo
   return { ...geom, coordinates: walkPositions(geom.coordinates, fn) };
 }
 
-function collectPositions(geom: AnyGeom, out: number[][]): void {
-  const walk = (c: AnyGeom) => {
-    if (typeof c[0] === "number") out.push(c as number[]);
-    else (c as AnyGeom[]).forEach(walk);
-  };
-  walk(geom.coordinates);
-}
-
 /** Centre of the combined bounding box of some geometries — the pivot for
  *  rotate/scale so the selection transforms about its own middle. */
 function bboxCenterOf(geoms: AnyGeom[]): [number, number] {
-  const pts: number[][] = [];
-  for (const g of geoms) collectPositions(g, pts);
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const [x, y] of pts) {
-    if (x < minX) minX = x;
-    if (y < minY) minY = y;
-    if (x > maxX) maxX = x;
-    if (y > maxY) maxY = y;
-  }
-  return [(minX + maxX) / 2, (minY + maxY) / 2];
+  const b = bboxOf(geoms.map((g) => g.coordinates));
+  return [(b.xmin + b.xmax) / 2, (b.ymin + b.ymax) / 2];
 }
 
 /** Map a GeoJSON geometry type to the layer's geometry family. */

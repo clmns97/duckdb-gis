@@ -340,6 +340,14 @@ await step("overture PMTiles layer: load, style layers, hide, remove", async () 
   const ids = () => page.evaluate(() => window.gisMap().getStyle().layers.filter((x) => x.id.startsWith("L_ovt_")).map((x) => `${x.id}:${x.layout?.visibility ?? "visible"}`));
   const shown = await ids();
   expect(shown.length >= 3 && shown.some((i) => i.endsWith("-fill:visible")), `style layers ${shown}`);
+  // click a division polygon → pmSelection holds it with a finite bbox
+  await jump(10.4, 51.1, 5);
+  await page.waitForTimeout(2500); // tiles over the network
+  const p = await mapPx(10.4, 51.1);
+  await page.mouse.click(p.x, p.y);
+  await page.waitForTimeout(300);
+  const sel = await page.evaluate(() => ({ n: window.gisPmSelection.size, b: window.gisPmSelection.bounds() }));
+  expect(sel.n > 0 && Number.isFinite(sel.b.xmin) && sel.b.xmin <= 10.4 && sel.b.xmax >= 10.4, `pm selection ${JSON.stringify(sel)}`);
   await sidebarTab("Layers").click();
   await page.getByRole("button", { name: `Hide ${l.name}` }).click();
   expect((await ids()).every((i) => i.endsWith(":none")), "hidden");

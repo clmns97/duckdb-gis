@@ -23,6 +23,7 @@ import { layers, sanitizeIdent } from "./layers";
 import { OVERTURE_BUCKET, ensureOvertureAccess } from "./remote";
 import { OVERTURE_TILES_BASE } from "./overtureTiles";
 import { pmSelection } from "./pmtilesSelection";
+import type { Bbox } from "./bbox";
 import { unsavedChanges } from "./unsavedChanges";
 
 /** One selectable Overture theme. `type` is the representative type partition
@@ -126,12 +127,6 @@ async function listParquetReleases(): Promise<Set<string>> {
   return set;
 }
 
-export interface Bbox {
-  xmin: number;
-  ymin: number;
-  xmax: number;
-  ymax: number;
-}
 
 /** Above this span (degrees, in either dimension) the direct GeoParquet-on-S3
  *  read globs too many whole-planet files to load interactively — the Overture
