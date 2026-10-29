@@ -3,8 +3,10 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
 // The duckdb-gis extension server (started via `CALL start_gis()`) binds
-// "localhost", which resolves to IPv6 [::1] here.
-const EXT = "http://[::1]:4214";
+// "localhost", which resolves to IPv6 [::1] here. GIS_PORT overrides its port
+// (the e2e suite runs its own server, see playwright.config.ts).
+const GIS_PORT = process.env.GIS_PORT ?? "4214";
+const EXT = `http://[::1]:${GIS_PORT}`;
 
 // In dev we serve the app from Vite (with HMR) and proxy the extension's
 // SQL-over-HTTP API to it, rewriting Origin/Referer so the extension's
@@ -12,7 +14,7 @@ const EXT = "http://[::1]:4214";
 const withOrigin = (extra: Record<string, string> = {}) => ({
   target: EXT,
   changeOrigin: true,
-  headers: { Origin: "http://localhost:4214", ...extra },
+  headers: { Origin: `http://localhost:${GIS_PORT}`, ...extra },
 });
 
 export default defineConfig({
