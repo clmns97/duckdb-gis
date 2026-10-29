@@ -73,3 +73,47 @@ test("a PMTiles layer selects, hides, round-trips a project and removes @network
   await page.getByRole("button", { name: `Remove ${layer.name}` }).click({ force: true });
   expect(await styleLayers()).toEqual([]);
 });
+
+// Uses one small building: a country-sized pick (zoom 5, Germany) is correct
+// but takes ~2 min over S3, which is a data-volume cost, not a regression.
+test("Create Layer from Selection copies the picked feature into an editable table @network", async ({ app, page }) => {
+  await page.evaluate(
+    (r) => window.gisOverture.addOvertureLayers({ themes: ["buildings"], release: r }),
+    await liveRelease(app),
+  );
+  await app.layersSettled();
+  const layer = (await app.layers()).find((l) => l.kind === "pmtiles")!;
+  await app.jump(8.682, 50.1105, 17); // Frankfurt Römerberg, dense small buildings
+  await page.waitForTimeout(3000); // tiles over the network
+  // a pixel that has a building under it
+  const p = await page.evaluate(() => {
+    const map = window.gisMap();
+    const ids = map.getStyle().layers.filter((x: { id: string; type: string }) => x.id.startsWith("L_ovt_") && x.type === "fill").map((x: { id: string }) => x.id);
+    const { width, height } = map.getContainer().getBoundingClientRect();
+    for (let r = 0; r < 200; r += 10)
+      for (const [dx, dy] of [[r, 0], [-r, 0], [0, r], [0, -r]]) {
+        const pt: [number, number] = [width / 2 + dx, height / 2 + dy];
+        if (map.queryRenderedFeatures(pt, { layers: ids }).length) {
+          const box = map.getContainer().getBoundingClientRect();
+          return { x: box.left + pt[0], y: box.top + pt[1] };
+        }
+      }
+    return null;
+  });
+  expect(p, "a rendered building near the map centre").not.toBeNull();
+  await page.mouse.click(p!.x, p!.y);
+  await expect.poll(() => page.evaluate(() => window.gisPmSelection.size)).toBeGreaterThan(0);
+  const picked: number = await page.evaluate(() => window.gisPmSelection.size);
+
+  await app.sidebarTab("Layers").click();
+  await page.getByRole("button", { name: `Actions for ${layer.name}` }).click();
+  await app.menuItem(/Create Layer from Selection/).click();
+  await expect
+    .poll(async () => (await app.layers()).find((l) => /^Buildings_selection_/.test(l.name)), { timeout: 45_000 })
+    .toBeTruthy();
+  await app.layersSettled();
+  const copy = (await app.layers()).find((l) => /^Buildings_selection_/.test(l.name))!;
+  expect(copy).toMatchObject({ kind: "table", status: "ready" });
+  const [{ n }] = await app.sql(`SELECT count(*)::INT AS n FROM memory.main."${copy.name}"`);
+  expect(n).toBe(picked);
+});
