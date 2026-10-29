@@ -49,11 +49,9 @@ export function App() {
   // more useful landing panel.
   const [tab, setTab] = useState<"layers" | "browser">("browser");
   const [menu, setMenu] = useState<MenuState | null>(null);
-  const [overtureOpen, setOvertureOpen] = useState(false);
-  const [attachOpen, setAttachOpen] = useState(false);
-  const [newLayerOpen, setNewLayerOpen] = useState(false);
-  const [saveProjectOpen, setSaveProjectOpen] = useState(false);
-  const [openProjectOpen, setOpenProjectOpen] = useState(false);
+  // The open dialog, if any — at most one at a time.
+  const [dialog, setDialog] = useState<"overture" | "attach" | "newLayer" | "save" | "open" | null>(null);
+  const closeDialog = () => setDialog(null);
   // Re-render when the active basemap changes so both the Browser entry label
   // and the pinned Layers row (via LayersPanel) reflect it.
   useSyncExternalStore(basemap.subscribe, basemap.getSnapshot);
@@ -153,8 +151,8 @@ export function App() {
   // Processing/Basemap, next to Help.
   const openProjectMenu = (e: React.MouseEvent) =>
     anchorMenu(e, [
-      { label: "Save project…", onSelect: () => setSaveProjectOpen(true) },
-      { label: "Open project…", onSelect: () => setOpenProjectOpen(true) },
+      { label: "Save project…", onSelect: () => setDialog("save") },
+      { label: "Open project…", onSelect: () => setDialog("open") },
     ]);
 
   // Right-click a geometry-bearing table → "Add to map" (QGIS "Add Layer").
@@ -302,7 +300,7 @@ export function App() {
               <SectionHeader
                 label="Layers"
                 addTitle="New layer"
-                onAdd={() => setNewLayerOpen(true)}
+                onAdd={() => setDialog("newLayer")}
               />
               <LayersPanel />
             </section>
@@ -313,7 +311,7 @@ export function App() {
                 label="Overture Maps"
                 hint="quick load…"
                 title="Add Overture Maps data (QuickOSM-style)"
-                onClick={() => setOvertureOpen(true)}
+                onClick={() => setDialog("overture")}
               />
 
               <QuickAction
@@ -345,7 +343,7 @@ export function App() {
                 <SectionHeader
                   label="Attached databases"
                   addTitle="Attach database"
-                  onAdd={() => setAttachOpen(true)}
+                  onAdd={() => setDialog("attach")}
                 />
 
                 {error ? (
@@ -476,30 +474,22 @@ export function App() {
         <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />
       )}
 
-      {overtureOpen && (
-        <OvertureModal onClose={() => setOvertureOpen(false)} onLoad={loadOverture} />
-      )}
-
-      {attachOpen && (
-        <AttachModal onClose={() => setAttachOpen(false)} onAttached={refreshCatalog} />
-      )}
-
-      {newLayerOpen && (
+      {dialog === "overture" && <OvertureModal onClose={closeDialog} onLoad={loadOverture} />}
+      {dialog === "attach" && <AttachModal onClose={closeDialog} onAttached={refreshCatalog} />}
+      {dialog === "newLayer" && (
         <NewLayerModal
-          onClose={() => setNewLayerOpen(false)}
+          onClose={closeDialog}
           onCreate={(name, geometryKind) => {
-            setNewLayerOpen(false);
             setTab("layers"); // surface the Layers panel so the new layer is visible
             editing.beginNewLayer({ name, geometryKind });
           }}
         />
       )}
 
-      {saveProjectOpen && <SaveProjectModal onClose={() => setSaveProjectOpen(false)} />}
-
-      {openProjectOpen && (
+      {dialog === "save" && <SaveProjectModal onClose={closeDialog} />}
+      {dialog === "open" && (
         <OpenProjectModal
-          onClose={() => setOpenProjectOpen(false)}
+          onClose={closeDialog}
           onOpened={(kind) => {
             refreshCatalog();
             if (kind === "project") setTab("layers"); // restored layers are what changed

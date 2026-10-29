@@ -328,12 +328,24 @@ await step("sidebar collapse + rail reveal", async () => {
   await sidebarTab("Layers").waitFor();
 });
 
-await step("overture modal opens/closes", async () => {
+await step("overture modal: escape, load a theme", async () => {
   await sidebarTab("Browser").click();
   await page.getByTitle(/Add Overture Maps data/).click();
   await page.getByRole("dialog").waitFor();
   await page.keyboard.press("Escape");
   await page.getByRole("dialog").waitFor({ state: "detached" });
+  await page.getByTitle(/Add Overture Maps data/).click();
+  expect(await page.getByRole("button", { name: "Load", exact: true }).isDisabled(), "Load enabled with no theme");
+  // wait for the live release list (the hard-coded fallback can be stale)
+  const live = await page.evaluate(() => import(performance.getEntriesByType("resource").map((e) => e.name).find((n) => n.includes("/src/lib/overture.ts"))).then((m) => m.listOvertureReleases()).then((r) => r[0]));
+  await page.waitForFunction((r) => document.querySelector('[role="dialog"] select')?.value === r, live, { timeout: 15000 });
+  await page.getByLabel("Divisions").check();
+  await page.getByRole("button", { name: "Load", exact: true }).click();
+  await page.getByRole("dialog").waitFor({ state: "detached" });
+  await page.waitForFunction(() => window.gisLayers.list().some((l) => l.kind === "pmtiles" && l.status === "ready"), null, { timeout: 30000 }).catch(async () => {
+    throw new Error(JSON.stringify(await page.evaluate(() => window.gisLayers.list().filter((l) => l.kind === "pmtiles").map((l) => [l.id, l.status, l.error]))));
+  });
+  await page.evaluate(() => window.gisLayers.list().filter((l) => l.kind === "pmtiles").forEach((l) => window.gisLayers.remove(l.id)));
 });
 
 await step("overture PMTiles layer: load, style layers, hide, remove", async () => {

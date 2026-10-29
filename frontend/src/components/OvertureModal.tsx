@@ -5,7 +5,7 @@ import {
   listOvertureReleases,
   type OvertureRequest,
 } from "../lib/overture";
-import { Modal, Button, ModalNote, INPUT } from "./Modal";
+import { FormModal, INPUT } from "./Modal";
 import { OvertureLogo } from "./OvertureLogo";
 
 // Overture quick-load form (T-012, rebuilt on PMTiles in T-058), QuickOSM-style:
@@ -51,31 +51,23 @@ export function OvertureModal({
     });
   };
 
-  const canLoad = themes.size > 0;
-
-  const submit = () => {
-    if (!canLoad) return;
-    onLoad({ themes: [...themes], release });
-    onClose();
-  };
-
   return (
-    <Modal
+    <FormModal
       title={
         <span className="flex items-center gap-2">
           <OvertureLogo size={18} className="shrink-0" />
           Add Overture Maps data
         </span>
       }
+      action="Load"
+      canSubmit={themes.size > 0}
+      onSubmit={() => onLoad({ themes: [...themes], release })}
       onClose={onClose}
-      footer={
+      note={
         <>
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant="primary" disabled={!canLoad} onClick={submit}>
-            Load
-          </Button>
+          Themes render from Overture's hosted, pre-tiled data — the whole planet is
+          available, just pan and zoom. To edit features, select them on the map and
+          use “Create Layer from Selection”.
         </>
       }
     >
@@ -112,11 +104,6 @@ export function OvertureModal({
         </select>
       </label>
 
-      <ModalNote>
-        Themes render from Overture's hosted, pre-tiled data — the whole planet is
-        available, just pan and zoom. To edit features, select them on the map and
-        use “Create Layer from Selection”.
-      </ModalNote>
-    </Modal>
+    </FormModal>
   );
 }
