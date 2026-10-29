@@ -1,10 +1,15 @@
 #
-# Builds and tests the `gis` extension.
+# Builds and tests the `gis` extension on every distribution platform, with
+# DuckDB's extension-ci-tools (the same toolchain community-extensions uses).
 #
 # The extension targets DuckDB's stable C extension API (v1.2.0, see the
-# Makefile), so one build per platform serves every supported DuckDB version:
-# the distribution job builds and tests it against the latest DuckDB, and the
-# compatibility job runs the tests against each DuckDB version we support.
+# Makefile), so one build per platform serves every supported DuckDB version.
+# Compatibility.yml runs the tests against each supported DuckDB version.
+#
+# This takes ~10 min (mostly rebuilding the Linux toolchain image), so on pull
+# requests it only runs when native code or build files change. Frontend-only
+# PRs are covered by Compatibility.yml (which embeds frontend/dist and tests
+# the extension natively) and Frontend.yml; every push to main runs it.
 #
 # There are deliberately no deploy jobs here. Distribution is handled by
 # duckdb/community-extensions: that repo builds, signs and publishes the
@@ -17,9 +22,15 @@
 name: Main Extension Distribution Pipeline
 on:
   pull_request:
-    paths-ignore:
-      - 'docs/**'
-      - 'README.md'
+    paths:
+      - 'src/**'
+      - 'third_party/**'
+      - 'duckdb_capi/**'
+      - 'scripts/**'
+      - 'CMakeLists.txt'
+      - 'Makefile'
+      - 'extension-ci-tools'
+      - '.github/workflows/MainDistributionPipeline.yml'
   push:
     branches:
       - 'main'
@@ -43,19 +54,3 @@ jobs:
       extension_name: gis
       extra_toolchains: python3
 
-  compatibility:
-    name: Test on DuckDB ${{ matrix.duckdb }}
-    runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        # The oldest supported release (1.4 LTS), the last 1.x, and the latest.
-        duckdb: ['1.4.5', '1.5.6', '2.0.0']
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
-      - name: Build
-        run: make configure release DUCKDB_TEST_VERSION=${{ matrix.duckdb }}
-      - name: Test
-        run: make test_release DUCKDB_TEST_VERSION=${{ matrix.duckdb }}

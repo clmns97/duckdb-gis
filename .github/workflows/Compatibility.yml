@@ -1,0 +1,40 @@
+#
+# Builds the extension natively and runs test/sql against each DuckDB version
+# we support. Fast (~1 min), so it runs on every PR and push; the full
+# per-platform build lives in MainDistributionPipeline.yml.
+#
+name: Compatibility
+on:
+  pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - 'README.md'
+  push:
+    branches:
+      - 'main'
+    paths-ignore:
+      - 'docs/**'
+      - 'README.md'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compatibility:
+    name: Test on DuckDB ${{ matrix.duckdb }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # The oldest supported release (1.4 LTS), the last 1.x, and the latest.
+        duckdb: ['1.4.5', '1.5.6', '2.0.0']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Build
+        run: make configure release DUCKDB_TEST_VERSION=${{ matrix.duckdb }}
+      - name: Test
+        run: make test_release DUCKDB_TEST_VERSION=${{ matrix.duckdb }}
