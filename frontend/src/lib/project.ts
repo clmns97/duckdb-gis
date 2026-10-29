@@ -13,8 +13,8 @@
 // That matches "Open restores a session", not "merge a session in".
 // ---------------------------------------------------------------------------
 
-import { query, str, sqlLit, errMsg } from "./duckdb";
-import { ident, layers, type ActiveLayer, type LayerStyle } from "./layers";
+import { query, str, sqlLit, errMsg, ident } from "./duckdb";
+import { layers, type ActiveLayer, type LayerStyle } from "./layers";
 import type { OvertureTheme } from "./overture";
 import { WORKING_CATALOG } from "./workspace";
 import { basemap } from "./basemaps";
@@ -45,8 +45,8 @@ const OPEN_ALIAS = "__gis_project_open";
 type SourceKind = "table" | "query" | "pmtiles";
 
 /** Quote a value for SQL, or `NULL` when absent. */
-function lit(v: string | null | undefined): string {
-  return v == null ? "NULL" : `'${sqlLit(v)}'`;
+function sqlValue(v: unknown): string {
+  return v == null ? "NULL" : typeof v === "string" ? `'${sqlLit(v)}'` : String(v);
 }
 function nullableStr(v: unknown): string | null {
   return v == null ? null : str(v);
@@ -63,23 +63,17 @@ function g(alias: string, table: string): string {
  * other schema (in particular a prior `_gis`) is dropped wholesale.
  */
 async function clearDatabase(alias: string): Promise<void> {
-  const views = await query(
-    `SELECT view_name AS n FROM duckdb_views() WHERE database_name = '${sqlLit(alias)}' AND schema_name = 'main' AND NOT internal`,
-  );
-  for (const r of views) await query(`DROP VIEW ${ident(alias)}.main.${ident(str(r.n))}`);
-
-  const tables = await query(
-    `SELECT table_name AS n FROM duckdb_tables() WHERE database_name = '${sqlLit(alias)}' AND schema_name = 'main' AND NOT internal`,
-  );
-  for (const r of tables) await query(`DROP TABLE ${ident(alias)}.main.${ident(str(r.n))}`);
-
-  const seqs = await query(
-    `SELECT sequence_name AS n FROM duckdb_sequences() WHERE database_name = '${sqlLit(alias)}' AND schema_name = 'main'`,
-  );
-  for (const r of seqs) await query(`DROP SEQUENCE ${ident(alias)}.main.${ident(str(r.n))}`);
-
+  const inDb = `database_name = '${sqlLit(alias)}'`;
+  const mainObjects = [
+    ["VIEW", `SELECT view_name AS n FROM duckdb_views() WHERE ${inDb} AND schema_name = 'main' AND NOT internal`],
+    ["TABLE", `SELECT table_name AS n FROM duckdb_tables() WHERE ${inDb} AND schema_name = 'main' AND NOT internal`],
+    ["SEQUENCE", `SELECT sequence_name AS n FROM duckdb_sequences() WHERE ${inDb} AND schema_name = 'main'`],
+  ];
+  for (const [kind, sql] of mainObjects) {
+    for (const r of await query(sql)) await query(`DROP ${kind} ${ident(alias)}.main.${ident(str(r.n))}`);
+  }
   const schemas = await query(
-    `SELECT schema_name AS n FROM duckdb_schemas() WHERE database_name = '${sqlLit(alias)}' AND NOT internal AND schema_name <> 'main'`,
+    `SELECT schema_name AS n FROM duckdb_schemas() WHERE ${inDb} AND NOT internal AND schema_name <> 'main'`,
   );
   for (const r of schemas) await query(`DROP SCHEMA ${ident(alias)}.${ident(str(r.n))} CASCADE`);
 }
@@ -187,16 +181,21 @@ async function writeMetadata(
 
   for (let i = 0; i < data.layers.length; i++) {
     const layer = data.layers[i];
-    const row = layerToRow(layer, data.dbPaths);
+    const row = layerRow(layer, data.dbPaths);
     if (!row) continue; // nothing persistable (e.g. a query layer that never resolved its SQL)
 
-    await query(`INSERT INTO ${g(alias, "layers")} VALUES (
-      '${sqlLit(layer.id)}', '${sqlLit(layer.name)}', '${row.sourceKind}', ${i}, ${layer.visible},
-      ${lit(row.sourceDb)}, ${lit(row.sourceSchema)}, ${lit(row.sourceTable)}, ${lit(row.sourceGeomColumn)},
-      ${row.external}, ${lit(row.sourcePath)},
-      ${lit(row.sql)},
-      ${lit(row.pmTheme)}, ${lit(row.pmThemeLabel)}, ${lit(row.pmThemeType)}, ${lit(row.pmRelease)}
-    )`);
+    const cols = {
+      id: layer.id,
+      name: layer.name,
+      z_order: i,
+      visible: layer.visible,
+      external: false,
+      ...row,
+    };
+    await query(
+      `INSERT INTO ${g(alias, "layers")} (${Object.keys(cols).join(", ")}) ` +
+        `VALUES (${Object.values(cols).map(sqlValue).join(", ")})`,
+    );
 
     if (layer.style) {
       await query(
@@ -206,61 +205,30 @@ async function writeMetadata(
   }
 }
 
-interface LayerRow {
-  sourceKind: SourceKind;
-  sourceDb: string | null;
-  sourceSchema: string | null;
-  sourceTable: string | null;
-  sourceGeomColumn: string | null;
-  external: boolean;
-  sourcePath: string | null;
-  sql: string | null;
-  pmTheme: string | null;
-  pmThemeLabel: string | null;
-  pmThemeType: string | null;
-  pmRelease: string | null;
-}
-
-function layerToRow(layer: ActiveLayer, dbPaths: Map<string, string>): LayerRow | null {
-  const empty: Omit<LayerRow, "sourceKind"> = {
-    sourceDb: null,
-    sourceSchema: null,
-    sourceTable: null,
-    sourceGeomColumn: null,
-    external: false,
-    sourcePath: null,
-    sql: null,
-    pmTheme: null,
-    pmThemeLabel: null,
-    pmThemeType: null,
-    pmRelease: null,
-  };
-
-  if (layer.kind === "table" && layer.source) {
-    const external = layer.source.db !== WORKING_CATALOG;
+// A layer's source-specific `_gis.layers` columns; columns left out are NULL.
+// Null when there's nothing persistable.
+function layerRow(layer: ActiveLayer, dbPaths: Map<string, string>): Record<string, unknown> | null {
+  const { source, pmtiles } = layer;
+  if (layer.kind === "table" && source) {
+    const external = source.db !== WORKING_CATALOG;
     return {
-      ...empty,
-      sourceKind: "table",
-      sourceDb: layer.source.db,
-      sourceSchema: layer.source.schema,
-      sourceTable: layer.source.table,
-      sourceGeomColumn: layer.source.geomColumn,
+      source_kind: "table",
+      source_db: source.db,
+      source_schema: source.schema,
+      source_table: source.table,
+      source_geom_column: source.geomColumn,
       external,
-      sourcePath: external ? (dbPaths.get(layer.source.db) ?? null) : null,
+      source_path: external ? (dbPaths.get(source.db) ?? null) : null,
     };
   }
-  if (layer.kind === "query") {
-    if (!layer.sql) return null;
-    return { ...empty, sourceKind: "query", sql: layer.sql };
-  }
-  if (layer.kind === "pmtiles" && layer.pmtiles) {
+  if (layer.kind === "query" && layer.sql) return { source_kind: "query", sql: layer.sql };
+  if (layer.kind === "pmtiles" && pmtiles) {
     return {
-      ...empty,
-      sourceKind: "pmtiles",
-      pmTheme: layer.pmtiles.theme.id,
-      pmThemeLabel: layer.pmtiles.theme.label,
-      pmThemeType: layer.pmtiles.theme.type,
-      pmRelease: layer.pmtiles.release,
+      source_kind: "pmtiles",
+      pmtiles_theme: pmtiles.theme.id,
+      pmtiles_theme_label: pmtiles.theme.label,
+      pmtiles_theme_type: pmtiles.theme.type,
+      pmtiles_release: pmtiles.release,
     };
   }
   return null;

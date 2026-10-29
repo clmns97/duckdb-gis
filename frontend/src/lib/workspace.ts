@@ -25,8 +25,8 @@
 //     losing the catalog entirely — see the comment on releaseWriteLock.
 // ---------------------------------------------------------------------------
 
-import { query, str, sqlLit, errMsg } from "./duckdb";
-import { ident, type LayerSource } from "./layers";
+import { query, str, sqlLit, errMsg, ident } from "./duckdb";
+import type { LayerSource } from "./layers";
 
 /** The ephemeral in-memory catalog scratch/new-from-draw layers live in. */
 export const WORKING_CATALOG = "memory";

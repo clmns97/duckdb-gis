@@ -10,18 +10,19 @@
 //
 // One code path for all six themes: each archive names its own vector_layers in
 // its metadata (buildings → building/building_part, base → land/water/…, etc.),
-// and each is drawn with the shared fill/line/circle family split (vectorStyle).
+// and each is drawn with one style layer per geometry family (FAMILIES below).
 // The layer is display + selection only — never edited. Clicking / box-selecting
 // features feeds "Create Layer from Selection" (see overture.ts), which
 // materialises the real geometry from GeoParquet.
 // ---------------------------------------------------------------------------
 
 import maplibregl from "maplibre-gl";
+import { changeSignal } from "./store";
 import { Protocol, PMTiles } from "pmtiles";
 import { getMap, whenStyleReady } from "./mapBus";
-import { addFamilyLayers, removeFamilyLayers } from "./vectorStyle";
 import { pmSelection, type PmPick } from "./pmtilesSelection";
-import type { OvertureTheme, Bbox } from "./overture";
+import type { OvertureTheme } from "./overture";
+import { bboxOf } from "./bbox";
 
 export const OVERTURE_TILES_BASE =
   "https://overturemaps-extras-us-west-2.s3.us-west-2.amazonaws.com/tiles";
@@ -31,13 +32,31 @@ export function tileArchiveUrl(themeId: string, release: string): string {
   return `${OVERTURE_TILES_BASE}/${release}/${themeId}.pmtiles`;
 }
 
+// A vector source-layer may mix geometry families in one tile, so it gets one
+// style layer per family (fill / line / circle), filtered on `$type`.
+const FAMILIES = [
+  {
+    type: "fill",
+    geom: "Polygon",
+    paint: { "fill-color": "#6366f1", "fill-opacity": 0.35, "fill-outline-color": "#494ab9" },
+  },
+  { type: "line", geom: "LineString", paint: { "line-color": "#494ab9", "line-width": 2 } },
+  {
+    type: "circle",
+    geom: "Point",
+    paint: {
+      "circle-color": "#6366f1",
+      "circle-radius": 4,
+      "circle-stroke-color": "#ffffff",
+      "circle-stroke-width": 1.2,
+    },
+  },
+] as const;
+
 interface TileLayerEntry {
   /** The PMTiles archive URL — the key `protocol.tiles` caches it under. */
   url: string;
   sourceId: string;
-  /** One id per source-layer (`${layerId}__${sourceLayer}`); each expands to a
-   *  fill/line/circle triple (see vectorStyle.addFamilyLayers/removeFamilyLayers). */
-  idBases: string[];
   /** All fill/line/circle style-layer ids across every source-layer. */
   styleLayerIds: string[];
   visible: boolean;
@@ -61,13 +80,11 @@ function sourceIdFor(layerId: string): string {
 
 interface VectorLayerMeta {
   id: string;
-  minzoom?: number;
-  maxzoom?: number;
 }
 
 /**
  * Add a theme's hosted PMTiles as a native MapLibre vector-tile layer. Reads the
- * archive's `vector_layers` metadata and draws each with the shared family split.
+ * archive's `vector_layers` metadata and draws each with the family split.
  * The layer's bounds are deliberately not surfaced here: a PMTiles archive
  * covers the whole planet, so there is nothing meaningful to frame the camera
  * on (the store leaves "Zoom to layer" disabled for this layer kind instead).
@@ -87,7 +104,6 @@ export async function addOvertureTileLayer(
     []) as VectorLayerMeta[];
 
   const sourceId = sourceIdFor(layerId);
-  const idBases: string[] = [];
   const styleLayerIds: string[] = [];
 
   const apply = (map: maplibregl.Map) => {
@@ -96,19 +112,22 @@ export async function addOvertureTileLayer(
       map.addSource(sourceId, { type: "vector", url: `pmtiles://${url}` });
     }
     for (const vl of vectorLayers) {
-      const idBase = `${layerId}__${vl.id}`;
-      idBases.push(idBase);
-      const ids = addFamilyLayers(map, {
-        source: sourceId,
-        sourceLayer: vl.id,
-        idBase,
-      });
-      for (const id of ids) {
+      for (const fam of FAMILIES) {
+        const id = `${layerId}__${vl.id}-${fam.type}`;
         styleLayerIds.push(id);
         styleLayerToLayer.set(id, layerId);
+        if (map.getLayer(id)) continue;
+        map.addLayer({
+          id,
+          type: fam.type,
+          source: sourceId,
+          "source-layer": vl.id,
+          filter: ["==", "$type", fam.geom],
+          paint: fam.paint,
+        } as Parameters<maplibregl.Map["addLayer"]>[0]);
       }
     }
-    registry.set(layerId, { url, sourceId, idBases, styleLayerIds, visible: true });
+    registry.set(layerId, { url, sourceId, styleLayerIds, visible: true });
   };
 
   const map = getMap();
@@ -119,7 +138,7 @@ export function removeOvertureTileLayer(layerId: string): void {
   const entry = registry.get(layerId);
   const map = getMap();
   if (entry && map) {
-    for (const base of entry.idBases) removeFamilyLayers(map, base);
+    for (const id of entry.styleLayerIds) if (map.getLayer(id)) map.removeLayer(id);
     if (map.getSource(entry.sourceId)) map.removeSource(entry.sourceId);
   }
   entry?.styleLayerIds.forEach((id) => styleLayerToLayer.delete(id));
@@ -151,26 +170,6 @@ function visibleStyleLayerIds(): string[] {
 
 // --- Selection -------------------------------------------------------------
 
-function bboxOfGeometry(geom: GeoJSON.Geometry): Bbox {
-  let xmin = Infinity,
-    ymin = Infinity,
-    xmax = -Infinity,
-    ymax = -Infinity;
-  const walk = (c: unknown): void => {
-    if (typeof (c as number[])[0] === "number") {
-      const [x, y] = c as number[];
-      xmin = Math.min(xmin, x);
-      ymin = Math.min(ymin, y);
-      xmax = Math.max(xmax, x);
-      ymax = Math.max(ymax, y);
-    } else {
-      for (const child of c as unknown[]) walk(child);
-    }
-  };
-  if (geom.type !== "GeometryCollection" && "coordinates" in geom) walk(geom.coordinates);
-  return { xmin, ymin, xmax, ymax };
-}
-
 // Group rendered-feature hits by owning app layer, de-duped on GERS id.
 function picksByLayer(features: maplibregl.MapGeoJSONFeature[]): Map<string, PmPick[]> {
   const byLayer = new Map<string, Map<string, PmPick>>();
@@ -181,7 +180,10 @@ function picksByLayer(features: maplibregl.MapGeoJSONFeature[]): Map<string, PmP
     const key = String(id);
     let picks = byLayer.get(layerId);
     if (!picks) byLayer.set(layerId, (picks = new Map()));
-    if (!picks.has(key)) picks.set(key, { id: key, bbox: bboxOfGeometry(f.geometry) });
+    if (!picks.has(key)) {
+      const coords = "coordinates" in f.geometry ? f.geometry.coordinates : [];
+      picks.set(key, { id: key, bbox: bboxOf(coords) });
+    }
   }
   const out = new Map<string, PmPick[]>();
   for (const [layerId, picks] of byLayer) out.set(layerId, [...picks.values()]);
@@ -191,24 +193,21 @@ function picksByLayer(features: maplibregl.MapGeoJSONFeature[]): Map<string, PmP
 // Box-select mode: while on, a drag paints a rectangle and selects everything
 // under it (QGIS "Select Features by Area"). Off, the map pans normally.
 let selectMode = false;
-const modeListeners = new Set<() => void>();
+const modeChanges = changeSignal();
 export const boxSelect = {
   get active(): boolean {
     return selectMode;
   },
   toggle(): void {
     selectMode = !selectMode;
-    modeListeners.forEach((l) => l());
+    modeChanges.emit();
   },
   set(on: boolean): void {
     if (on === selectMode) return;
     selectMode = on;
-    modeListeners.forEach((l) => l());
+    modeChanges.emit();
   },
-  subscribe(l: () => void): () => void {
-    modeListeners.add(l);
-    return () => modeListeners.delete(l);
-  },
+  subscribe: modeChanges.subscribe,
 };
 
 function applyPicks(layerHits: Map<string, PmPick[]>, additive: boolean): void {

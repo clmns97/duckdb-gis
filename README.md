@@ -169,8 +169,7 @@ stream; `POST /ddb/interrupt` cancels a running query. See
 The frontend talks to the server through `frontend/src/lib/duckdb.ts`, which
 decodes the Arrow results with `apache-arrow`; the map renders the same Arrow
 tables directly. Spatial work is done with DuckDB's `spatial` extension
-and rendered via GeoArrow deck.gl layers (`frontend/src/lib/deckRender.ts`);
-tiled rendering uses `ST_AsMVT` (`frontend/src/lib/tiles.ts`).
+and rendered via GeoArrow deck.gl layers (`frontend/src/lib/deckRender.ts`).
 
 ## Versioning
 

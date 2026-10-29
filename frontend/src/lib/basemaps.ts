@@ -13,6 +13,7 @@
 // ---------------------------------------------------------------------------
 
 import type maplibregl from "maplibre-gl";
+import { changeSignal } from "./store";
 import type { LayerSpecification, StyleSpecification } from "maplibre-gl";
 import type { MenuItem } from "../components/ContextMenu";
 import { getMap, whenStyleReady } from "./mapBus";
@@ -191,7 +192,7 @@ function readStored(): string {
 }
 
 let activeId = readStored();
-const listeners = new Set<() => void>();
+const signal = changeSignal();
 
 function byId(id: string): Basemap | undefined {
   return BASEMAPS.find((b) => b.id === id);
@@ -323,14 +324,9 @@ export const basemap = {
       // ignore: storage disabled — selection just stays session-only
     }
     applyBasemap(getMap(), id);
-    listeners.forEach((l) => l());
+    signal.emit();
   },
-  subscribe(l: () => void): () => void {
-    listeners.add(l);
-    return () => {
-      listeners.delete(l);
-    };
-  },
+  subscribe: signal.subscribe,
   getSnapshot(): string {
     return activeId;
   },

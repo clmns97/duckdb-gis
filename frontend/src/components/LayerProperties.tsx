@@ -7,6 +7,7 @@ import {
   type LayerStyle,
 } from "../lib/layers";
 import { Modal, Button, ModalNote } from "./Modal";
+import { errMsg } from "../lib/duckdb";
 
 // Layer Properties dialog (QGIS's Layer Properties). Two tabs sharing one
 // surface, as QGIS co-locates them: **Information** (read-only source /
@@ -55,7 +56,7 @@ export function LayerProperties({ layerId, onClose }: { layerId: string; onClose
   // dialog closes itself if the layer is removed underneath it.
   const version = useSyncExternalStore(layers.subscribe, () => layers.version);
   void version;
-  const layer = layers.list().find((l) => l.id === layerId);
+  const layer = layers.get(layerId);
 
   useEffect(() => {
     if (!layer) onClose(); // layer removed while open
@@ -105,7 +106,7 @@ function InformationTab({ layer }: { layer: ActiveLayer }) {
     setError(null);
     loadLayerInfo(layer)
       .then((i) => live && setInfo(i))
-      .catch((e) => live && setError(e instanceof Error ? e.message : String(e)));
+      .catch((e) => live && setError(errMsg(e)));
     return () => {
       live = false;
     };
@@ -129,7 +130,9 @@ function InformationTab({ layer }: { layer: ActiveLayer }) {
         {error ? "—" : info ? (info.featureCount ?? "—").toLocaleString() : "…"}
       </Row>
       <Row label="Extent">{extent}</Row>
-      <Row label="CRS">EPSG:4326 (assumed)</Row>
+      <Row label="CRS">
+        {error ? "—" : info ? info.crs ?? "Not declared (assumed EPSG:4326)" : "…"}
+      </Row>
 
       <dt className="col-span-full mt-2 pt-2 border-t border-gray-200 font-medium text-gray-500">
         Attributes
@@ -192,75 +195,45 @@ function SymbologyTab({ layer }: { layer: ActiveLayer }) {
     return <p className="mt-0.5 text-editor text-gray-500 italic">Style unavailable (layer still loading).</p>;
 
   const set = (changes: Partial<LayerStyle>) => layers.setStyle(layer.id, changes);
-
-  const color = "w-10 h-6 p-0 border border-gray-200 rounded-sm bg-transparent cursor-pointer";
-  const range = "accent-primary w-40";
-  const output = "min-w-[42px] text-right text-gray-500 tabular-nums";
+  const color = (label: string, key: "fillColor" | "lineColor") => (
+    <SymRow label={label}>
+      <input
+        type="color"
+        className="w-10 h-6 p-0 border border-gray-200 rounded-sm bg-transparent cursor-pointer"
+        value={rgbToHex(style[key])}
+        onChange={(e) => set({ [key]: hexToRgb(e.target.value) })}
+      />
+    </SymRow>
+  );
+  const range = (
+    label: string,
+    key: "fillOpacity" | "lineWidth" | "pointRadius",
+    [min, max, step]: [number, number, number],
+    show: (v: number) => string,
+  ) => (
+    <SymRow label={label}>
+      <span className="flex items-center gap-2">
+        <input
+          type="range"
+          className="accent-primary w-40"
+          min={min}
+          max={max}
+          step={step}
+          value={style[key]}
+          onChange={(e) => set({ [key]: Number(e.target.value) })}
+        />
+        <output className="min-w-[42px] text-right text-gray-500 tabular-nums">{show(style[key])}</output>
+      </span>
+    </SymRow>
+  );
 
   return (
     <div className="flex flex-col gap-3">
-      <SymRow label="Fill color">
-        <input
-          type="color"
-          className={color}
-          value={rgbToHex(style.fillColor)}
-          onChange={(e) => set({ fillColor: hexToRgb(e.target.value) })}
-        />
-      </SymRow>
-
-      <SymRow label="Line color">
-        <input
-          type="color"
-          className={color}
-          value={rgbToHex(style.lineColor)}
-          onChange={(e) => set({ lineColor: hexToRgb(e.target.value) })}
-        />
-      </SymRow>
-
-      <SymRow label="Opacity">
-        <span className="flex items-center gap-2">
-          <input
-            type="range"
-            className={range}
-            min={0}
-            max={1}
-            step={0.05}
-            value={style.fillOpacity}
-            onChange={(e) => set({ fillOpacity: Number(e.target.value) })}
-          />
-          <output className={output}>{Math.round(style.fillOpacity * 100)}%</output>
-        </span>
-      </SymRow>
-
-      <SymRow label="Line width">
-        <span className="flex items-center gap-2">
-          <input
-            type="range"
-            className={range}
-            min={0}
-            max={8}
-            step={0.5}
-            value={style.lineWidth}
-            onChange={(e) => set({ lineWidth: Number(e.target.value) })}
-          />
-          <output className={output}>{style.lineWidth} px</output>
-        </span>
-      </SymRow>
-
-      <SymRow label="Point size">
-        <span className="flex items-center gap-2">
-          <input
-            type="range"
-            className={range}
-            min={1}
-            max={12}
-            step={1}
-            value={style.pointRadius}
-            onChange={(e) => set({ pointRadius: Number(e.target.value) })}
-          />
-          <output className={output}>{style.pointRadius} px</output>
-        </span>
-      </SymRow>
+      {color("Fill color", "fillColor")}
+      {color("Line color", "lineColor")}
+      {range("Opacity", "fillOpacity", [0, 1, 0.05], (v) => `${Math.round(v * 100)}%`)}
+      {range("Line width", "lineWidth", [0, 8, 0.5], (v) => `${v} px`)}
+      {range("Point size", "pointRadius", [1, 12, 1], (v) => `${v} px`)}
 
       <ModalNote>
         Single-symbol styling. Categorized / graduated (data-driven) styling is a

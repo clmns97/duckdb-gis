@@ -25,6 +25,8 @@
 // to a real rowid/PK; keeping the id behind this module localises that change.
 // ---------------------------------------------------------------------------
 
+import { changeSignal } from "./store";
+
 /** Column name carrying the per-render stable feature id. */
 export const FID = "__fid";
 
@@ -34,37 +36,29 @@ export const FID = "__fid";
  * (`geom IS NOT NULL`) so fids assigned here match the ones the map renders.
  */
 export function fidTaggedRelation(sourceSql: string): string {
-  const inner = sourceSql.trim().replace(/;\s*$/, "");
-  return `SELECT *, row_number() OVER () AS ${FID} FROM (${inner}) _q WHERE geom IS NOT NULL`;
+  return `SELECT *, row_number() OVER () AS ${FID} FROM (${cleanSql(sourceSql)}) _q WHERE geom IS NOT NULL`;
 }
 
-type Listener = () => void;
+/** A query as a subquery-safe relation: trimmed, trailing `;` dropped. Also the
+ *  canonical form selection sources are compared in. */
+export function cleanSql(sql: string): string {
+  return sql.trim().replace(/;\s*$/, "");
+}
+
 
 const selected = new Set<number>();
 let sourceSql = "";
-let version = 0;
-const listeners = new Set<Listener>();
+const signal = changeSignal();
 
-function emit(): void {
-  version += 1;
-  listeners.forEach((l) => l());
-}
 
 export const selection = {
   has: (fid: number): boolean => selected.has(fid),
   get size(): number {
     return selected.size;
   },
-  fids: (): number[] => [...selected],
   /** Bump on every mutation; use as a deck.gl `updateTriggers` value. */
   get version(): number {
-    return version;
-  },
-
-  toggle(fid: number): void {
-    if (selected.has(fid)) selected.delete(fid);
-    else selected.add(fid);
-    emit();
+    return signal.version;
   },
 
   /**
@@ -77,7 +71,7 @@ export const selection = {
    * multi-select is a deliberate follow-up.
    */
   pick(source: string, fid: number, additive: boolean): void {
-    const src = source.trim().replace(/;\s*$/, "");
+    const src = cleanSql(source);
     if (additive && src === sourceSql) {
       if (selected.has(fid)) selected.delete(fid);
       else selected.add(fid);
@@ -86,17 +80,12 @@ export const selection = {
       selected.clear();
       selected.add(fid);
     }
-    emit();
-  },
-  set(fids: number[]): void {
-    selected.clear();
-    for (const f of fids) selected.add(f);
-    emit();
+    signal.emit();
   },
   clear(): void {
     if (selected.size === 0) return;
     selected.clear();
-    emit();
+    signal.emit();
   },
 
   /**
@@ -104,9 +93,9 @@ export const selection = {
    * fids are only meaningful within the render they came from.
    */
   setSource(sql: string): void {
-    sourceSql = sql.trim().replace(/;\s*$/, "");
+    sourceSql = cleanSql(sql);
     selected.clear();
-    emit();
+    signal.emit();
   },
   source: (): string => sourceSql,
 
@@ -120,10 +109,5 @@ export const selection = {
     return { sql: sourceSql, fids: [...selected] };
   },
 
-  subscribe(l: Listener): () => void {
-    listeners.add(l);
-    return () => listeners.delete(l);
-  },
+  subscribe: signal.subscribe,
 };
-
-export type Selection = typeof selection;

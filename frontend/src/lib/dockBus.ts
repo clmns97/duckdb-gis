@@ -10,10 +10,6 @@ export function setDockApi(api: DockviewApi | null): void {
   apiRef = api;
 }
 
-export function getDockApi(): DockviewApi | null {
-  return apiRef;
-}
-
 /** Stable dock-panel id for a layer's attribute table (one tab per layer). */
 export function attributesPanelId(layerId: string): string {
   return `attr-${layerId}`;

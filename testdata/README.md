@@ -23,7 +23,7 @@ All geometry columns are named `geom` (frontend convention).
 ## Serve it
 
 Launches `start_gis` against a throwaway copy (the committed fixture stays
-pristine even when a test writes, e.g. `tile-check.mjs` creating `pts_tiles`):
+pristine even when a test writes, e.g. `e2e-smoke.mjs` drawing a new layer):
 
 ```bash
 testdata/serve.sh            # port 4214 (default)

@@ -1,8 +1,8 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { IDockviewPanelProps } from "dockview";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { layers, loadLayerInfo, qualified, ident, type LayerColumn } from "../../lib/layers";
-import { query, str } from "../../lib/duckdb";
+import { layers, loadLayerInfo, qualified, type LayerColumn } from "../../lib/layers";
+import { query, str, ident, errMsg } from "../../lib/duckdb";
 import { Button } from "../Button";
 import { TypeGlyph } from "../TypeGlyph";
 import { typeKind, isNumeric } from "../../lib/columnTypes";
@@ -17,15 +17,12 @@ const PAGE_SIZE = 100;
 
 type Rows = Awaited<ReturnType<typeof query>>;
 
-function msg(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
-}
 
 export function AttributesPanel(props: IDockviewPanelProps) {
   const layerId = str(props.params.layerId);
   // Re-render on store changes so a removed layer is reflected.
   useSyncExternalStore(layers.subscribe, () => layers.version);
-  const layer = layers.list().find((l) => l.id === layerId);
+  const layer = layers.get(layerId);
   const source = layer?.source;
 
   const [columns, setColumns] = useState<LayerColumn[] | null>(null);
@@ -45,7 +42,7 @@ export function AttributesPanel(props: IDockviewPanelProps) {
         setColumns(info.columns.filter((c) => c.name !== source.geomColumn));
         setTotal(info.featureCount);
       })
-      .catch((e) => !cancelled && setError(msg(e)));
+      .catch((e) => !cancelled && setError(errMsg(e)));
     return () => {
       cancelled = true;
     };
@@ -75,7 +72,7 @@ export function AttributesPanel(props: IDockviewPanelProps) {
         setRows(r);
         setError(null);
       })
-      .catch((e) => !cancelled && setError(msg(e)))
+      .catch((e) => !cancelled && setError(errMsg(e)))
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;

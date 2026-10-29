@@ -8,8 +8,6 @@ export function setMap(m: maplibregl.Map | null) {
   mapRef = m;
 }
 
-// Shared accessor so render paths (the Arrow/deck.gl overlay, the ST_AsMVT tile
-// renderer) can reach the single map instance without prop-drilling.
 export function getMap(): maplibregl.Map | null {
   return mapRef;
 }
@@ -33,5 +31,18 @@ export function whenStyleReady(map: maplibregl.Map, cb: () => void): Promise<voi
       cb();
       res();
     }),
+  );
+}
+
+/** Frame the map on a lon/lat extent (no-op without a map or bounds). */
+export function fitBounds(bounds: [number, number, number, number] | null): void {
+  if (!mapRef || !bounds) return;
+  const [xmin, ymin, xmax, ymax] = bounds;
+  mapRef.fitBounds(
+    [
+      [xmin, ymin],
+      [xmax, ymax],
+    ],
+    { padding: 60, maxZoom: 14, duration: 600 },
   );
 }

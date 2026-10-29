@@ -22,23 +22,9 @@
 // on those nodes — never on the default/in-memory database.
 // ---------------------------------------------------------------------------
 
-import { query, sqlLit } from "./duckdb";
-
-type Listener = () => void;
+import { query, sqlLit, ident } from "./duckdb";
 
 const attachedAliases = new Set<string>();
-let version = 0;
-const listeners = new Set<Listener>();
-
-function emit(): void {
-  version += 1;
-  listeners.forEach((l) => l());
-}
-
-/** Quote an identifier for SQL (alias). */
-function ident(name: string): string {
-  return `"${name.replace(/"/g, '""')}"`;
-}
 
 /**
  * Derive a default alias from a file path: the basename without its extension,
@@ -54,17 +40,7 @@ export function aliasFromPath(path: string): string {
 }
 
 export const attach = {
-  /** Aliases attached this session, in insertion order. */
-  list: (): string[] => [...attachedAliases],
   has: (alias: string): boolean => attachedAliases.has(alias),
-  /** Scalar snapshot for `useSyncExternalStore`. */
-  get version(): number {
-    return version;
-  },
-  subscribe(l: Listener): () => void {
-    listeners.add(l);
-    return () => listeners.delete(l);
-  },
 
   /**
    * Attach a DuckDB database file, always read-only (#66 — the default DB and
@@ -82,7 +58,6 @@ export const attach = {
     await query(`ATTACH '${sqlLit(path)}' AS ${ident(alias)} (READ_ONLY)`);
 
     attachedAliases.add(alias);
-    emit();
     return alias;
   },
 
@@ -92,8 +67,5 @@ export const attach = {
   async detach(alias: string): Promise<void> {
     await query(`DETACH ${ident(alias)}`);
     attachedAliases.delete(alias);
-    emit();
   },
 };
-
-export type Attach = typeof attach;
