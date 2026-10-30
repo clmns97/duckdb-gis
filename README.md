@@ -1,203 +1,245 @@
 # duckdb-gis
 
-A browser-based GIS built on DuckDB. `duckdb-gis` is a DuckDB **extension**
-(C++) that starts a local HTTP server and serves a [MapLibre](https://maplibre.org/)
-+ [deck.gl](https://deck.gl/) frontend, letting you explore and run spatial SQL
-against your data on a map — QGIS-style, but with DuckDB as the engine.
+[![Build](https://github.com/clmns97/duckdb-gis/actions/workflows/MainDistributionPipeline.yml/badge.svg?branch=main)](https://github.com/clmns97/duckdb-gis/actions/workflows/MainDistributionPipeline.yml)
+[![DuckDB compatibility](https://github.com/clmns97/duckdb-gis/actions/workflows/Compatibility.yml/badge.svg?branch=main)](https://github.com/clmns97/duckdb-gis/actions/workflows/Compatibility.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![DuckDB 1.4+](https://img.shields.io/badge/DuckDB-1.4%2B-7d66ff.svg)](https://duckdb.org)
 
-The north star is to replicate QGIS's core workflows (Layers panel, Browser
-panel, geoprocessing tools, feature selection) while keeping all compute
-**native and local**: the extension runs the SQL and spatial work in-process,
-in the same DuckDB instance — there is no remote backend.
+**A desktop-style GIS in your browser, with DuckDB as the engine.** `gis` is a
+DuckDB extension: `CALL start_gis()` opens a map UI — layers, a catalog browser,
+a SQL editor, selection, processing tools and editing — on the data in your
+DuckDB session. It borrows [QGIS](https://qgis.org)'s concepts and vocabulary;
+all the work runs as SQL with DuckDB's [`spatial`](https://duckdb.org/docs/stable/core_extensions/spatial/overview)
+extension, in-process, on your machine.
 
-![duckdb-gis: a table added from the Browser panel and rendered as a map layer](docs/screenshot.png)
+![duckdb-gis: roads buffered by a processing tool, one buffer selected, and the points near the roads from a SQL query](docs/screenshot.png)
 
-`duckdb-gis` began as a fork of
-[`duckdb/duckdb-ui`](https://github.com/duckdb/duckdb-ui) and is now developed as
-a standalone project. It still builds on that project's SQL-over-HTTP transport
-and TypeScript client, but replaces the hosted UI with our own MapLibre frontend
-under `frontend/`.
+> **Status: pre-1.0.** v0.1.0 is the first release. Things work and are tested,
+> but the UI and, in minor releases, the SQL functions may still change — see
+> the [changelog](CHANGELOG.md).
 
-Bug reports and contributions are welcome — see
-[CONTRIBUTING.md](CONTRIBUTING.md).
-
-## Install
+## Quick start
 
 > **Not yet listed.** The submission to
 > [`duckdb/community-extensions`](https://github.com/duckdb/community-extensions)
-> is still in progress, so the command below does not work yet. Until it lands,
-> [build from source](#build-from-source).
+> is still in progress, so `INSTALL gis FROM community` does not work yet.
+> Until it lands, [build from source](#building-from-source).
 
 ```sql
 INSTALL gis FROM community;
 LOAD gis;
-CALL start_gis();
+CALL start_gis();   -- starts a local server and opens the UI in your browser
 ```
 
-`start_gis()` starts a local HTTP server and opens your browser. Everything it
-serves — the frontend included — is compiled into the extension binary, so it
-works offline and makes no outbound network requests.
+Then give it something to show. Any table with a `GEOMETRY` column works:
 
-The extension is named `gis`, which is distinct from DuckDB's own core `ui`
-extension: `LOAD ui; LOAD gis;` can coexist in one session.
+```sql
+INSTALL spatial;
+LOAD spatial;
 
-## What you get
+CREATE TABLE cities AS
+  SELECT name, ST_Point(lon, lat) AS geom
+  FROM (VALUES
+    ('Berlin',    13.4050, 52.5200),
+    ('Hamburg',    9.9937, 53.5511),
+    ('Munich',    11.5820, 48.1351),
+    ('Cologne',    6.9603, 50.9375),
+    ('Frankfurt',  8.6821, 50.1109)
+  ) t(name, lon, lat);
 
-- **Layers panel** — add any table or query with a geometry column as a map
-  layer; reorder, toggle, style and zoom to it.
-- **Browser panel** — walk the DuckDB catalog and add geometry-bearing tables
-  to the map from a right-click menu.
-- **SQL editor** — run spatial SQL and render the result set as a temporary
-  layer.
-- **Select features** — click, tap or box-select features of the active layer,
-  or select them by a SQL expression or by location against another layer.
-- **Processing** — buffer, dissolve, clip, intersect, spatially join and more:
-  each tool reads a layer (optionally only its selected features) and writes a
-  new one, as native DuckDB spatial SQL.
-- **Draw and edit** — digitize geometry into a working set, then commit it back
-  into a native DuckDB table.
+-- or read a file: ST_Read handles GeoJSON, GeoPackage, Shapefile, …
+CREATE TABLE countries AS FROM ST_Read('countries.geojson');
+```
 
-Spatial work uses DuckDB's `spatial` extension and runs in-process. There is no
-remote backend and no data leaves your machine.
+In the UI, open the **Browser** panel, right-click the table and choose
+**Add to map**. Or type a query into the **SQL editor** and run it: the result
+is drawn as a temporary layer.
 
-## Repository layout
+## Features
 
-- `src/` — the C++ extension, on DuckDB's stable C API: SQL functions
-  (`gis_extension.cpp`), HTTP server (`http_server.cpp`) and SQL → Arrow IPC
-  (`query.cpp`).
-- `frontend/` — the MapLibre/deck.gl GIS frontend (React + Vite). This is the
-  point of the project.
-- `design-system/` — `@duckdb-gis/ui-kit`, a Storybook workspace for the
-  frontend's components. See `design-system/README.md`.
-- `test/sql/` — SQL-level extension tests.
-- `testdata/` — a deterministic demo database for manual and e2e testing.
-  See `testdata/README.md`.
-- `scripts/` — build helpers, including the frontend-asset embedder.
-- `docs/` — documentation. `docs/requirements/` is the requirements record
-  (vision, glossary, register); `docs/adr/` holds architecture decision
-  records explaining why the design is the way it is.
+- **Map and layers** — add tables and query results as layers; reorder,
+  show/hide, style, zoom to, inspect their properties, browse the attribute
+  table. Basemaps: an offline Natural Earth map by default, OpenFreeMap styles
+  online.
+- **Browser** — walk the DuckDB catalog and attach other DuckDB database files
+  (read-only unless you edit them).
+- **SQL editor** — run spatial SQL; geometry results appear on the map.
+- **Selection** — click, Shift+click, or turn on select mode to tap features or
+  drag a box (works on touch screens). Select by expression (a SQL condition)
+  and Select by location (against another layer). Each layer keeps its own
+  selection; the gestures act on the active layer.
+- **Processing** — tools that read a layer, or just its selected features, and
+  write the result as a new layer:
+  - geometry: Buffer, Centroids, Convex/Concave hull, Bounding box, Simplify,
+    Dissolve, Multipart to single parts, Fix geometries, Add geometry
+    attributes, Reproject, Voronoi polygons;
+  - overlay: Clip, Difference, Intersection, Union, Join attributes by
+    location, Count points in polygon, Merge vector layers.
 
-## Build from source
+  Distances and areas are in metres.
+- **Editing** — draw points, lines and polygons; edit vertices; move, rotate,
+  scale, merge, duplicate and delete features; undo/redo; save the edits back to
+  the table, including tables in attached databases.
+- **Coordinate systems** — geometry with a declared CRS is reprojected to WGS84
+  for display; coordinates that can't be longitude/latitude are refused with an
+  explanation rather than drawn in the wrong place.
+- **Overture Maps** — load [Overture](https://overturemaps.org) themes
+  (buildings, places, roads, …) as vector tiles, select features, and copy them
+  into an editable table.
+- **Projects** — save and open your layers, styles, map view and working tables
+  as a single `.duckdb` file; a warning before unsaved work is discarded.
+
+## Requirements
+
+- **DuckDB 1.4 LTS or later**, in any client that loads extensions — the CLI,
+  Python, R, Node, …. One binary covers every version from 1.4 on.
+- **Platforms:** Linux (x86-64, arm64), macOS (Apple silicon), Windows
+  (x86-64). Not DuckDB-Wasm: the extension runs an HTTP server.
+- **A web browser** on the same machine.
+- The UI installs and loads DuckDB's `spatial` extension on first start, which
+  needs network access once.
+
+## Functions
+
+| Function | Returns | |
+|---|---|---|
+| `start_gis(port := 4214)` | message | Start the server and open the UI in your browser |
+| `start_gis_server(port := 4214)` | message | Start the server without opening a browser |
+| `stop_gis_server()` | message | Stop the server |
+| `get_gis_url()` | URL | The UI's address |
+| `gis_is_started()` | boolean | Whether the server is running |
+
+All are table functions; use them with `CALL` or `FROM`. The port defaults to
+`4214`; the `port` parameter or the `GIS_LOCAL_PORT` environment variable
+change it.
+
+The extension is named `gis`, not `ui`, so it loads alongside DuckDB's own
+[UI extension](https://duckdb.org/docs/stable/core_extensions/ui). That also means the CLI's
+`duckdb -ui` flag, which calls `start_ui()`, opens DuckDB's UI, not this one.
+To make it open this one, add `.ui_command start_gis()` to your `~/.duckdbrc`.
+
+## Security and privacy
+
+- The server listens on **localhost only** and accepts SQL only from its own
+  page (it checks the `Origin` header), so other websites can't use it.
+- The UI runs **any SQL you type**, with the rights of the DuckDB process that
+  loaded the extension — the same as typing it into DuckDB yourself. Don't load
+  it into a process that holds data you wouldn't query directly.
+- **Your data stays local.** The UI and the server make network requests only
+  for things you ask for: online basemaps, Overture data, remote files you
+  query, and installing `spatial`.
+
+To report a vulnerability, see [SECURITY.md](SECURITY.md).
+
+## Building from source
 
 The extension is built on DuckDB's stable
-[C extension API](https://github.com/duckdb/extension-template-c): it calls
-DuckDB only through the function table DuckDB hands it at load time, so it
-contains no DuckDB code and **one binary loads on DuckDB 1.4 LTS and every
-later release**. The build needs CMake, a C/C++ compiler and Python 3, but no
-DuckDB checkout:
+[C extension API](https://github.com/duckdb/extension-template-c), so the build
+needs no DuckDB checkout — just CMake, a C/C++ compiler and Python 3:
 
 ```sh
-make configure      # once: Python venv with duckdb + the test runner
-make                # builds build/release/gis.duckdb_extension
-make test_release   # runs test/sql against the duckdb Python package
-make test_release DUCKDB_TEST_VERSION=1.4.5   # ...or against another DuckDB
+git clone https://github.com/clmns97/duckdb-gis.git
+cd duckdb-gis
+make configure      # once: Python venv with duckdb and the test runner
+make                # → build/release/gis.duckdb_extension
 ```
 
-The targeted C-API version is `TARGET_DUCKDB_VERSION` in the `Makefile`; the
-DuckDB headers it builds against are vendored in `duckdb_capi/`. Load the
-result into any DuckDB with `-unsigned`:
+Load the result into any DuckDB 1.4+ with unsigned extensions allowed:
 
 ```sh
-duckdb -unsigned -cmd "LOAD 'build/release/gis.duckdb_extension'"
+duckdb -unsigned -cmd "LOAD 'build/release/gis.duckdb_extension'; CALL start_gis();"
 ```
-
-The extension name is `gis` — distinct from DuckDB's own core `ui` extension,
-so `LOAD ui; LOAD gis;` both work in the same session.
 
 The built frontend (`frontend/dist/`) is committed and compiled into the
-extension binary as gzip-compressed byte arrays (see
-`scripts/generate_embedded_assets.py` and the custom command in
-`CMakeLists.txt`), so `make` alone never needs Node. If you change anything
-under `frontend/src`, refresh the committed bundle first:
+binary, so `make` never needs Node. After changing anything under
+`frontend/src`, rebuild it first with `make frontend` (needs Node and pnpm);
+CI fails if `frontend/dist` is stale.
+
+## Development
+
+### Tests
 
 ```sh
-make frontend   # pnpm install && pnpm build in frontend/
-make            # picks up the new frontend/dist automatically
+make test_release                             # SQL tests in test/sql (latest DuckDB)
+make test_release DUCKDB_TEST_VERSION=1.4.5   # ...against another DuckDB
+cd frontend && pnpm typecheck                 # frontend static checks
+cd frontend && pnpm test:e2e                  # Playwright end-to-end suite
 ```
 
-CI (`.github/workflows/Frontend.yml`) fails the build if `frontend/dist` is
-stale relative to `frontend/src`.
+The end-to-end suite starts its own extension server over a demo database
+(`testdata/`) and a Vite dev server; see [test/README.md](test/README.md).
 
-## Run
+### Frontend with hot reload
 
-From SQL:
-
-```sql
-FROM start_gis();                      -- start the server and open a browser
-FROM start_gis_server();               -- start the server without opening a browser
-FROM start_gis_server(port := 4300);   -- ...on another port (default 4214, or $GIS_LOCAL_PORT)
-FROM gis_is_started();                 -- is the server running?
-FROM get_gis_url();                    -- the local URL
-FROM stop_gis_server();                -- stop the server
-```
-
-The DuckDB shell's `-ui` flag is hardcoded to call `start_ui()`, which this
-extension deliberately does not register (that name belongs to DuckDB core's
-`ui` extension — registering it too would collide). So `duckdb -ui` does not
-launch the GIS UI; use `CALL start_gis();` above. To make `duckdb -ui` launch
-this UI, put `.ui_command start_gis()` in your `~/.duckdbrc`.
-
-## Frontend development
-
-`FROM start_gis_server()` serves the frontend embedded in the extension
-binary — no network access, works fully offline. During development, run the
-Vite dev server with hot-module reload instead, which proxies the
-SQL-over-HTTP API to the running extension. From `frontend/`:
+Run the Vite dev server, which proxies SQL to a running extension:
 
 ```sh
-pnpm install
-pnpm dev        # Vite dev server on http://127.0.0.1:5173
+cd frontend && pnpm install && pnpm dev    # http://127.0.0.1:5173
 ```
 
-and start the extension server in a DuckDB shell:
-
 ```sql
+-- in a DuckDB shell
 LOAD 'build/release/gis.duckdb_extension';
-FROM start_gis_server();   -- binds localhost:4214
+CALL start_gis_server();   -- localhost:4214, where Vite proxies /ddb
 ```
 
-Then open http://127.0.0.1:5173. Vite proxies `/ddb` to the extension
-server, rewriting `Origin` so the extension's same-origin gate is satisfied
-(see `frontend/vite.config.ts` and `src/http_server.cpp`). Other scripts:
-`pnpm build`, `pnpm typecheck`.
+### How it works
 
-## Architecture
+The extension starts an HTTP server that serves the frontend compiled into the
+binary and runs SQL: `POST /ddb/run` executes the request body and streams the
+last statement's result back as [Arrow IPC](https://arrow.apache.org/docs/format/Columnar.html#ipc-streaming-format)
+(`src/http_server.cpp`, `src/query.cpp`). The frontend — React, MapLibre and
+deck.gl — decodes the Arrow results and renders geometry with GeoArrow layers.
+Everything spatial, from a buffer to a spatial join, is SQL sent to DuckDB.
 
-The extension starts an HTTP server that both serves the frontend and runs
-SQL. `GET` serves the frontend embedded in the binary (no network access);
-`POST /ddb/run` runs the SQL in the request body and returns the last
-statement's result as an [Arrow IPC](https://arrow.apache.org/docs/format/Columnar.html#ipc-streaming-format)
-stream; `POST /ddb/interrupt` cancels a running query. See
-[http_server.cpp](src/http_server.cpp) and [query.cpp](src/query.cpp).
+Background reads (layer data, attribute pages) run on a small pool of
+connections, so they don't wait behind a long query in the SQL editor.
+Decisions behind the design are recorded in [docs/adr/](docs/adr/).
 
-The frontend talks to the server through `frontend/src/lib/duckdb.ts`, which
-decodes the Arrow results with `apache-arrow`; the map renders the same Arrow
-tables directly. Spatial work is done with DuckDB's `spatial` extension
-and rendered via GeoArrow deck.gl layers (`frontend/src/lib/deckRender.ts`).
+### Repository layout
 
-## Versioning
+| Path | |
+|---|---|
+| `src/` | The C++ extension: SQL functions, HTTP server, SQL → Arrow |
+| `frontend/` | The map UI (React, Vite, MapLibre, deck.gl) |
+| `design-system/` | Storybook UI kit for the frontend's components |
+| `test/sql/` | SQL-level extension tests |
+| `testdata/` | Deterministic demo database for manual and e2e testing |
+| `scripts/` | Build helpers (frontend embedding, Natural Earth basemap) |
+| `docs/` | Release procedure, architecture decisions, requirements |
 
-Releases are tagged `vMAJOR.MINOR.PATCH` and versioned independently of DuckDB —
-a release supports whichever DuckDB versions its CI matrix builds against (see
-`.github/workflows/MainDistributionPipeline.yml`), rather than mirroring a
-DuckDB version number.
+## Contributing
 
-Our own releases start at `v0.1.0`.
+Bug reports, ideas and pull requests are welcome — see
+[CONTRIBUTING.md](CONTRIBUTING.md). Work is tracked in
+[GitHub Issues](https://github.com/clmns97/duckdb-gis/issues); the current
+focus is the [v0.1.0 milestone](https://github.com/clmns97/duckdb-gis/milestone/1).
 
-## License and attribution
+## Versioning and releases
 
-MIT — see [LICENSE](LICENSE). The copyright notice is retained from upstream
-`duckdb/duckdb-ui` (Stichting DuckDB Foundation), from which this project is
-derived. It started from duckdb-ui's extension scaffolding, SQL-over-HTTP
-transport and TypeScript client; since the move to DuckDB's stable C API (#88)
-the extension, transport and client have been rewritten. duckdb-gis is
-developed in a separate repository and does not track upstream.
+Releases are tagged `vMAJOR.MINOR.PATCH` and versioned independently of DuckDB:
+a release supports the DuckDB versions its CI builds and tests against. Our own
+releases start at `v0.1.0`; the inherited `v1.4.4` tag is upstream's. Changes
+are listed in the [changelog](CHANGELOG.md), and the release procedure is in
+[docs/RELEASING.md](docs/RELEASING.md).
 
-The offline default basemap is made with [Natural Earth](https://www.naturalearthdata.com)
-(public domain) 1:50m data, built by `scripts/build_natural_earth.py` into
-`frontend/public/basemaps/natural-earth/`.
+## License and acknowledgements
 
-DuckDB is a trademark of the DuckDB Foundation. This project is an independent
-derivative and is not affiliated with, maintained by, or endorsed by the DuckDB
-Foundation or DuckDB Labs. "duckdb-gis" is a descriptive name for a GIS
-extension for DuckDB; it does not indicate official status.
+MIT — see [LICENSE](LICENSE).
+
+duckdb-gis began as a fork of [`duckdb/duckdb-ui`](https://github.com/duckdb/duckdb-ui)
+and keeps its copyright notice (Stichting DuckDB Foundation). Since the move to
+DuckDB's stable C API, the extension, its HTTP transport and the client have
+been rewritten, and the project no longer tracks upstream.
+
+Built with [DuckDB](https://duckdb.org) and its `spatial` extension,
+[MapLibre GL JS](https://maplibre.org), [deck.gl](https://deck.gl) and
+[GeoArrow](https://geoarrow.org), [Terra Draw](https://terradraw.io) and
+[cpp-httplib](https://github.com/yhirose/cpp-httplib). The offline basemap is
+made with [Natural Earth](https://www.naturalearthdata.com) (public domain);
+online basemaps come from [OpenFreeMap](https://openfreemap.org) with
+© [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors.
+
+DuckDB is a trademark of the DuckDB Foundation. This project is independent and
+is not affiliated with, maintained by, or endorsed by the DuckDB Foundation or
+DuckDB Labs.
