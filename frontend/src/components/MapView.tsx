@@ -3,6 +3,7 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { setMap } from "../lib/mapBus";
 import { basemap } from "../lib/basemaps";
+import { installSelectTool } from "../lib/selectTool";
 
 export function MapView() {
   const ref = useRef<HTMLDivElement>(null);
@@ -31,6 +32,7 @@ export function MapView() {
     // into its `error` event — surface them or tile bugs are invisible.
     map.on("error", (e) => console.error("[maplibre]", e.error ?? e));
     setMap(map);
+    installSelectTool(map);
     return () => {
       setMap(null);
       map.remove();

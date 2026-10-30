@@ -30,6 +30,7 @@ import {
   setDeckLayerVisible,
   setPreviewVisible,
   clearDeck,
+  PREVIEW_ID,
   type LayerStyle,
   type GeometryKind,
 } from "./deckRender";
@@ -99,7 +100,7 @@ export interface ActiveLayer {
 
 /** Fixed id of the single SQL-editor Run-result temp layer (T-027). Re-Running
  *  replaces this row rather than accumulating new ones. */
-export const PREVIEW_ID = "L_sql_preview";
+export { PREVIEW_ID };
 
 
 const byId = new Map<string, ActiveLayer>();
@@ -282,6 +283,7 @@ export const layers = {
       status: "loading",
     });
     order = [id, ...order];
+    activeId = id; // a new layer becomes the active one, as in QGIS
     syncDeckOrder();
     signal.emit();
 
@@ -304,6 +306,7 @@ export const layers = {
 
     byId.set(id, { id, kind: "query", name, sql, visible: true, status: "loading" });
     if (!existing) order = [id, ...order]; // keep position on retry
+    activeId = id;
     syncDeckOrder();
     signal.emit();
 
@@ -329,6 +332,7 @@ export const layers = {
       pmtiles: { theme, release },
     });
     order = [id, ...order];
+    activeId = id;
     signal.emit();
 
     try {
@@ -390,6 +394,7 @@ export const layers = {
       bounds: existing?.bounds ?? null,
     });
     if (!existing) order = [PREVIEW_ID, ...order]; // newest-first / on top
+    activeId = PREVIEW_ID; // so its features can be selected right away
     signal.emit();
   },
 

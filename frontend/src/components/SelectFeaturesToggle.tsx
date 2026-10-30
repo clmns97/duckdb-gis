@@ -1,25 +1,22 @@
 import { useSyncExternalStore } from "react";
 import { SquareDashedMousePointer } from "lucide-react";
-import { boxSelect } from "../lib/overtureTiles";
-import { pmSelection } from "../lib/pmtilesSelection";
+import { selectTool } from "../lib/selectTool";
 
-// On-canvas "Select features" toggle for Overture PMTiles layers (T-058). Same
-// chrome as the Edit button / MapLibre controls (white, rounded-lg, shadow-md,
-// 34×34). When on, a drag paints a rectangle and selects the features under it
-// (click-select works either way). A badge shows the current selection count so
-// the user knows there's something to "Create Layer from Selection" from.
+// On-canvas "Select features" toggle (#110), for every layer kind. Same chrome
+// as the Edit button / MapLibre controls (white, rounded-lg, shadow-md, 34×34).
+// When on, a tap toggles a feature of the active layer and a drag draws a box
+// whose features are added. The count lives in the SelectionChip below it.
 export function SelectFeaturesToggle() {
-  const active = useSyncExternalStore(boxSelect.subscribe, () => boxSelect.active);
-  useSyncExternalStore(pmSelection.subscribe, () => pmSelection.version);
-  const count = pmSelection.size;
+  const active = useSyncExternalStore(selectTool.subscribe, () => selectTool.active);
 
   return (
     <div className="flex items-center bg-white rounded-lg shadow-md overflow-hidden">
       <button
         type="button"
-        title="Select features (drag a box; Shift to add)"
+        title="Select features of the active layer (tap to add or remove; drag a box)"
+        aria-label="Select features"
         aria-pressed={active}
-        onClick={() => boxSelect.toggle()}
+        onClick={() => selectTool.toggle()}
         className={
           "w-[34px] h-[34px] grid place-items-center shrink-0 cursor-pointer " +
           (active
@@ -29,11 +26,6 @@ export function SelectFeaturesToggle() {
       >
         <SquareDashedMousePointer size={18} strokeWidth={2} className="shrink-0" />
       </button>
-      {count > 0 && (
-        <span className="pr-2.5 pl-1.5 text-xs text-gray-600 whitespace-nowrap">
-          {count} selected
-        </span>
-      )}
     </div>
   );
 }

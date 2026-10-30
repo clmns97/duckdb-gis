@@ -15,6 +15,7 @@
 
 import { selection, fidTaggedRelation, FID } from "./selection";
 import { layers } from "./layers";
+import { deckSource } from "./deckRender";
 import { errMsg } from "./duckdb";
 import type { MenuItem } from "../components/ContextMenu";
 
@@ -33,13 +34,14 @@ export interface GeoTool {
 let mergeTick = 0;
 
 async function runMerge(): Promise<void> {
-  const sel = selection.query();
-  if (!sel || sel.fids.length < 2) {
-    throw new Error("Select at least two features on the map before merging.");
+  const id = layers.activeId;
+  const source = id ? deckSource(id) : null;
+  if (!id || !source || selection.size(id) < 2) {
+    throw new Error("Select at least two features of the active layer before merging.");
   }
   const n = ++mergeTick;
-  const rel = fidTaggedRelation(sel.sql);
-  const fidList = sel.fids.join(", ");
+  const rel = fidTaggedRelation(source);
+  const fidList = selection.keys(id).join(", ");
   const merged =
     `SELECT ST_Union_Agg(geom) AS geom ` +
     `FROM (${rel}) ` +
@@ -58,7 +60,7 @@ export const TOOLS: GeoTool[] = [
   {
     id: "merge",
     label: "Merge selected features",
-    enabled: () => selection.size >= 2,
+    enabled: () => selection.size(layers.activeId) >= 2,
     disabledHint: "Select at least two features on the map",
     run: runMerge,
   },

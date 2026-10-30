@@ -3,7 +3,7 @@ import { Eye, EyeOff, GripVertical, X, Map as MapIcon, EllipsisVertical } from "
 import { layers, type ActiveLayer } from "../lib/layers";
 import { editing, canEditInPlace } from "../lib/editing";
 import { createLayerFromSelection, isLargePmSelection } from "../lib/overture";
-import { pmSelection } from "../lib/pmtilesSelection";
+import { selection } from "../lib/selection";
 import { errMsg } from "../lib/duckdb";
 import { openAttributes } from "../lib/dockBus";
 import { basemap, basemapMenuItems } from "../lib/basemaps";
@@ -29,7 +29,7 @@ export function LayersPanel() {
   useSyncExternalStore(editing.subscribe, () => editing.version);
   // Re-render on PMTiles selection changes so a layer's "Create Layer from
   // Selection" count/enablement stays current (T-058).
-  useSyncExternalStore(pmSelection.subscribe, () => pmSelection.version);
+  useSyncExternalStore(selection.subscribe, () => selection.version);
   const list = layers.list();
   const [menu, setMenu] = useState<MenuState | null>(null);
   // Inline surface for a failed "Toggle editing" (e.g. layer too large / still
@@ -98,27 +98,25 @@ export function LayersPanel() {
       },
       // Overture PMTiles layers are display+selection only: materialise the
       // selected features into a normal, editable layer (T-058). Enabled when
-      // this layer owns the current PMTiles selection.
+      // this layer has a selection.
       ...(layer.kind === "pmtiles"
         ? [
             {
               label: `Create Layer from Selection${
-                pmSelection.layerId === layer.id && pmSelection.size
-                  ? ` (${pmSelection.size})`
-                  : ""
+                selection.size(layer.id) ? ` (${selection.size(layer.id)})` : ""
               }`,
-              disabled: pmSelection.layerId !== layer.id || pmSelection.size === 0,
+              disabled: selection.size(layer.id) === 0,
               onSelect: () => {
                 const pm = layer.pmtiles!;
                 if (
-                  isLargePmSelection() &&
+                  isLargePmSelection(layer.id) &&
                   !window.confirm(
                     "This is a large selection and may be slow to materialise. Continue?",
                   )
                 )
                   return;
                 setEditErr(null);
-                createLayerFromSelection(pm.theme, pm.release).catch((err) =>
+                createLayerFromSelection(layer.id, pm.theme, pm.release).catch((err) =>
                   setEditErr(errMsg(err)),
                 );
               },
