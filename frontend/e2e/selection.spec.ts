@@ -28,6 +28,11 @@ test("clicks select on the active layer only, and each layer keeps its own selec
   await expect.poll(() => size(app, regions)).toBe(1);
   expect(await size(app, cities)).toBe(1);
   await expect(page.getByRole("status")).toContainText("1 selected · regions");
+  const rhine = await app.mapPx(8.2, 47.5); // inside both boxes; the Rhine box is on top
+  await page.keyboard.down("Shift");
+  await page.mouse.click(rhine.x, rhine.y);
+  await page.keyboard.up("Shift");
+  await expect.poll(() => size(app, regions)).toBe(2);
 
   await page.getByRole("button", { name: "Clear selection" }).click();
   expect(await size(app, regions)).toBe(0);

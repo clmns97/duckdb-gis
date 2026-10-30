@@ -542,7 +542,8 @@ export const editing = {
     void whenStyleReady(map, () => draw?.start());
 
     // Inject the edit gate + z-order provider into the read-only render path.
-    setDrawHooks({ isEditing: this.isEditing, beforeId: bottomLayerId });
+    setDrawHooks({ beforeId: bottomLayerId });
+    selectTool.yieldWhile(this.isEditing); // Terra Draw owns map clicks while editing
 
     // Select mode and digitizing are mutually exclusive — both fight over map
     // clicks/dragPan. Turning select mode on cancels any in-progress edit;

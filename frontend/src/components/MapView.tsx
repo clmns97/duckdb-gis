@@ -22,9 +22,9 @@ export function MapView() {
     });
     // Add the default / last-chosen basemap once the (empty) style is ready.
     basemap.applyInitial(map);
-    // Shift-click is our additive-selection gesture (see deckRender picking).
+    // Shift-click is our additive-selection gesture (see lib/selectTool.ts).
     // MapLibre's shift+drag box-zoom otherwise swallows the shift+mousedown, so
-    // deck.gl never computes a pick — disable it so selection wins the modifier.
+    // the click never fires — disable it so selection wins the modifier.
     map.boxZoom.disable();
     map.addControl(new maplibregl.NavigationControl(), "top-right");
     map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");

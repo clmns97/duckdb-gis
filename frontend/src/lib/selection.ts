@@ -78,8 +78,6 @@ export const selection = {
     if (boxes.length === 0) return null;
     return bboxOf(boxes.map((b) => [[b.xmin, b.ymin], [b.xmax, b.ymax]]));
   },
-  /** Layers that currently have a selection. */
-  layerIds: (): string[] => [...byLayer.keys()],
 
   /** Apply picks to a layer's selection. */
   select(layerId: string, picks: Pick[], mode: SelectMode): void {
