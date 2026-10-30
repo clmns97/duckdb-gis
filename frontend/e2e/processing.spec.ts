@@ -20,7 +20,7 @@ async function run(
     "/src/lib/geoprocessing.ts",
     `async (m) => {
       const tool = m.TOOLS.find((t) => t.id === ${JSON.stringify(toolId)});
-      const values = { ...Object.fromEntries(tool.params.filter((p) => p.kind !== "layer").map((p) => [p.key, p.kind === "field" ? "" : p.default])), ...${JSON.stringify(values)} };
+      const values = { ...m.paramDefaults(tool), ...${JSON.stringify(values)} };
       await m.runTool(tool, ${JSON.stringify(inputs)}, values, ${JSON.stringify(output)});
     }` as never,
   );

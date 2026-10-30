@@ -1,9 +1,9 @@
 import { useState, useSyncExternalStore } from "react";
-import { FormModal, FieldLabel, TextField, INPUT } from "./Modal";
+import { FormModal, FieldLabel, SelectField, TextField, INPUT } from "./Modal";
 import { LayerInput } from "./ProcessingModal";
 import { layers } from "../lib/layers";
 import { selection, type SelectMode } from "../lib/selection";
-import { inputLayers, type ToolInput } from "../lib/geoprocessing";
+import { defaultInput, inputLayers, type ToolInput } from "../lib/geoprocessing";
 import { selectByExpression, selectByLocation, type LocationPredicate } from "../lib/selectBy";
 
 // Select by expression / Select by location (#113). Fills the chosen layer's
@@ -25,44 +25,14 @@ const PREDICATES: Array<{ value: LocationPredicate; label: string }> = [
   { value: "dwithin", label: "are within a distance of" },
 ];
 
-function Select<T extends string>({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: T;
-  options: Array<{ value: T; label: string }>;
-  onChange: (v: T) => void;
-}) {
-  return (
-    <label className="flex flex-col gap-2">
-      <FieldLabel>{label}</FieldLabel>
-      <select className={INPUT} value={value} onChange={(e) => onChange(e.target.value as T)}>
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
 export function SelectByModal({ kind, onClose }: { kind: "expression" | "location"; onClose: () => void }) {
   useSyncExternalStore(selection.subscribe, () => selection.version);
-  const ids = inputLayers().map((l) => l.id);
-  const start = ids.includes(layers.activeId ?? "") ? layers.activeId! : (ids[0] ?? "");
-  const [layerId, setLayerId] = useState(start);
+  const [layerId, setLayerId] = useState(() => defaultInput().layerId);
   const [mode, setMode] = useState<SelectMode>("replace");
   const [where, setWhere] = useState("");
   const [predicate, setPredicate] = useState<LocationPredicate>("intersects");
   const [metres, setMetres] = useState("1000");
-  const [other, setOther] = useState<ToolInput>(() => {
-    const id = ids.find((x) => x !== start) ?? start;
-    return { layerId: id, selectedOnly: false };
-  });
+  const [other, setOther] = useState<ToolInput>(() => defaultInput(layerId));
 
   const submit = async () => {
     if (kind === "expression") await selectByExpression(layerId, where, mode);
@@ -89,7 +59,7 @@ export function SelectByModal({ kind, onClose }: { kind: "expression" | "locatio
         )
       }
     >
-      <Select
+      <SelectField
         label={kind === "expression" ? "Layer" : "Select features from"}
         value={layerId}
         options={inputLayers().map((l) => ({ value: l.id, label: l.name }))}
@@ -109,7 +79,7 @@ export function SelectByModal({ kind, onClose }: { kind: "expression" | "locatio
         </label>
       ) : (
         <>
-          <Select label="where the features" value={predicate} options={PREDICATES} onChange={setPredicate} />
+          <SelectField label="where the features" value={predicate} options={PREDICATES} onChange={setPredicate} />
           {predicate === "dwithin" && (
             <TextField
               label="Distance (m)"
@@ -123,7 +93,7 @@ export function SelectByModal({ kind, onClose }: { kind: "expression" | "locatio
           <LayerInput label="the features of" value={other} onChange={setOther} />
         </>
       )}
-      <Select label="Mode" value={mode} options={MODES} onChange={setMode} />
+      <SelectField label="Mode" value={mode} options={MODES} onChange={setMode} />
     </FormModal>
   );
 }

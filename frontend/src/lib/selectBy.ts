@@ -5,17 +5,9 @@
 // (new selection / add / remove / select within the current selection).
 // ---------------------------------------------------------------------------
 
-import { selection, fidTaggedRelation, FID, type SelectMode } from "./selection";
-import { layers } from "./layers";
+import { selection, FID, type SelectMode } from "./selection";
 import { query } from "./duckdb";
-import { inputRelation, utm, type ToolInput } from "./geoprocessing";
-
-/** The `__fid`-tagged features of a layer, every attribute included. */
-async function tagged(layerId: string): Promise<string> {
-  const base = await layers.attributeSql(layerId);
-  if (!base) throw new Error("Features of this layer can't be selected with SQL.");
-  return fidTaggedRelation(base);
-}
+import { inputRelation, taggedRelation, utm, type ToolInput } from "./geoprocessing";
 
 async function applyFids(layerId: string, sql: string, mode: SelectMode): Promise<number> {
   const rows = await query(sql);
@@ -27,7 +19,7 @@ async function applyFids(layerId: string, sql: string, mode: SelectMode): Promis
  *  columns. Resolves with the layer's selection size afterwards. */
 export async function selectByExpression(layerId: string, where: string, mode: SelectMode): Promise<number> {
   if (!where.trim()) throw new Error("Enter an expression, e.g. population > 1000000");
-  return applyFids(layerId, `SELECT ${FID} FROM (${await tagged(layerId)}) WHERE (${where})`, mode);
+  return applyFids(layerId, `SELECT ${FID} FROM (${await taggedRelation(layerId)}) WHERE (${where})`, mode);
 }
 
 export type LocationPredicate = "intersects" | "within" | "contains" | "disjoint" | "dwithin";
@@ -55,7 +47,7 @@ export async function selectByLocation(
   const exists = `EXISTS (SELECT 1 FROM (${await inputRelation(other)}) b WHERE ${test})`;
   return applyFids(
     layerId,
-    `SELECT ${FID} FROM (${await tagged(layerId)}) a WHERE ${predicate === "disjoint" ? "NOT " : ""}${exists}`,
+    `SELECT ${FID} FROM (${await taggedRelation(layerId)}) a WHERE ${predicate === "disjoint" ? "NOT " : ""}${exists}`,
     mode,
   );
 }

@@ -1,11 +1,13 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { FormModal, FieldLabel, TextField, INPUT } from "./Modal";
+import { FormModal, SelectField, TextField } from "./Modal";
 import { layers } from "../lib/layers";
 import { selection } from "../lib/selection";
 import {
+  defaultInput,
   freeTableName,
   inputFields,
   inputLayers,
+  paramDefaults,
   runTool,
   type GeoTool,
   type Param,
@@ -17,13 +19,6 @@ import {
 // the input layer (default: the active one) with "Selected features only", one
 // field per parameter, and the output table's name. Run writes the result to a
 // new table and adds it as a layer (`runTool`).
-
-const defaults = (tool: GeoTool): Record<string, ParamValue> =>
-  Object.fromEntries(
-    tool.params.flatMap((p) =>
-      p.kind === "layer" ? [] : [[p.key, p.kind === "field" ? "" : p.default]],
-    ),
-  );
 
 /** Picks an input layer plus its "Selected features only" switch. */
 export function LayerInput({
@@ -38,22 +33,12 @@ export function LayerInput({
   const n = selection.size(value.layerId);
   return (
     <div className="flex flex-col gap-2">
-      <label className="flex flex-col gap-2">
-        <FieldLabel>{label}</FieldLabel>
-        <select
-          className={INPUT}
-          value={value.layerId}
-          onChange={(e) =>
-            onChange({ layerId: e.target.value, selectedOnly: selection.size(e.target.value) > 0 })
-          }
-        >
-          {inputLayers().map((l) => (
-            <option key={l.id} value={l.id}>
-              {l.name}
-            </option>
-          ))}
-        </select>
-      </label>
+      <SelectField
+        label={label}
+        value={value.layerId}
+        options={inputLayers().map((l) => ({ value: l.id, label: l.name }))}
+        onChange={(id) => onChange({ layerId: id, selectedOnly: selection.size(id) > 0 })}
+      />
       <label className="flex items-center gap-2 text-editor text-gray-700">
         <input
           type="checkbox"
@@ -105,18 +90,7 @@ function ParamField({
         param.kind === "field"
           ? [...(param.optional ? [{ value: "", label: "— none —" }] : []), ...fields.map((f) => ({ value: f, label: f }))]
           : param.options;
-      return (
-        <label className="flex flex-col gap-2">
-          <FieldLabel>{param.label}</FieldLabel>
-          <select className={INPUT} value={value} onChange={(e) => onChange(e.target.value)}>
-            {options.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </label>
-      );
+      return <SelectField label={param.label} value={String(value)} options={options} onChange={onChange} />;
     }
   }
 }
@@ -124,21 +98,13 @@ function ParamField({
 export function ProcessingModal({ tool, onClose }: { tool: GeoTool; onClose: () => void }) {
   useSyncExternalStore(selection.subscribe, () => selection.version);
   const candidates = inputLayers();
-  const first = (avoid?: string): ToolInput => {
-    const id =
-      [layers.activeId, ...candidates.map((l) => l.id)].find((x) => x && x !== avoid && candidates.some((l) => l.id === x)) ??
-      candidates[0]?.id ??
-      "";
-    return { layerId: id, selectedOnly: selection.size(id) > 0 };
-  };
-
   const [inputs, setInputs] = useState<Record<string, ToolInput>>(() => {
-    const main = first();
+    const main = defaultInput();
     const out: Record<string, ToolInput> = { input: main };
-    for (const p of tool.params) if (p.kind === "layer") out[p.key] = first(main.layerId);
+    for (const p of tool.params) if (p.kind === "layer") out[p.key] = defaultInput(main.layerId);
     return out;
   });
-  const [values, setValues] = useState(() => defaults(tool));
+  const [values, setValues] = useState(() => paramDefaults(tool));
   const [fields, setFields] = useState<string[]>([]);
   const [output, setOutput] = useState("");
   const [outputTouched, setOutputTouched] = useState(false);
