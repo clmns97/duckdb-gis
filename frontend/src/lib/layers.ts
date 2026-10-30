@@ -227,6 +227,20 @@ export const layers = {
   },
   subscribe: signal.subscribe,
 
+  /**
+   * A layer's features with all their attributes and a WGS84 `geom` (#111):
+   * the relation processing tools read. Row order matches the render query, so
+   * `fidTaggedRelation` numbers both alike. Null for PMTiles layers (no rows to
+   * read — "Create Layer from Selection" makes a table first).
+   */
+  async attributeSql(id: string): Promise<string | null> {
+    const layer = byId.get(id);
+    if (!layer || layer.kind === "pmtiles") return null;
+    if (!layer.source) return layer.sql ?? null;
+    const s = layer.source;
+    return `SELECT * EXCLUDE (${ident(s.geomColumn)}), ${await geomExpr(s)} AS geom FROM ${qualified(s)}`;
+  },
+
   /** Look up a layer by id (used by the editing store, T-038). */
   get(id: string): ActiveLayer | undefined {
     return byId.get(id);

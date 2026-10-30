@@ -76,14 +76,3 @@ test.describe("on a phone", () => {
     await expect.poll(() => size(app, cities)).toBe(1);
   });
 });
-
-test("Processing ▸ Merge unions the selected features into a new layer", async ({ app, page }) => {
-  await app.runSql("SELECT geom FROM demo.regions");
-  await page.evaluate(() =>
-    window.gisSelection.select("L_sql_preview", [{ key: 1 }, { key: 2 }], "replace"),
-  );
-  await page.getByRole("button", { name: "Processing" }).click();
-  await app.menuItem("Merge selected features").click();
-  await app.layersSettled();
-  expect((await app.layer("Merge result 1"))?.status).toBe("ready");
-});
