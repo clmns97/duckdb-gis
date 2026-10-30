@@ -44,9 +44,9 @@ outside it.
 `README.md` is the source of truth for building and running; this file won't
 duplicate it. Read:
 
-- [Build from source](README.md#build-from-source) — `make`, and what it produces
-- [Run](README.md#run) — starting the server
-- [Frontend development](README.md#frontend-development) — the Vite dev loop
+- [Building from source](README.md#building-from-source) — `make`, and what it produces
+- [Functions](README.md#functions) — starting the server
+- [Development](README.md#development) — tests and the Vite dev loop
 - [Repository layout](README.md#repository-layout) — where things live
 
 Two things worth knowing that aren't obvious from a directory listing:
@@ -57,7 +57,7 @@ Two things worth knowing that aren't obvious from a directory listing:
 - **You probably don't need the C++ build.** A frontend-only change needs Node
   and pnpm, nothing else. The extension build needs CMake, a C/C++ compiler
   and Python 3 (no DuckDB checkout); see
-  [Build from source](README.md#build-from-source).
+  [Building from source](README.md#building-from-source).
 
 pnpm is pinned per workspace via `packageManager`, so `corepack enable pnpm`
 gets you the right version automatically.
