@@ -51,7 +51,7 @@
   --color-primary-border-active: #afc0f2; /* focused cell border */
 
   /* ---- Brand accents (observed in logo / top bar) ------------------- */
-  --color-duck-yellow: #fbe200; /* (approx) DuckDB duck mark */
+  --color-ce-purple: #7d66ff; /* DuckDB Community Extensions (Medium Slate Blue, duckdb.org --purple-70) */
   --color-brand-orange: #fb7115; /* (approx) MotherDuck "Sign in" accent */
 
   /* ---- Semantic surfaces / status ---------------------------------- */
@@ -90,7 +90,6 @@
   --indigo: var(--color-accent);
   --indigo-primary: var(--color-primary);
   --indigo-border-active: var(--color-primary-border-active);
-  --duck-yellow: var(--color-duck-yellow);
   --brand-orange: var(--color-brand-orange);
 
   /* ---- Semantic colors ---------------------------------------------- */
