@@ -36,6 +36,7 @@ import { attach } from "./lib/attach";
 import { basemap, basemapMenuItems } from "./lib/basemaps";
 import { processingMenuItems, type GeoTool } from "./lib/geoprocessing";
 import { ProcessingModal } from "./components/ProcessingModal";
+import { SelectByModal } from "./components/SelectByModal";
 import { addOvertureLayers, createLayerFromSelection, type OvertureRequest } from "./lib/overture";
 import { selectTool } from "./lib/selectTool";
 import { ensureWorkingCatalog } from "./lib/workspace";
@@ -53,6 +54,7 @@ export function App() {
   const [dialog, setDialog] = useState<"overture" | "attach" | "newLayer" | "save" | "open" | null>(null);
   const closeDialog = () => setDialog(null);
   const [tool, setTool] = useState<GeoTool | null>(null); // open Processing dialog
+  const [selectBy, setSelectBy] = useState<"expression" | "location" | null>(null);
   // Re-render when the active basemap changes so both the Browser entry label
   // and the pinned Layers row (via LayersPanel) reflect it.
   useSyncExternalStore(basemap.subscribe, basemap.getSnapshot);
@@ -141,7 +143,7 @@ export function App() {
 
   // Processing menu (T-004, #111): the tool registry grouped by heading,
   // anchored under its header button; each tool opens its dialog.
-  const openProcessingMenu = (e: React.MouseEvent) => anchorMenu(e, processingMenuItems(setTool));
+  const openProcessingMenu = (e: React.MouseEvent) => anchorMenu(e, processingMenuItems(setTool, setSelectBy));
 
   // Basemap picker (T-033): the Browser-pane entry opens the shared basemap
   // submenu, anchored under the button (same menu the pinned Layers row uses).
@@ -487,6 +489,7 @@ export function App() {
       )}
 
       {tool && <ProcessingModal tool={tool} onClose={() => setTool(null)} />}
+      {selectBy && <SelectByModal kind={selectBy} onClose={() => setSelectBy(null)} />}
       {dialog === "save" && <SaveProjectModal onClose={closeDialog} />}
       {dialog === "open" && (
         <OpenProjectModal

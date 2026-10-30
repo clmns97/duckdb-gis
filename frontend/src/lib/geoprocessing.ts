@@ -54,7 +54,7 @@ export interface GeoTool {
 
 /** The UTM zone (as an `'EPSG:326nn'` / `'EPSG:327nn'` expression) of a
  *  geometry's centroid — a metric CRS that is accurate near the feature. */
-const utm = (g: string): string =>
+export const utm = (g: string): string =>
   `'EPSG:' || (CASE WHEN ST_Y(ST_Centroid(${g})) >= 0 THEN 32600 ELSE 32700 END` +
   ` + LEAST(60, CAST(floor((ST_X(ST_Centroid(${g})) + 180) / 6) AS INTEGER) + 1))`;
 
@@ -366,7 +366,7 @@ export interface ToolInput {
 }
 
 /** An input layer's features (all, or the selected ones) with attributes. */
-async function inputRelation({ layerId, selectedOnly }: ToolInput): Promise<string> {
+export async function inputRelation({ layerId, selectedOnly }: ToolInput): Promise<string> {
   const base = await layers.attributeSql(layerId);
   if (!base) throw new Error("This layer can't be used as a tool input.");
   const fids = selectedOnly ? selection.keys(layerId) : [];
@@ -416,8 +416,12 @@ export async function runTool(
   await layers.add({ db: WORKING_CATALOG, schema: "main", table: output, geomColumn: "geom" });
 }
 
-/** The Processing menu: every tool under its group's heading. */
-export function processingMenuItems(open: (tool: GeoTool) => void): MenuItem[] {
+/** The Processing menu: every tool under its group's heading, then the
+ *  selection tools (#113). */
+export function processingMenuItems(
+  open: (tool: GeoTool) => void,
+  openSelectBy: (kind: "expression" | "location") => void,
+): MenuItem[] {
   const items: MenuItem[] = [];
   for (const tool of TOOLS) {
     if (items.length === 0 || tool.group !== TOOLS[TOOLS.indexOf(tool) - 1].group) {
@@ -425,5 +429,10 @@ export function processingMenuItems(open: (tool: GeoTool) => void): MenuItem[] {
     }
     items.push({ label: `${tool.label}…`, onSelect: () => open(tool) });
   }
+  items.push(
+    { label: "Selection", header: true },
+    { label: "Select by expression…", onSelect: () => openSelectBy("expression") },
+    { label: "Select by location…", onSelect: () => openSelectBy("location") },
+  );
   return items;
 }

@@ -26,7 +26,7 @@ const defaults = (tool: GeoTool): Record<string, ParamValue> =>
   );
 
 /** Picks an input layer plus its "Selected features only" switch. */
-function LayerInput({
+export function LayerInput({
   label,
   value,
   onChange,
