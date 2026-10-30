@@ -100,7 +100,8 @@ is drawn as a temporary layer.
 - **DuckDB 1.4 LTS or later**, in any client that loads extensions — the CLI,
   Python, R, Node, …. One binary covers every version from 1.4 on.
 - **Platforms:** Linux (x86-64, arm64), macOS (Apple silicon), Windows
-  (x86-64). Not DuckDB-Wasm: the extension runs an HTTP server.
+  (x86-64); Intel macOS on a best-effort basis (built, but not tested on Intel
+  hardware). Not DuckDB-Wasm: the extension runs an HTTP server.
 - **A web browser** on the same machine.
 - The UI installs and loads DuckDB's `spatial` extension on first start, which
   needs network access once.

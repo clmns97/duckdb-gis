@@ -20,12 +20,12 @@ the README). Before 1.0, mark releases as pre-releases on GitHub.
 
 - The end-to-end suite passes: `cd frontend && pnpm test:e2e` locally, or
   Actions → E2E → "Run workflow" on `main`.
-- The excluded platforms match in both places. These two lines must list the
-  same platforms:
+- The excluded and opt-in platforms match in both places. Each pair must list
+  the same platforms:
 
   ```sh
-  grep exclude_archs .github/workflows/MainDistributionPipeline.yml
-  grep excluded_platforms description.yml
+  grep -E 'exclude_archs|opt_in_archs' .github/workflows/MainDistributionPipeline.yml
+  grep -E 'excluded_platforms|opt_in_platforms' description.yml
   ```
 
   Excluding a platform that fails to build is a legitimate release decision,

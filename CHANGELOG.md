@@ -38,6 +38,8 @@ so it loads alongside DuckDB's core `ui` extension.
   from a localhost-only HTTP server; query results reach the browser as Arrow.
   The UI's background reads run on a small pool of connections so a slow query
   doesn't block them.
+- **Platforms:** Linux (x86-64, arm64), macOS (Apple silicon; Intel on a
+  best-effort basis), Windows (x86-64, MSVC and MinGW). Not DuckDB-Wasm.
 - **Map:** MapLibre with deck.gl/GeoArrow rendering. Basemaps: an offline
   Natural Earth default, plus OpenFreeMap styles.
 - **Layers panel:** add tables and query results as layers; reorder, show/hide,
