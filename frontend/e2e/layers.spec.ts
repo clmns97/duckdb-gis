@@ -24,6 +24,18 @@ test("layers hide, show and reorder", async ({ app, page }) => {
   expect((await app.layers()).map((l) => l.name)).toEqual([...before.slice(1), before[0]]);
 });
 
+test("zoom to layer frames a layer on a phone-sized map", async ({ app, page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await app.addLayer("regions");
+  await app.jump(100, -30, 3);
+  await app.sidebarTab("Layers").click();
+  await page.getByRole("button", { name: "Actions for regions" }).click();
+  await app.menuItem("Zoom to layer").click();
+  await expect
+    .poll(() => page.evaluate(() => window.gisMap().getCenter().lng))
+    .toBeCloseTo(8.25, 0);
+});
+
 test("layer properties show information and edit symbology", async ({ app, page }) => {
   await app.addLayer("regions");
   await app.sidebarTab("Layers").click();
