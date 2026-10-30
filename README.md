@@ -49,7 +49,11 @@ extension: `LOAD ui; LOAD gis;` can coexist in one session.
   to the map from a right-click menu.
 - **SQL editor** — run spatial SQL and render the result set as a temporary
   layer.
-- **Select features** — click features on the map to select the underlying rows.
+- **Select features** — click, tap or box-select features of the active layer,
+  or select them by a SQL expression or by location against another layer.
+- **Processing** — buffer, dissolve, clip, intersect, spatially join and more:
+  each tool reads a layer (optionally only its selected features) and writes a
+  new one, as native DuckDB spatial SQL.
 - **Draw and edit** — digitize geometry into a working set, then commit it back
   into a native DuckDB table.
 

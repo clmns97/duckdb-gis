@@ -1,11 +1,7 @@
 # Submission descriptor for duckdb/community-extensions.
 #
-# This file is not read by anything in this repository. To publish a release:
-#   1. Tag this repo (see "Versioning" in README.md) and push the tag.
-#   2. Set `repo.ref` below to that tag's commit SHA -- the community build
-#      pins an immutable ref, not a branch.
-#   3. Copy this file to extensions/gis/description.yml in a fork of
-#      duckdb/community-extensions and open a PR.
+# This file is not read by anything in this repository. How a release sets
+# `version` and `repo.ref` and submits this file: docs/RELEASING.md.
 #
 # Keep `excluded_platforms` in sync with `exclude_archs` in
 # .github/workflows/MainDistributionPipeline.yml.
@@ -25,8 +21,8 @@ extension:
 
 repo:
   github: clmns97/duckdb-gis
-  # TODO: replace with the tagged release SHA before opening the PR.
-  # Keep it quoted: an all-digit SHA would otherwise parse as a number.
+  # The release tag's commit SHA (docs/RELEASING.md, step 5). Keep it
+  # quoted: an all-digit SHA would otherwise parse as a number.
   ref: "REPLACE_WITH_RELEASE_SHA"
 
 docs:
