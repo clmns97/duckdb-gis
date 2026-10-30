@@ -38,11 +38,14 @@ export function whenStyleReady(map: maplibregl.Map, cb: () => void): Promise<voi
 export function fitBounds(bounds: [number, number, number, number] | null): void {
   if (!mapRef || !bounds) return;
   const [xmin, ymin, xmax, ymax] = bounds;
+  // A fixed padding wider than half the map makes MapLibre skip the fit ("Map
+  // cannot fit within canvas"), as on a phone, where the map is ~100px wide.
+  const { clientWidth: w, clientHeight: h } = mapRef.getContainer();
   mapRef.fitBounds(
     [
       [xmin, ymin],
       [xmax, ymax],
     ],
-    { padding: 60, maxZoom: 14, duration: 600 },
+    { padding: Math.min(60, Math.floor(Math.min(w, h) / 5)), maxZoom: 14, duration: 600 },
   );
 }
