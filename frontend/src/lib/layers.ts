@@ -98,9 +98,6 @@ export interface ActiveLayer {
   pmtiles?: { theme: OvertureTheme; release: string };
 }
 
-/** Fixed id of the single SQL-editor Run-result temp layer (T-027). Re-Running
- *  replaces this row rather than accumulating new ones. */
-export { PREVIEW_ID };
 
 
 const byId = new Map<string, ActiveLayer>();

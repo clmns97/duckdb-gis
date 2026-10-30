@@ -88,6 +88,32 @@ export function TextField({ label, ...input }: { label: string } & InputHTMLAttr
   );
 }
 
+// A labelled drop-down for a FormModal body.
+export function SelectField<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: Array<{ value: T; label: string }>;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <label className="flex flex-col gap-2">
+      <FieldLabel>{label}</FieldLabel>
+      <select className={INPUT} value={value} onChange={(e) => onChange(e.target.value as T)}>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 // A dialog whose body is one small form with a single primary action (Attach,
 // Save/Open project, New layer). Owns the async submit: Enter in any field or
 // the primary button runs `onSubmit`; a throw shows its message inline and keeps

@@ -25,20 +25,14 @@ import type { PickingInfo } from "@deck.gl/core";
 let overlay: MapboxOverlay | null = null;
 let overlayMap: maplibregl.Map | null = null;
 
-// Hooks injected by the editing store (T-025) so the read-only render path stays
-// a leaf module (no import of `editing`). `editGate` lets Terra Draw own map
-// clicks while digitizing (deck must not pick/clear selection); `beforeIdFn`
-// returns the MapLibre layer id the deck layers should render *beneath*, so the
-// editable working set (a MapLibre-native source) draws on top of deck geometry.
-let editGate: (() => boolean) | null = null;
+// Hook injected by the editing store (T-025) so the read-only render path stays
+// a leaf module (no import of `editing`): `beforeIdFn` returns the MapLibre layer
+// id the deck layers should render *beneath*, so the editable working set (a
+// MapLibre-native source) draws on top of deck geometry.
 let beforeIdFn: (() => string | undefined) | null = null;
 
-/** Wire the editing store's gate + z-order provider into the render path. */
-export function setDrawHooks(hooks: {
-  isEditing: () => boolean;
-  beforeId: () => string | undefined;
-}): void {
-  editGate = hooks.isEditing;
+/** Wire the editing store's z-order provider into the render path. */
+export function setDrawHooks(hooks: { beforeId: () => string | undefined }): void {
   beforeIdFn = hooks.beforeId;
   syncOverlay();
 }
@@ -52,8 +46,10 @@ export function requestSync(): void {
 // The SQL editor's Run preview: the last query result, kept so selection changes
 // can rebuild its deck.gl layers (with updated highlight colors) without
 // re-querying DuckDB. Composed *over* the persistent added layers (see `added`).
-let rendered: { table: Table; kind: GeometryKind; source: string } | null = null;
-/** The layers-store id of the Run preview, its key in the selection store. */
+let rendered: { table: Table; kind: GeometryKind } | null = null;
+/** Fixed layers-store id of the single SQL-editor Run-result temp layer (T-027),
+ *  also its key in the selection store. Re-Running replaces this row rather
+ *  than accumulating new ones. */
 export const PREVIEW_ID = "L_sql_preview";
 // Whether the Run preview is drawn. The SQL-result temp layer (T-027) toggles
 // this to hide/show without re-querying — selection and highlight state survive.
@@ -76,9 +72,6 @@ interface AddedLayer {
    *  clobbers the user's own show/hide state. A layer draws only when
    *  `visible && !suppressed`. */
   suppressed: boolean;
-  /** The inner source query (projects `geom`): what a tool feeds through
-   *  `fidTaggedRelation` to rebuild the selected rows (T-041). */
-  source: string;
 }
 const added = new Map<string, AddedLayer>();
 
@@ -93,11 +86,6 @@ export function setPickableLayer(id: string | null): void {
   syncOverlay();
 }
 
-/** The source query of a deck layer (or the Run preview), for tools. */
-export function deckSource(id: string): string | null {
-  if (id === PREVIEW_ID) return rendered?.source ?? null;
-  return added.get(id)?.source ?? null;
-}
 
 // Explicit bottom→top draw order for the added layers (T-031). When set, it is
 // the single source of truth for z-order and overrides the Map's insertion
@@ -126,9 +114,6 @@ function ensureOverlay(map: maplibregl.Map): MapboxOverlay {
     // (see syncOverlay). The read-only GeoArrow path is otherwise unchanged.
     interleaved: true,
     layers: [],
-    // Click a feature of the active layer to select it; shift-click adds or
-    // removes; clicking empty map clears. Select mode handles its own gestures.
-    onClick: handleClick,
   });
   map.addControl(overlay);
   overlayMap = map;
@@ -222,6 +207,14 @@ function resolvePick(info: PickingInfo): { fid: number; layerId: string } | null
 export const isDeckLayer = (id: string): boolean =>
   id === PREVIEW_ID ? rendered != null : added.has(id);
 
+/** The topmost feature of the pickable (active) deck layer within `radius`
+ *  pixels of a canvas point. */
+export function pickDeckPoint(x: number, y: number, radius: number): Pick[] {
+  const pick = overlay?.pickObject({ x, y, radius });
+  const hit = pick ? resolvePick(pick) : null;
+  return hit && hit.layerId === pickableId ? [{ key: hit.fid }] : [];
+}
+
 /** Features of the pickable (active) deck layer inside a canvas-pixel rect. */
 export function pickDeckRect(x: number, y: number, width: number, height: number): Pick[] {
   if (!overlay || !pickableId) return [];
@@ -231,41 +224,6 @@ export function pickDeckRect(x: number, y: number, width: number, height: number
     if (pick?.layerId === pickableId) keys.add(pick.fid);
   }
   return [...keys].map((key) => ({ key }));
-}
-
-// Select mode (`lib/selectTool.ts`) owns map gestures while it is on.
-let selectGate: (() => boolean) | null = null;
-export function setSelectGate(gate: () => boolean): void {
-  selectGate = gate;
-}
-
-// deck.gl's mjolnir `click` event does not reliably carry the Shift modifier
-// (`srcEvent.shiftKey` comes through undefined), so track it at the document
-// level instead. Shift-click is our additive-selection gesture.
-let shiftHeld = false;
-if (typeof window !== "undefined") {
-  const sync = (e: KeyboardEvent) => {
-    if (e.key === "Shift") shiftHeld = e.type === "keydown";
-  };
-  window.addEventListener("keydown", sync);
-  window.addEventListener("keyup", sync);
-  window.addEventListener("blur", () => {
-    shiftHeld = false;
-  });
-}
-
-function handleClick(info: PickingInfo, event: { srcEvent?: { shiftKey?: boolean } }): void {
-  // While a draw/edit mode is active, Terra Draw owns the click — don't pick or
-  // clear the selection out from under it (T-025).
-  if (editGate?.() || selectGate?.()) return;
-  if (!pickableId || !isDeckLayer(pickableId)) return; // a PMTiles layer is active
-  const additive = Boolean(event?.srcEvent?.shiftKey) || shiftHeld;
-  const pick = info?.picked ? resolvePick(info) : null;
-  if (!pick || pick.layerId !== pickableId) {
-    if (!additive) selection.clear(pickableId);
-    return;
-  }
-  selection.select(pick.layerId, [{ key: pick.fid }], additive ? "toggle" : "replace");
 }
 
 // Rebuild layers in place when the selection changes (no DuckDB round-trip).
@@ -499,7 +457,7 @@ export async function renderGeoArrow(userSql: string): Promise<DeckOutcome> {
   const { table, bytes } = await fetchGeoArrow(inner, kind);
   const t1 = performance.now();
 
-  rendered = { table, kind, source: inner };
+  rendered = { table, kind };
   renderedVisible = true; // a fresh Run is always shown, even if the last was hidden
 
   const map = getMap();
@@ -676,7 +634,7 @@ export async function addDeckLayer(
   // Keep an existing layer's edit-suppression across a re-add (e.g. a commit
   // that re-renders the layer while still editing); default false on first add.
   const suppressed = added.get(id)?.suppressed ?? false;
-  added.set(id, { table, kind, style, visible: true, suppressed, source: inner });
+  added.set(id, { table, kind, style, visible: true, suppressed });
   selection.clear(id); // re-rendered: the old fids no longer line up
   syncOverlay();
   return {

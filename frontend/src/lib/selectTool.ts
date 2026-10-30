@@ -6,8 +6,7 @@
 // `pickTileRect`.
 //
 //   • Normal mode: a click selects the feature under it (Shift adds/removes);
-//     a click on empty map clears. Deck layers handle this in `deckRender`'s
-//     own click handler; PMTiles layers here.
+//     a click on empty map clears.
 //   • Select mode (the on-canvas toggle): a tap toggles one feature and a drag
 //     draws a box whose features are added (Alt+drag removes them). Pointer
 //     events, so it works with a finger as well as a mouse — no Shift needed.
@@ -17,12 +16,14 @@ import maplibregl from "maplibre-gl";
 import { changeSignal } from "./store";
 import { selection, type Pick, type SelectMode } from "./selection";
 import { layers } from "./layers";
-import { isDeckLayer, pickDeckRect, setPickableLayer, setSelectGate } from "./deckRender";
+import { isDeckLayer, pickDeckPoint, pickDeckRect, setPickableLayer } from "./deckRender";
 import { pickTileRect } from "./overtureTiles";
 import { getMap } from "./mapBus";
 
 let on = false;
 const modeChanges = changeSignal();
+// While this returns true (an edit session), Terra Draw owns map clicks.
+let yieldGate = (): boolean => false;
 
 export const selectTool = {
   get active(): boolean {
@@ -45,9 +46,12 @@ export const selectTool = {
     modeChanges.emit();
   },
   subscribe: modeChanges.subscribe,
+  /** Leave map clicks alone while `gate` returns true (set by the editing store). */
+  yieldWhile(gate: () => boolean): void {
+    yieldGate = gate;
+  },
 };
 
-setSelectGate(() => on);
 // Only the active layer is pickable, so clicks reach it through other layers.
 layers.subscribe(() => setPickableLayer(layers.activeId));
 
@@ -67,21 +71,23 @@ function pickActive(a: maplibregl.Point, b: maplibregl.Point): { layerId: string
 // points are reachable with a finger; only the topmost feature counts.
 const TAP_SLOP = 4;
 function tapAt(p: maplibregl.Point, mode: SelectMode): void {
+  const layerId = layers.activeId;
+  if (!layerId) return;
   const d = new maplibregl.Point(TAP_SLOP, TAP_SLOP);
-  const hit = pickActive(p.sub(d), p.add(d));
-  if (!hit) return;
-  if (hit.picks.length) selection.select(hit.layerId, hit.picks.slice(0, 1), mode);
-  else if (mode === "replace") selection.clear(hit.layerId);
+  const picks = isDeckLayer(layerId)
+    ? pickDeckPoint(p.x, p.y, TAP_SLOP)
+    : pickTileRect(layerId, p.sub(d), p.add(d)).slice(0, 1); // topmost first
+  if (picks.length) selection.select(layerId, picks, mode);
+  else if (mode === "replace") selection.clear(layerId);
 }
 
 /** Wire the gestures onto a newly created map. */
 export function installSelectTool(map: maplibregl.Map): void {
   selectTool.set(false); // a fresh map starts panning normally
 
-  // Normal mode, PMTiles active layer (deck layers handle their own clicks).
+  // Normal mode: click to select, Shift+click to add or remove.
   map.on("click", (e) => {
-    const id = layers.activeId;
-    if (on || !id || isDeckLayer(id)) return;
+    if (on || yieldGate()) return;
     tapAt(e.point, e.originalEvent.shiftKey ? "toggle" : "replace");
   });
 

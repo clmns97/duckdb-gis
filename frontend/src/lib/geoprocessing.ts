@@ -54,7 +54,7 @@ export interface GeoTool {
 
 /** The UTM zone (as an `'EPSG:326nn'` / `'EPSG:327nn'` expression) of a
  *  geometry's centroid — a metric CRS that is accurate near the feature. */
-const utm = (g: string): string =>
+export const utm = (g: string): string =>
   `'EPSG:' || (CASE WHEN ST_Y(ST_Centroid(${g})) >= 0 THEN 32600 ELSE 32700 END` +
   ` + LEAST(60, CAST(floor((ST_X(ST_Centroid(${g})) + 180) / 6) AS INTEGER) + 1))`;
 
@@ -365,14 +365,34 @@ export interface ToolInput {
   selectedOnly: boolean;
 }
 
-/** An input layer's features (all, or the selected ones) with attributes. */
-async function inputRelation({ layerId, selectedOnly }: ToolInput): Promise<string> {
+/** The input a dialog starts from: the active layer (or, for a second input,
+ *  another one), limited to its selection when it has one. */
+export function defaultInput(avoid?: string): ToolInput {
+  const ids = inputLayers().map((l) => l.id);
+  const layerId = [layers.activeId, ...ids].find((x) => x && x !== avoid && ids.includes(x)) ?? ids[0] ?? "";
+  return { layerId, selectedOnly: selection.size(layerId) > 0 };
+}
+
+/** A tool's parameter values before the user changes any. */
+export const paramDefaults = (tool: GeoTool): Record<string, ParamValue> =>
+  Object.fromEntries(
+    tool.params.flatMap((p) => (p.kind === "layer" ? [] : [[p.key, p.kind === "field" ? "" : p.default]])),
+  );
+
+/** A layer's features with all attributes, tagged with the `__fid` its
+ *  selection is keyed by. */
+export async function taggedRelation(layerId: string): Promise<string> {
   const base = await layers.attributeSql(layerId);
-  if (!base) throw new Error("This layer can't be used as a tool input.");
+  if (!base) throw new Error("This layer has no rows to read (an Overture tile layer?).");
+  return fidTaggedRelation(base);
+}
+
+/** An input layer's features (all, or the selected ones) with attributes. */
+export async function inputRelation({ layerId, selectedOnly }: ToolInput): Promise<string> {
   const fids = selectedOnly ? selection.keys(layerId) : [];
   if (selectedOnly && fids.length === 0) throw new Error("No features are selected in the input layer.");
   const where = selectedOnly ? ` WHERE ${FID} IN (${fids.map(num).join(", ")})` : "";
-  return `SELECT * EXCLUDE (${FID}) FROM (${fidTaggedRelation(base)})${where}`;
+  return `SELECT * EXCLUDE (${FID}) FROM (${await taggedRelation(layerId)})${where}`;
 }
 
 /** The input layer's attribute columns (for field parameters). */
@@ -416,14 +436,21 @@ export async function runTool(
   await layers.add({ db: WORKING_CATALOG, schema: "main", table: output, geomColumn: "geom" });
 }
 
-/** The Processing menu: every tool under its group's heading. */
-export function processingMenuItems(open: (tool: GeoTool) => void): MenuItem[] {
+/** The Processing menu: every tool under its group's heading, then the
+ *  selection tools (#113). */
+export function processingMenuItems(
+  open: (tool: GeoTool) => void,
+  openSelectBy: (kind: "expression" | "location") => void,
+): MenuItem[] {
   const items: MenuItem[] = [];
-  for (const tool of TOOLS) {
-    if (items.length === 0 || tool.group !== TOOLS[TOOLS.indexOf(tool) - 1].group) {
-      items.push({ label: tool.group, header: true });
-    }
+  TOOLS.forEach((tool, i) => {
+    if (tool.group !== TOOLS[i - 1]?.group) items.push({ label: tool.group, header: true });
     items.push({ label: `${tool.label}…`, onSelect: () => open(tool) });
-  }
+  });
+  items.push(
+    { label: "Selection", header: true },
+    { label: "Select by expression…", onSelect: () => openSelectBy("expression") },
+    { label: "Select by location…", onSelect: () => openSelectBy("location") },
+  );
   return items;
 }
