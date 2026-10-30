@@ -228,6 +228,130 @@ export const TOOLS: GeoTool[] = [
   },
 ];
 
+const OVERLAY = "Vector overlay";
+const OVERLAY_LAYER: Param = { kind: "layer", key: "overlay", label: "Overlay layer" };
+
+/** The overlay's attributes, prefixed so they can't clash with the input's. */
+const overlayCols = (b: string): string => `COLUMNS(${b}.* EXCLUDE (geom)) AS 'overlay_\\0'`;
+
+/** `g` minus every feature of `rel` that touches it. */
+const minus = (g: string, rel: string): string =>
+  `ST_Difference(${g}, coalesce((SELECT ST_Union_Agg(o.geom) FROM ${rel} o WHERE ST_Intersects(o.geom, ${g})),` +
+  ` ST_GeomFromText('GEOMETRYCOLLECTION EMPTY')))`;
+
+/** Only the parts of `g` of `like`'s geometry family (an overlay of two
+ *  polygons can also touch in lines or points). */
+const sameFamily = (g: string, like: string): string =>
+  `ST_CollectionExtract(${g}, ST_Dimension(${like}) + 1)`;
+
+const nonEmpty = (sql: string): string => `SELECT * FROM (${sql}) WHERE NOT ST_IsEmpty(geom)`;
+
+const intersections = `SELECT a.* EXCLUDE (geom), ${overlayCols("b")},
+       ST_CollectionExtract(ST_Intersection(a.geom, b.geom), least(ST_Dimension(a.geom), ST_Dimension(b.geom)) + 1) AS geom
+  FROM input a JOIN overlay b ON ST_Intersects(a.geom, b.geom)`;
+
+const PREDICATES: Record<string, string> = {
+  intersects: "ST_Intersects(a.geom, b.geom)",
+  within: "ST_Within(a.geom, b.geom)",
+  contains: "ST_Contains(a.geom, b.geom)",
+};
+
+TOOLS.push(
+  {
+    id: "clip",
+    label: "Clip",
+    group: OVERLAY,
+    description: "The parts of the input features inside the overlay layer's features.",
+    params: [OVERLAY_LAYER],
+    sql: () =>
+      nonEmpty(
+        `SELECT a.* REPLACE (${sameFamily("ST_Intersection(a.geom, o.g)", "a.geom")} AS geom)
+         FROM input a, (SELECT ST_Union_Agg(geom) AS g FROM overlay) o WHERE ST_Intersects(a.geom, o.g)`,
+      ),
+  },
+  {
+    id: "difference",
+    label: "Difference",
+    group: OVERLAY,
+    description: "The parts of the input features outside the overlay layer's features.",
+    params: [OVERLAY_LAYER],
+    sql: () => nonEmpty(`SELECT a.* REPLACE (${sameFamily(minus("a.geom", "overlay"), "a.geom")} AS geom) FROM input a`),
+  },
+  {
+    id: "intersection",
+    label: "Intersection",
+    group: OVERLAY,
+    description: "Where input and overlay features overlap, with the attributes of both.",
+    params: [OVERLAY_LAYER],
+    sql: () => nonEmpty(intersections),
+  },
+  {
+    id: "union",
+    label: "Union",
+    group: OVERLAY,
+    description: "Both layers cut at each other's edges: overlaps with both attributes, the rest with one.",
+    params: [OVERLAY_LAYER],
+    sql: () =>
+      nonEmpty(
+        `${intersections}
+         UNION ALL BY NAME
+         SELECT a.* REPLACE (${sameFamily(minus("a.geom", "overlay"), "a.geom")} AS geom) FROM input a
+         UNION ALL BY NAME
+         SELECT ${overlayCols("b")}, ${sameFamily(minus("b.geom", "input"), "b.geom")} AS geom FROM overlay b`,
+      ),
+  },
+  {
+    id: "spatial_join",
+    label: "Join attributes by location",
+    group: OVERLAY,
+    description: "Copy the overlay's attributes onto the input features they match (one row per match).",
+    params: [
+      { ...OVERLAY_LAYER, label: "Join layer" },
+      {
+        kind: "choice",
+        key: "predicate",
+        label: "Where the input feature",
+        options: [
+          { value: "intersects", label: "intersects" },
+          { value: "within", label: "is within" },
+          { value: "contains", label: "contains" },
+        ],
+        default: "intersects",
+      },
+      {
+        kind: "choice",
+        key: "keep",
+        label: "Input features without a match",
+        options: [
+          { value: "left", label: "Keep" },
+          { value: "inner", label: "Drop" },
+        ],
+        default: "left",
+      },
+    ],
+    sql: (p) =>
+      `SELECT a.*, ${overlayCols("b")} FROM input a ${p.keep === "inner" ? "" : "LEFT "}JOIN overlay b
+       ON ${PREDICATES[String(p.predicate)] ?? PREDICATES.intersects}`,
+  },
+  {
+    id: "count_points",
+    label: "Count points in polygon",
+    group: OVERLAY,
+    description: "Add the number of points that fall in each polygon.",
+    params: [{ kind: "layer", key: "overlay", label: "Points layer" }],
+    sql: () =>
+      `SELECT a.*, (SELECT count(*) FROM overlay b WHERE ST_Intersects(a.geom, b.geom)) AS point_count FROM input a`,
+  },
+  {
+    id: "merge_layers",
+    label: "Merge vector layers",
+    group: OVERLAY,
+    description: "All features of both layers in one; columns are matched by name.",
+    params: [{ kind: "layer", key: "overlay", label: "Second layer" }],
+    sql: () => `SELECT * FROM input UNION ALL BY NAME SELECT * FROM overlay`,
+  },
+);
+
 // --- Running ---------------------------------------------------------------
 
 /** Layers a tool can read: deck-drawn layers that finished loading. */

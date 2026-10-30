@@ -8,16 +8,20 @@ async function run(
   table: string,
   values: Record<string, string | number> = {},
   extra = "",
+  overlay?: string,
 ): Promise<Record<string, unknown>[]> {
-  if (!(await app.layer(table))) await app.addLayer(table, table.startsWith("t_") ? "memory" : "demo");
-  const id = (await app.layer(table))!.id;
+  const layerOf = async (t: string) => {
+    if (!(await app.layer(t))) await app.addLayer(t, t.startsWith("t_") ? "memory" : "demo");
+    return { layerId: (await app.layer(t))!.id, selectedOnly: false };
+  };
+  const inputs = { input: await layerOf(table), ...(overlay ? { overlay: await layerOf(overlay) } : {}) };
   const output = `out_${toolId}`;
   await app.withModule(
     "/src/lib/geoprocessing.ts",
     `async (m) => {
       const tool = m.TOOLS.find((t) => t.id === ${JSON.stringify(toolId)});
       const values = { ...Object.fromEntries(tool.params.filter((p) => p.kind !== "layer").map((p) => [p.key, p.kind === "field" ? "" : p.default])), ...${JSON.stringify(values)} };
-      await m.runTool(tool, { input: { layerId: ${JSON.stringify(id)}, selectedOnly: false } }, values, ${JSON.stringify(output)});
+      await m.runTool(tool, ${JSON.stringify(inputs)}, values, ${JSON.stringify(output)});
     }` as never,
   );
   await app.layersSettled();
@@ -79,4 +83,36 @@ test("single-layer tools produce the expected geometry", async ({ app }) => {
   await app.sql("CREATE TABLE memory.main.t_bowtie AS SELECT ST_GeomFromText('POLYGON((0 0, 2 2, 2 0, 0 2, 0 0))') AS geom");
   const fixed = await run(app, "fix", "t_bowtie", {}, ", ST_IsValid(geom) AS ok");
   expect(fixed.map((r) => r.ok)).toEqual([true]);
+});
+
+test("overlay tools combine two layers", async ({ app }) => {
+  test.setTimeout(120_000);
+  // Two overlapping 2×2 squares, offset by 1: they share a 1×1 square.
+  await app.sql(`CREATE TABLE memory.main.t_a AS SELECT 'a' AS name, ST_GeomFromText('POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))') AS geom`);
+  await app.sql(`CREATE TABLE memory.main.t_b AS SELECT 'b' AS name, ST_GeomFromText('POLYGON((1 1, 3 1, 3 3, 1 3, 1 1))') AS geom`);
+  const area = ", round(ST_Area(geom), 6) AS area";
+
+  expect(await run(app, "clip", "t_a", {}, area, "t_b")).toEqual([{ t: "POLYGON", area: 1 }]);
+  expect(await run(app, "difference", "t_a", {}, area, "t_b")).toEqual([{ t: "POLYGON", area: 3 }]);
+  expect(await run(app, "intersection", "t_a", {}, `${area}, name, overlay_name`, "t_b")).toEqual([
+    { t: "POLYGON", area: 1, name: "a", overlay_name: "b" },
+  ]);
+  expect(await run(app, "union", "t_a", {}, `${area}, name, overlay_name`, "t_b")).toEqual([
+    { t: "POLYGON", area: 1, name: "a", overlay_name: "b" },
+    { t: "POLYGON", area: 3, name: "a", overlay_name: null },
+    { t: "POLYGON", area: 3, name: null, overlay_name: "b" },
+  ]);
+  expect(await run(app, "merge_layers", "t_a", {}, ", name", "t_b")).toEqual([
+    { t: "POLYGON", name: "a" },
+    { t: "POLYGON", name: "b" },
+  ]);
+
+  // Zürich lies in both demo regions; the other cities in none.
+  const joined = await run(app, "spatial_join", "cities", {}, ", name, overlay_name", "regions");
+  expect(joined).toHaveLength(9);
+  expect(joined.filter((r) => r.name === "Zürich").map((r) => r.overlay_name)).toEqual(["Alpine box", "Rhine box"]);
+  expect(await app.sql("SELECT count(*)::INT AS n FROM memory.main.out_spatial_join WHERE overlay_name IS NULL")).toEqual([{ n: 7 }]);
+
+  const counts = await run(app, "count_points", "regions", {}, ", name, point_count::INT AS n", "cities");
+  expect(counts.map((r) => [r.name, r.n])).toEqual([["Alpine box", 1], ["Rhine box", 1]]);
 });
