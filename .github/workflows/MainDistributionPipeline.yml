@@ -51,6 +51,9 @@ jobs:
       duckdb_version: v2.0.0
       ci_tools_version: v2.0-cyanoptera
       exclude_archs: 'wasm_mvp;wasm_eh;wasm_threads'
+      # Intel macOS is opt-in in extension-ci-tools v2.0; build it (best effort,
+      # cross-compiled on an Apple-silicon runner).
+      opt_in_archs: 'osx_amd64'
       extension_name: gis
       extra_toolchains: python3
 

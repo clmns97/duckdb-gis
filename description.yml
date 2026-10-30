@@ -3,8 +3,8 @@
 # This file is not read by anything in this repository. How a release sets
 # `version` and `repo.ref` and submits this file: docs/RELEASING.md.
 #
-# Keep `excluded_platforms` in sync with `exclude_archs` in
-# .github/workflows/MainDistributionPipeline.yml.
+# Keep `excluded_platforms` and `opt_in_platforms` in sync with `exclude_archs`
+# and `opt_in_archs` in .github/workflows/MainDistributionPipeline.yml.
 
 extension:
   name: gis
@@ -16,6 +16,8 @@ extension:
   license: MIT
   # The extension runs a threaded HTTP server, which has no wasm equivalent.
   excluded_platforms: wasm_mvp;wasm_eh;wasm_threads
+  # Intel macOS is opt-in in the community build; best effort.
+  opt_in_platforms: osx_amd64
   maintainers:
     - clmns97
 
