@@ -141,7 +141,11 @@ export function ContextMenu({
     >
       <ul
         ref={ref}
-        className={`fixed ${MENU_CLASS}`}
+        // A long flat menu (Processing) scrolls on a short screen; one with
+        // flyouts can't, as the scroll box would clip them.
+        className={`fixed ${MENU_CLASS} ${
+          items.some((i) => i.children) ? "" : "max-h-[calc(100vh-8px)] overflow-y-auto"
+        }`}
         role="menu"
         style={{ left: pos.left, top: pos.top }}
         onClick={(e) => e.stopPropagation()}
