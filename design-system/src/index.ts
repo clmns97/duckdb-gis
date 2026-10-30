@@ -13,6 +13,7 @@ export { ContextMenu } from "../../frontend/src/components/ContextMenu";
 export type { MenuItem, MenuState } from "../../frontend/src/components/ContextMenu";
 export { TypeGlyph } from "../../frontend/src/components/TypeGlyph";
 export { SymbologyGlyph } from "../../frontend/src/components/SymbologyGlyph";
+export { AppLogo } from "../../frontend/src/components/AppLogo";
 export { OvertureLogo } from "../../frontend/src/components/OvertureLogo";
 export { SelectionChipView } from "../../frontend/src/components/SelectionChipView";
 export { DrawToolbarView } from "../../frontend/src/components/DrawToolbarView";

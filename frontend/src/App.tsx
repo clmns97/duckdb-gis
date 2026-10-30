@@ -40,6 +40,7 @@ import { pmSelection } from "./lib/pmtilesSelection";
 import { boxSelect } from "./lib/overtureTiles";
 import { ensureWorkingCatalog } from "./lib/workspace";
 import { unsavedChanges } from "./lib/unsavedChanges";
+import { AppLogo } from "./components/AppLogo";
 
 export function App() {
   const [databases, setDatabases] = useState<CatalogDatabase[] | null>(null);
@@ -244,12 +245,7 @@ export function App() {
   return (
     <div className="flex flex-col h-full">
       <header className="h-14 shrink-0 flex items-center gap-2.5 px-4 border-b border-gray-200 bg-white">
-        <span
-          className="w-[26px] h-[26px] shrink-0 rounded-full bg-black grid place-items-center"
-          aria-hidden="true"
-        >
-          <span className="w-[11px] h-[11px] rounded-full bg-duck-yellow" />
-        </span>
+        <AppLogo className="shrink-0" />
         <b className="font-medium text-lg">duckdb-gis</b>
         <span className="flex-1" />
         <Button variant="ghost" onClick={openProcessingMenu} title="Geoprocessing tools">
