@@ -58,8 +58,8 @@ test("a PMTiles layer selects, hides, round-trips a project and removes @network
   await page.waitForTimeout(2500); // tiles over the network
   const p = await app.mapPx(10.4, 51.1);
   await page.mouse.click(p.x, p.y);
-  await expect.poll(() => page.evaluate(() => window.gisPmSelection.size)).toBeGreaterThan(0);
-  const b = await page.evaluate(() => window.gisPmSelection.bounds());
+  await expect.poll(() => page.evaluate((id) => window.gisSelection.size(id), layer.id)).toBeGreaterThan(0);
+  const b = await page.evaluate((id) => window.gisSelection.bounds(id), layer.id);
   expect(b.xmin <= 10.4 && b.xmax >= 10.4 && b.ymin <= 51.1 && b.ymax >= 51.1).toBe(true);
 
   // project round-trip
@@ -100,8 +100,8 @@ test("Create Layer from Selection copies the picked feature into an editable tab
   });
   expect(p, "a rendered building near the map centre").not.toBeNull();
   await page.mouse.click(p!.x, p!.y);
-  await expect.poll(() => page.evaluate(() => window.gisPmSelection.size)).toBeGreaterThan(0);
-  const picked: number = await page.evaluate(() => window.gisPmSelection.size);
+  await expect.poll(() => page.evaluate((id) => window.gisSelection.size(id), layer.id)).toBeGreaterThan(0);
+  const picked: number = await page.evaluate((id) => window.gisSelection.size(id), layer.id);
 
   await app.sidebarTab("Layers").click();
   await page.getByRole("button", { name: `Actions for ${layer.name}` }).click();

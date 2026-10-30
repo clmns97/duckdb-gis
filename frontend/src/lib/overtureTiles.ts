@@ -11,16 +11,15 @@
 // One code path for all six themes: each archive names its own vector_layers in
 // its metadata (buildings → building/building_part, base → land/water/…, etc.),
 // and each is drawn with one style layer per geometry family (FAMILIES below).
-// The layer is display + selection only — never edited. Clicking / box-selecting
-// features feeds "Create Layer from Selection" (see overture.ts), which
+// The layer is display + selection only — never edited. Selecting features
+// (`lib/selectTool.ts`) feeds "Create Layer from Selection" (see overture.ts), which
 // materialises the real geometry from GeoParquet.
 // ---------------------------------------------------------------------------
 
 import maplibregl from "maplibre-gl";
-import { changeSignal } from "./store";
 import { Protocol, PMTiles } from "pmtiles";
 import { getMap, whenStyleReady } from "./mapBus";
-import { pmSelection, type PmPick } from "./pmtilesSelection";
+import { selection, type Pick } from "./selection";
 import type { OvertureTheme } from "./overture";
 import { bboxOf } from "./bbox";
 
@@ -34,18 +33,33 @@ export function tileArchiveUrl(themeId: string, release: string): string {
 
 // A vector source-layer may mix geometry families in one tile, so it gets one
 // style layer per family (fill / line / circle), filtered on `$type`.
+// Selected features (feature-state `selected`) draw amber, as in deck layers.
+const sel = (on: string, off: string) => [
+  "case",
+  ["boolean", ["feature-state", "selected"], false],
+  on,
+  off,
+];
 const FAMILIES = [
   {
     type: "fill",
     geom: "Polygon",
-    paint: { "fill-color": "#6366f1", "fill-opacity": 0.35, "fill-outline-color": "#494ab9" },
+    paint: {
+      "fill-color": sel("#ff9f1c", "#6366f1"),
+      "fill-opacity": 0.35,
+      "fill-outline-color": sel("#d97706", "#494ab9"),
+    },
   },
-  { type: "line", geom: "LineString", paint: { "line-color": "#494ab9", "line-width": 2 } },
+  {
+    type: "line",
+    geom: "LineString",
+    paint: { "line-color": sel("#d97706", "#494ab9"), "line-width": 2 },
+  },
   {
     type: "circle",
     geom: "Point",
     paint: {
-      "circle-color": "#6366f1",
+      "circle-color": sel("#ff9f1c", "#6366f1"),
       "circle-radius": 4,
       "circle-stroke-color": "#ffffff",
       "circle-stroke-width": 1.2,
@@ -107,9 +121,9 @@ export async function addOvertureTileLayer(
   const styleLayerIds: string[] = [];
 
   const apply = (map: maplibregl.Map) => {
-    installSelectionHandlers(map);
     if (!map.getSource(sourceId)) {
-      map.addSource(sourceId, { type: "vector", url: `pmtiles://${url}` });
+      // `promoteId`: key features by their GERS id, for feature-state highlight.
+      map.addSource(sourceId, { type: "vector", url: `pmtiles://${url}`, promoteId: "id" });
     }
     for (const vl of vectorLayers) {
       for (const fam of FAMILIES) {
@@ -146,7 +160,8 @@ export function removeOvertureTileLayer(layerId: string): void {
   // outlives the layer for the rest of the app's lifetime.
   if (entry) protocol?.tiles.delete(entry.url);
   registry.delete(layerId);
-  pmSelection.clear(layerId);
+  highlighted.delete(layerId);
+  selection.clear(layerId);
 }
 
 export function setOvertureTileVisible(layerId: string, visible: boolean): void {
@@ -159,132 +174,46 @@ export function setOvertureTileVisible(layerId: string, visible: boolean): void 
   }
 }
 
-/** Style-layer ids across all *visible* PMTiles layers (for queryRenderedFeatures). */
-function visibleStyleLayerIds(): string[] {
-  const ids: string[] = [];
-  for (const entry of registry.values()) {
-    if (entry.visible) ids.push(...entry.styleLayerIds);
-  }
-  return ids;
-}
-
 // --- Selection -------------------------------------------------------------
 
-// Group rendered-feature hits by owning app layer, de-duped on GERS id.
-function picksByLayer(features: maplibregl.MapGeoJSONFeature[]): Map<string, PmPick[]> {
-  const byLayer = new Map<string, Map<string, PmPick>>();
-  for (const f of features) {
-    const layerId = styleLayerToLayer.get(f.layer.id);
+/** Features of one PMTiles layer inside a canvas-pixel rect, de-duped on GERS
+ *  id, topmost first. The select gestures live in `lib/selectTool.ts`. */
+export function pickTileRect(
+  layerId: string,
+  p0: maplibregl.PointLike,
+  p1: maplibregl.PointLike,
+): Pick[] {
+  const entry = registry.get(layerId);
+  const map = getMap();
+  if (!entry?.visible || !map) return [];
+  const picks = new Map<string, Pick>();
+  for (const f of map.queryRenderedFeatures([p0, p1], { layers: entry.styleLayerIds })) {
     const id = f.properties?.id;
-    if (!layerId || id == null) continue;
-    const key = String(id);
-    let picks = byLayer.get(layerId);
-    if (!picks) byLayer.set(layerId, (picks = new Map()));
-    if (!picks.has(key)) {
-      const coords = "coordinates" in f.geometry ? f.geometry.coordinates : [];
-      picks.set(key, { id: key, bbox: bboxOf(coords) });
+    if (id == null || picks.has(String(id))) continue;
+    const coords = "coordinates" in f.geometry ? f.geometry.coordinates : [];
+    picks.set(String(id), { key: String(id), bbox: bboxOf(coords), sourceLayer: f.sourceLayer });
+  }
+  return [...picks.values()];
+}
+
+// Selected features draw amber through MapLibre feature-state (the paint
+// expressions in FAMILIES); mirror the selection store into it on each change.
+const highlighted = new Map<string, Pick[]>(); // layerId -> picks flagged now
+function syncHighlight(): void {
+  const map = getMap();
+  if (!map) return;
+  for (const [layerId, entry] of registry) {
+    const want = selection.picks(layerId);
+    const keep = new Set(want.map((p) => p.key));
+    for (const p of highlighted.get(layerId) ?? []) {
+      if (!keep.has(p.key)) {
+        map.setFeatureState({ source: entry.sourceId, sourceLayer: p.sourceLayer, id: p.key }, { selected: false });
+      }
     }
+    for (const p of want) {
+      map.setFeatureState({ source: entry.sourceId, sourceLayer: p.sourceLayer, id: p.key }, { selected: true });
+    }
+    highlighted.set(layerId, want);
   }
-  const out = new Map<string, PmPick[]>();
-  for (const [layerId, picks] of byLayer) out.set(layerId, [...picks.values()]);
-  return out;
 }
-
-// Box-select mode: while on, a drag paints a rectangle and selects everything
-// under it (QGIS "Select Features by Area"). Off, the map pans normally.
-let selectMode = false;
-const modeChanges = changeSignal();
-export const boxSelect = {
-  get active(): boolean {
-    return selectMode;
-  },
-  toggle(): void {
-    selectMode = !selectMode;
-    modeChanges.emit();
-  },
-  set(on: boolean): void {
-    if (on === selectMode) return;
-    selectMode = on;
-    modeChanges.emit();
-  },
-  subscribe: modeChanges.subscribe,
-};
-
-function applyPicks(layerHits: Map<string, PmPick[]>, additive: boolean): void {
-  if (layerHits.size === 0) {
-    if (!additive) pmSelection.clear();
-    return;
-  }
-  // Topmost/first hit layer wins scope (selection is single-layer, T-058).
-  const [layerId, picks] = [...layerHits][0];
-  pmSelection.select(layerId, picks, additive);
-}
-
-let handlersInstalled = false;
-function installSelectionHandlers(map: maplibregl.Map): void {
-  if (handlersInstalled) return;
-  handlersInstalled = true;
-
-  // Click-select: hit-test the point against visible PMTiles layers.
-  map.on("click", (e) => {
-    if (selectMode) return; // drag handler owns interactions in box-select mode
-    const layers = visibleStyleLayerIds();
-    if (layers.length === 0) return;
-    const feats = map.queryRenderedFeatures(e.point, { layers });
-    applyPicks(picksByLayer(feats), e.originalEvent.shiftKey);
-  });
-
-  installBoxDrag(map);
-}
-
-function installBoxDrag(map: maplibregl.Map): void {
-  const container = map.getContainer();
-  let start: maplibregl.Point | null = null;
-  let box: HTMLDivElement | null = null;
-  let additive = false;
-
-  const onMouseDown = (e: MouseEvent) => {
-    if (!selectMode || e.button !== 0) return;
-    e.preventDefault();
-    additive = e.shiftKey;
-    map.dragPan.disable();
-    start = new maplibregl.Point(e.clientX, e.clientY);
-    box = document.createElement("div");
-    box.style.cssText =
-      "position:fixed;z-index:50;pointer-events:none;border:1px solid #6366f1;background:rgba(99,102,241,0.2);";
-    document.body.appendChild(box);
-    document.addEventListener("mousemove", onMouseMove);
-    document.addEventListener("mouseup", onMouseUp);
-  };
-
-  const onMouseMove = (e: MouseEvent) => {
-    if (!start || !box) return;
-    const x = Math.min(e.clientX, start.x);
-    const y = Math.min(e.clientY, start.y);
-    box.style.left = `${x}px`;
-    box.style.top = `${y}px`;
-    box.style.width = `${Math.abs(e.clientX - start.x)}px`;
-    box.style.height = `${Math.abs(e.clientY - start.y)}px`;
-  };
-
-  const onMouseUp = (e: MouseEvent) => {
-    document.removeEventListener("mousemove", onMouseMove);
-    document.removeEventListener("mouseup", onMouseUp);
-    map.dragPan.enable();
-    box?.remove();
-    const from = start;
-    start = null;
-    box = null;
-    if (!from) return;
-    const rect = container.getBoundingClientRect();
-    const p0 = new maplibregl.Point(from.x - rect.left, from.y - rect.top);
-    const p1 = new maplibregl.Point(e.clientX - rect.left, e.clientY - rect.top);
-    const layers = visibleStyleLayerIds();
-    if (layers.length === 0) return;
-    // A zero-area drag (a click in box mode) still hit-tests at the point.
-    const feats = map.queryRenderedFeatures([p0, p1], { layers });
-    applyPicks(picksByLayer(feats), additive);
-  };
-
-  container.addEventListener("mousedown", onMouseDown);
-}
+selection.subscribe(syncHighlight);

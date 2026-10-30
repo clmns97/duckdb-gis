@@ -15,7 +15,7 @@ function Stage({ count }: { count: number }) {
   return (
     <div className="relative w-[340px] h-[90px] bg-gray-100 rounded-lg overflow-hidden">
       <div className="absolute top-3 left-3">
-        <SelectionChipView count={count} onClear={() => {}} />
+        <SelectionChipView count={count} layer="regions" onClear={() => {}} />
       </div>
     </div>
   );

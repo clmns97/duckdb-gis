@@ -18,7 +18,7 @@ import { query, sqlLit, str, ident } from "./duckdb";
 import { layers, sanitizeIdent } from "./layers";
 import { OVERTURE_BUCKET, ensureOvertureAccess } from "./remote";
 import { OVERTURE_TILES_BASE } from "./overtureTiles";
-import { pmSelection } from "./pmtilesSelection";
+import { selection } from "./selection";
 import type { Bbox } from "./bbox";
 import { unsavedChanges } from "./unsavedChanges";
 
@@ -208,8 +208,8 @@ export function addOvertureLayers(req: OvertureRequest): void {
  *  read and render (T-029). A city is well under this; a country is over it. */
 const LARGE_EXTENT_DEGREES = 5;
 
-export function isLargePmSelection(): boolean {
-  const b = pmSelection.bounds();
+export function isLargePmSelection(layerId: string): boolean {
+  const b = selection.bounds(layerId);
   return (
     b != null && (b.xmax - b.xmin > LARGE_EXTENT_DEGREES || b.ymax - b.ymin > LARGE_EXTENT_DEGREES)
   );
@@ -224,9 +224,13 @@ export function isLargePmSelection(): boolean {
  * The caller (Layers panel) owns the large-selection warning
  * ({@link isLargePmSelection}).
  */
-export async function createLayerFromSelection(theme: OvertureTheme, release: string): Promise<void> {
-  const ids = pmSelection.ids();
-  const bbox = pmSelection.bounds();
+export async function createLayerFromSelection(
+  layerId: string,
+  theme: OvertureTheme,
+  release: string,
+): Promise<void> {
+  const ids = selection.keys(layerId).map(String);
+  const bbox = selection.bounds(layerId);
   if (ids.length === 0 || !bbox) return;
   await ensureOvertureAccess();
   const stamp = Date.now().toString(36);

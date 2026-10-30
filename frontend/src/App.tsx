@@ -36,8 +36,7 @@ import { attach } from "./lib/attach";
 import { basemap, basemapMenuItems } from "./lib/basemaps";
 import { toolMenuItems } from "./lib/geoprocessing";
 import { addOvertureLayers, createLayerFromSelection, type OvertureRequest } from "./lib/overture";
-import { pmSelection } from "./lib/pmtilesSelection";
-import { boxSelect } from "./lib/overtureTiles";
+import { selectTool } from "./lib/selectTool";
 import { ensureWorkingCatalog } from "./lib/workspace";
 import { unsavedChanges } from "./lib/unsavedChanges";
 import { AppLogo } from "./components/AppLogo";
@@ -236,9 +235,9 @@ export function App() {
       gisSelection: selection,
       gisEditing: editing,
       gisQuery: query,
-      gisOverture: { addOvertureLayers, createLayerFromSelection, boxSelect },
+      gisOverture: { addOvertureLayers, createLayerFromSelection },
+      gisSelectTool: selectTool,
       gisLayers: layers,
-      gisPmSelection: pmSelection,
     });
   }, []);
 

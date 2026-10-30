@@ -10,7 +10,7 @@ import { Table, makeVector, type RecordBatch, type Vector } from "apache-arrow";
 import { query, queryArrow, str, type QueryOptions } from "./duckdb";
 import { wkbToGeoArrow } from "./wkb";
 import { getMap, fitBounds } from "./mapBus";
-import { selection, FID, fidTaggedRelation, cleanSql } from "./selection";
+import { selection, FID, fidTaggedRelation, cleanSql, type Pick } from "./selection";
 import type { PickingInfo } from "@deck.gl/core";
 
 // ---------------------------------------------------------------------------
@@ -53,6 +53,8 @@ export function requestSync(): void {
 // can rebuild its deck.gl layers (with updated highlight colors) without
 // re-querying DuckDB. Composed *over* the persistent added layers (see `added`).
 let rendered: { table: Table; kind: GeometryKind; source: string } | null = null;
+/** The layers-store id of the Run preview, its key in the selection store. */
+export const PREVIEW_ID = "L_sql_preview";
 // Whether the Run preview is drawn. The SQL-result temp layer (T-027) toggles
 // this to hide/show without re-querying — selection and highlight state survive.
 let renderedVisible = true;
@@ -74,11 +76,28 @@ interface AddedLayer {
    *  clobbers the user's own show/hide state. A layer draws only when
    *  `visible && !suppressed`. */
   suppressed: boolean;
-  /** The inner source query (projects `geom`), recorded so a picked feature can
-   *  set it as the active selection source (T-041) for downstream tools. */
+  /** The inner source query (projects `geom`): what a tool feeds through
+   *  `fidTaggedRelation` to rebuild the selected rows (T-041). */
   source: string;
 }
 const added = new Map<string, AddedLayer>();
+
+// The active layer (#110): the only layer deck makes pickable, so a click or a
+// box selects features of the active layer even where another layer covers it.
+let pickableId: string | null = null;
+
+/** Make `id` (the active layer) the one pickable deck layer. */
+export function setPickableLayer(id: string | null): void {
+  if (id === pickableId) return;
+  pickableId = id;
+  syncOverlay();
+}
+
+/** The source query of a deck layer (or the Run preview), for tools. */
+export function deckSource(id: string): string | null {
+  if (id === PREVIEW_ID) return rendered?.source ?? null;
+  return added.get(id)?.source ?? null;
+}
 
 // Explicit bottom→top draw order for the added layers (T-031). When set, it is
 // the single source of truth for z-order and overrides the Map's insertion
@@ -107,8 +126,8 @@ function ensureOverlay(map: maplibregl.Map): MapboxOverlay {
     // (see syncOverlay). The read-only GeoArrow path is otherwise unchanged.
     interleaved: true,
     layers: [],
-    // Click a feature to select it; shift-click adds/removes; clicking empty
-    // map clears. Picking info comes from the GeoArrow layers (pickable below).
+    // Click a feature of the active layer to select it; shift-click adds or
+    // removes; clicking empty map clears. Select mode handles its own gestures.
     onClick: handleClick,
   });
   map.addControl(overlay);
@@ -140,23 +159,15 @@ const fidAt = (info: FidInfo): number => {
   return Number(fids.get(info.index));
 };
 
-// A feature highlights only when it belongs to the active selection layer AND
-// its fid is selected. Selection is scoped to one source at a time (T-041), so
-// the source guard stops fid 1 in layer B lighting up because fid 1 in layer A
-// (a different `__fid` space) is selected.
-const isActiveSel = (source: string, fid: number): boolean =>
-  selection.source() === source && selection.has(fid);
-
-// With nothing selected in this layer (always so right after a Run), hand deck.gl
-// the plain value: a constant attribute instead of an accessor called per
-// feature. Layers are rebuilt on every selection change, so this re-evaluates.
-const hasActiveSel = (source: string): boolean =>
-  selection.size > 0 && selection.source() === source;
-
+// Selection is kept per layer (#110), each in its own `__fid` space, so a
+// feature highlights when its fid is selected *in its own layer*. With nothing
+// selected in a layer (always so right after a Run), hand deck.gl the plain
+// value: a constant attribute instead of an accessor called per feature.
+// Layers are rebuilt on every selection change, so this re-evaluates.
 type Color = [number, number, number] | [number, number, number, number];
-const acc = <T extends Color | number>(source: string, base: T, sel: T) =>
-  (hasActiveSel(source)
-    ? (info: FidInfo) => (isActiveSel(source, fidAt(info)) ? sel : base)
+const acc = <T extends Color | number>(layerId: string, base: T, sel: T) =>
+  (selection.size(layerId) > 0
+    ? (info: FidInfo) => (selection.has(layerId, fidAt(info)) ? sel : base)
     : base) as never;
 
 // `updateTriggers` value shared by every highlight accessor.
@@ -185,27 +196,47 @@ function fidFrom(info: PickingInfo, table: Table, batchIdx: number): number | nu
   return null;
 }
 
-// Resolve a pick to its `__fid` *and* the source query of the layer it hit
-// (T-041), so the selection can scope itself to that layer. The layer id encodes
-// which render path was hit: `geoarrow-<t>-<i>` is the Run preview;
+// Resolve a pick to its `__fid` and the id of the layer it hit. The deck layer
+// id encodes which render path was hit: `geoarrow-<t>-<i>` is the Run preview;
 // `added-<id>-<t>-<i>` is a persistent added layer (ids are word-char only, so
 // the trailing `-<t>-<i>` is unambiguous). See batchLayers for `<t>`.
-function resolvePick(info: PickingInfo): { fid: number; source: string } | null {
+function resolvePick(info: PickingInfo): { fid: number; layerId: string } | null {
   const id = info.layer?.id ?? "";
   const prev = /^geoarrow-\d+-(\d+)$/.exec(id);
   if (prev && rendered) {
     const fid = fidFrom(info, rendered.table, Number(prev[1]));
-    return fid == null ? null : { fid, source: rendered.source };
+    return fid == null ? null : { fid, layerId: PREVIEW_ID };
   }
   const add = /^added-(.+)-\d+-(\d+)$/.exec(id);
   if (add) {
     const al = added.get(add[1]);
     if (al) {
       const fid = fidFrom(info, al.table, Number(add[2]));
-      if (fid != null) return { fid, source: al.source };
+      if (fid != null) return { fid, layerId: add[1] };
     }
   }
   return null;
+}
+
+/** Whether `id` is drawn by deck (as opposed to a PMTiles layer). */
+export const isDeckLayer = (id: string): boolean =>
+  id === PREVIEW_ID ? rendered != null : added.has(id);
+
+/** Features of the pickable (active) deck layer inside a canvas-pixel rect. */
+export function pickDeckRect(x: number, y: number, width: number, height: number): Pick[] {
+  if (!overlay || !pickableId) return [];
+  const keys = new Set<number>();
+  for (const info of overlay.pickObjects({ x, y, width: Math.max(width, 1), height: Math.max(height, 1) })) {
+    const pick = resolvePick(info);
+    if (pick?.layerId === pickableId) keys.add(pick.fid);
+  }
+  return [...keys].map((key) => ({ key }));
+}
+
+// Select mode (`lib/selectTool.ts`) owns map gestures while it is on.
+let selectGate: (() => boolean) | null = null;
+export function setSelectGate(gate: () => boolean): void {
+  selectGate = gate;
 }
 
 // deck.gl's mjolnir `click` event does not reliably carry the Shift modifier
@@ -226,14 +257,15 @@ if (typeof window !== "undefined") {
 function handleClick(info: PickingInfo, event: { srcEvent?: { shiftKey?: boolean } }): void {
   // While a draw/edit mode is active, Terra Draw owns the click — don't pick or
   // clear the selection out from under it (T-025).
-  if (editGate?.()) return;
+  if (editGate?.() || selectGate?.()) return;
+  if (!pickableId || !isDeckLayer(pickableId)) return; // a PMTiles layer is active
   const additive = Boolean(event?.srcEvent?.shiftKey) || shiftHeld;
   const pick = info?.picked ? resolvePick(info) : null;
-  if (!pick) {
-    if (!additive) selection.clear();
+  if (!pick || pick.layerId !== pickableId) {
+    if (!additive) selection.clear(pickableId);
     return;
   }
-  selection.pick(pick.source, pick.fid, additive);
+  selection.select(pick.layerId, [{ key: pick.fid }], additive ? "toggle" : "replace");
 }
 
 // Rebuild layers in place when the selection changes (no DuckDB round-trip).
@@ -329,58 +361,58 @@ const SEL_FILL: Color = [255, 159, 28, 230];
 const SEL_LINE: Color = [217, 119, 6, 255];
 
 // One deck.gl layer factory per geometry family. Base colours come from a
-// LayerStyle; a selected feature in the active layer draws amber over it (the
-// `source`-scoped accessors above). Persistent added layers (T-024) pass their
+// LayerStyle; a selected feature draws amber over it (the per-layer
+// accessors above). Persistent added layers (T-024) pass their
 // editable style (T-010); the Run preview passes PREVIEW_STYLE.
 type LayerFactory = (
   batch: RecordBatch,
   geom: unknown,
   id: string,
-  source: string,
+  layerId: string,
   s: LayerStyle,
   selFill?: Color,
 ) => Layer;
 
 const FACTORIES: Record<GeometryKind, LayerFactory> = {
-  point: (batch, geom, id, source, s, selFill = SEL_FILL) =>
+  point: (batch, geom, id, layerId, s, selFill = SEL_FILL) =>
     new GeoArrowScatterplotLayer({
       id,
       data: batch,
       getPosition: geom as never,
       pickable: true,
-      getRadius: acc(source, s.pointRadius, s.pointRadius + 2),
+      getRadius: acc(layerId, s.pointRadius, s.pointRadius + 2),
       radiusUnits: "pixels",
-      getFillColor: acc(source, rgba(s.fillColor, s.fillOpacity), selFill),
+      getFillColor: acc(layerId, rgba(s.fillColor, s.fillOpacity), selFill),
       stroked: true,
-      getLineColor: acc(source, opaque(s.lineColor), SEL_LINE),
+      getLineColor: acc(layerId, opaque(s.lineColor), SEL_LINE),
       lineWidthUnits: "pixels",
-      getLineWidth: acc(source, s.lineWidth, s.lineWidth + 1),
+      getLineWidth: acc(layerId, s.lineWidth, s.lineWidth + 1),
       updateTriggers: hiTriggers(),
     }),
-  line: (batch, geom, id, source, s) =>
+  line: (batch, geom, id, layerId, s) =>
     new GeoArrowPathLayer({
       id,
       data: batch,
       getPath: geom as never,
       pickable: true,
-      getColor: acc(source, rgba(s.lineColor, s.fillOpacity), SEL_LINE),
+      getColor: acc(layerId, rgba(s.lineColor, s.fillOpacity), SEL_LINE),
       widthUnits: "pixels",
-      getWidth: acc(source, s.lineWidth, s.lineWidth + 2),
+      getWidth: acc(layerId, s.lineWidth, s.lineWidth + 2),
       capRounded: true,
       jointRounded: true,
       updateTriggers: hiTriggers(),
     }),
-  polygon: (batch, geom, id, source, s, selFill = SEL_FILL) =>
+  polygon: (batch, geom, id, layerId, s, selFill = SEL_FILL) =>
     new GeoArrowPolygonLayer({
       id,
       data: batch,
       getPolygon: geom as never,
       pickable: true,
       filled: true,
-      getFillColor: acc(source, rgba(s.fillColor, s.fillOpacity), selFill),
+      getFillColor: acc(layerId, rgba(s.fillColor, s.fillOpacity), selFill),
       stroked: true,
-      getLineColor: acc(source, opaque(s.lineColor), SEL_LINE),
-      getLineWidth: acc(source, s.lineWidth, s.lineWidth + 1),
+      getLineColor: acc(layerId, opaque(s.lineColor), SEL_LINE),
+      getLineWidth: acc(layerId, s.lineWidth, s.lineWidth + 1),
       lineWidthUnits: "pixels",
       // Triangulate on the main thread instead of fetching the earcut worker from
       // a CDN — deterministic and offline-safe. (Revisit with a self-hosted worker
@@ -452,9 +484,8 @@ export async function renderGeoArrow(userSql: string): Promise<DeckOutcome> {
   const t0 = performance.now();
   const probe = await probeGeometry(inner);
   const kind = geometryKindOf(probe.type);
-  // New render → new feature-id space; drop any stale selection and record the
-  // source query so a downstream tool can rebuild these exact features.
-  selection.setSource(inner);
+  // New render → new feature-id space; drop the preview's stale selection.
+  selection.clear(PREVIEW_ID);
 
   if (probe.count === 0) {
     clearDeck();
@@ -584,17 +615,18 @@ function syncOverlay(): void {
     const make = FACTORIES[al.kind];
     layers.push(
       ...batchLayers(al.table, `added-${id}-`, (b, g, lid) =>
-        make(b, g, lid, al.source, al.style).clone({ visible }),
+        make(b, g, lid, id, al.style).clone({ visible, pickable: id === pickableId }),
       ),
     );
   }
   if (rendered) {
-    const { table, kind, source } = rendered;
+    const { table, kind } = rendered;
     const selFill = kind === "polygon" ? PREVIEW_POLYGON_SEL_FILL : undefined;
     layers.push(
       ...batchLayers(table, "geoarrow-", (b, g, lid) =>
-        FACTORIES[kind](b, g, lid, source, PREVIEW_STYLE[kind], selFill).clone({
+        FACTORIES[kind](b, g, lid, PREVIEW_ID, PREVIEW_STYLE[kind], selFill).clone({
           visible: renderedVisible,
+          pickable: pickableId === PREVIEW_ID,
         }),
       ),
     );
@@ -625,7 +657,7 @@ export interface AddedLayerOutcome {
  * column) and draw it on the overlay, stacked over any existing added layers.
  * Probes the geometry type, encodes it to GeoArrow, and returns the feature
  * count + extent so the caller can frame the map. Re-adding the same `id`
- * replaces it. Not selection-coupled — see `renderGeoArrow` for the pickable path.
+ * replaces it. Pickable while it is the active layer (`setPickableLayer`).
  */
 export async function addDeckLayer(
   id: string,
@@ -645,6 +677,7 @@ export async function addDeckLayer(
   // that re-renders the layer while still editing); default false on first add.
   const suppressed = added.get(id)?.suppressed ?? false;
   added.set(id, { table, kind, style, visible: true, suppressed, source: inner });
+  selection.clear(id); // re-rendered: the old fids no longer line up
   syncOverlay();
   return {
     featureCount: probe.count,
@@ -656,6 +689,7 @@ export async function addDeckLayer(
 
 /** Drop a persistent added layer from the overlay. */
 export function removeDeckLayer(id: string): void {
+  selection.clear(id);
   if (added.delete(id)) syncOverlay();
 }
 
@@ -691,6 +725,7 @@ export function setDeckLayerStyle(id: string, style: LayerStyle): void {
 /** Clear only the editor's Run preview; persistent added layers are kept. */
 export function clearDeck(): void {
   rendered = null;
+  selection.clear(PREVIEW_ID);
   renderedVisible = true;
   syncOverlay();
 }

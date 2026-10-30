@@ -25,9 +25,12 @@ function CursorIcon() {
 
 export function SelectionChipView({
   count,
+  layer,
   onClear,
 }: {
   count: number;
+  /** The layer the selection belongs to. */
+  layer?: string;
   onClear: () => void;
 }) {
   return (
@@ -36,7 +39,9 @@ export function SelectionChipView({
       role="status"
     >
       <CursorIcon />
-      <span>{count} selected</span>
+      <span className="whitespace-nowrap">
+        {count} selected{layer && <span className="text-gray-600"> · {layer}</span>}
+      </span>
       <button
         type="button"
         className="grid place-items-center w-5 h-5 shrink-0 rounded-full cursor-pointer hover:bg-accent/[.14]"
