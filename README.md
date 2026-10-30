@@ -1,9 +1,15 @@
-# duckdb-gis
+<p align="center">
+  <img src="frontend/public/favicon.svg" width="112" alt="duckdb-gis logo: contour lines of a hill in purple on a dark disc">
+</p>
 
-[![Build](https://github.com/clmns97/duckdb-gis/actions/workflows/MainDistributionPipeline.yml/badge.svg?branch=main)](https://github.com/clmns97/duckdb-gis/actions/workflows/MainDistributionPipeline.yml)
-[![DuckDB compatibility](https://github.com/clmns97/duckdb-gis/actions/workflows/Compatibility.yml/badge.svg?branch=main)](https://github.com/clmns97/duckdb-gis/actions/workflows/Compatibility.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![DuckDB 1.4+](https://img.shields.io/badge/DuckDB-1.4%2B-7d66ff.svg)](https://duckdb.org)
+<h1 align="center">duckdb-gis</h1>
+
+<p align="center">
+  <a href="https://github.com/clmns97/duckdb-gis/actions/workflows/MainDistributionPipeline.yml"><img src="https://github.com/clmns97/duckdb-gis/actions/workflows/MainDistributionPipeline.yml/badge.svg?branch=main" alt="Build"></a>
+  <a href="https://github.com/clmns97/duckdb-gis/actions/workflows/Compatibility.yml"><img src="https://github.com/clmns97/duckdb-gis/actions/workflows/Compatibility.yml/badge.svg?branch=main" alt="DuckDB compatibility"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="https://duckdb.org"><img src="https://img.shields.io/badge/DuckDB-1.4%2B-7d66ff.svg" alt="DuckDB 1.4+"></a>
+</p>
 
 **A desktop-style GIS in your browser, with DuckDB as the engine.** `gis` is a
 DuckDB extension: `CALL start_gis()` opens a map UI — layers, a catalog browser,
