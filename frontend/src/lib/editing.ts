@@ -192,10 +192,12 @@ function transformSelectedAbout(
   if (!draw || feats.length === 0) return;
   const [cx, cy] = bboxCenterOf(feats.map((f) => f.geometry));
   const fn = makeFn(cx, cy);
-  for (const f of feats) {
-    draw.updateFeatureGeometry(f.id!, transformGeometry(f.geometry, fn));
-    dirty.add(String(f.id));
-  }
+  ownStep(() => {
+    for (const f of feats) {
+      draw!.updateFeatureGeometry(f.id!, transformGeometry(f.geometry, fn));
+      dirty.add(String(f.id));
+    }
+  });
   refresh();
 }
 
@@ -204,7 +206,7 @@ function transformSelectedAbout(
 function addClones(feats: GeoJSONStoreFeatures[], kind: GeometryKind): void {
   if (!draw) return;
   const clones = feats.map((f) => cloneFeatureOffset(f, kind));
-  draw.addFeatures(clones);
+  ownStep(() => draw!.addFeatures(clones));
   clones.forEach((c) => dirty.add(String(c.id)));
   refresh();
 }
@@ -363,6 +365,17 @@ function settleGesture(): void {
   }
   gestureOpen = false;
   settled = cloneFeatures(workingSnapshot());
+}
+
+/** Run a toolbar edit (delete, merge, duplicate, paste, rotate, scale) as its
+ *  own undo step. Like a finished drawing it's a discrete action, so it closes
+ *  whatever gesture is open before and its own after; otherwise two clicks
+ *  within GESTURE_IDLE_MS (Duplicate then Paste, say) became one step and a
+ *  single undo reverted both. */
+function ownStep(mutate: () => void): void {
+  settleGesture();
+  mutate();
+  settleGesture();
 }
 
 /** Replace the working set with `snap` and reconcile the bookkeeping Commit
@@ -679,7 +692,7 @@ export const editing = {
   /** Delete the feature(s) currently selected in select mode. */
   deleteSelected(): void {
     if (!draw || selectedIds.size === 0) return;
-    draw.removeFeatures([...selectedIds]);
+    ownStep(() => draw!.removeFeatures([...selectedIds]));
     selectedIds.clear();
     refresh();
   },
@@ -779,13 +792,15 @@ export const editing = {
     const merged = JSON.parse(gj);
 
     const survivorRid = feats.map((f) => f.properties?.__rid).find((r) => r != null);
-    draw.removeFeatures(feats.map((f) => f.id!));
     const id = uuid();
     const properties: Record<string, unknown> = { mode: MODE_NAME[kind] };
     if (survivorRid != null) properties.__rid = String(survivorRid);
-    draw.addFeatures([
-      { id, type: "Feature", geometry: merged, properties } as unknown as GeoJSONStoreFeatures,
-    ]);
+    ownStep(() => {
+      draw!.removeFeatures(feats.map((f) => f.id!));
+      draw!.addFeatures([
+        { id, type: "Feature", geometry: merged, properties } as unknown as GeoJSONStoreFeatures,
+      ]);
+    });
     selectedIds.clear();
     dirty.add(id);
     refresh();
