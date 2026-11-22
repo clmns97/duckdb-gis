@@ -13,6 +13,7 @@ import {
   ChevronRight,
   ChevronDown,
   EllipsisVertical,
+  Globe,
 } from "lucide-react";
 import { Dock } from "./components/Dock";
 import { Button } from "./components/Button";
@@ -20,6 +21,7 @@ import { LayersPanel } from "./components/LayersPanel";
 import { OvertureModal } from "./components/OvertureModal";
 import { OvertureLogo } from "./components/OvertureLogo";
 import { AttachModal } from "./components/AttachModal";
+import { WebServiceModal } from "./components/WebServiceModal";
 import { NewLayerModal } from "./components/NewLayerModal";
 import { SaveProjectModal } from "./components/SaveProjectModal";
 import { OpenProjectModal } from "./components/OpenProjectModal";
@@ -38,6 +40,7 @@ import { processingMenuItems, type GeoTool } from "./lib/geoprocessing";
 import { ProcessingModal } from "./components/ProcessingModal";
 import { SelectByModal } from "./components/SelectByModal";
 import { addOvertureLayers, createLayerFromSelection, type OvertureRequest } from "./lib/overture";
+import { webServices } from "./lib/webServices";
 import { selectTool } from "./lib/selectTool";
 import { ensureWorkingCatalog } from "./lib/workspace";
 import { unsavedChanges } from "./lib/unsavedChanges";
@@ -52,7 +55,9 @@ export function App() {
   const [tab, setTab] = useState<"layers" | "browser">("browser");
   const [menu, setMenu] = useState<MenuState | null>(null);
   // The open dialog, if any — at most one at a time.
-  const [dialog, setDialog] = useState<"overture" | "attach" | "newLayer" | "save" | "open" | null>(null);
+  const [dialog, setDialog] = useState<
+    "overture" | "webService" | "attach" | "newLayer" | "save" | "open" | null
+  >(null);
   const closeDialog = () => setDialog(null);
   const [tool, setTool] = useState<GeoTool | null>(null); // open Processing dialog
   const [selectBy, setSelectBy] = useState<"expression" | "location" | null>(null);
@@ -241,6 +246,7 @@ export function App() {
       gisOverture: { addOvertureLayers, createLayerFromSelection },
       gisSelectTool: selectTool,
       gisLayers: layers,
+      gisWebServices: webServices,
     });
   }, []);
 
@@ -310,6 +316,21 @@ export function App() {
                 hint="quick load…"
                 title="Add Overture Maps data (QuickOSM-style)"
                 onClick={() => setDialog("overture")}
+              />
+
+              <QuickAction
+                icon={
+                  <Globe
+                    size={15}
+                    strokeWidth={2}
+                    className="shrink-0 text-accent"
+                    aria-hidden="true"
+                  />
+                }
+                label="Web services"
+                hint="WFS · OGC API · ArcGIS"
+                title="Add a layer from a WFS, OGC API – Features or ArcGIS REST service"
+                onClick={() => setDialog("webService")}
               />
 
               <QuickAction
@@ -473,6 +494,15 @@ export function App() {
       )}
 
       {dialog === "overture" && <OvertureModal onClose={closeDialog} onLoad={loadOverture} />}
+      {dialog === "webService" && (
+        <WebServiceModal
+          onClose={closeDialog}
+          onAdded={() => {
+            setTab("layers");
+            refreshCatalog(); // the new working-catalog table
+          }}
+        />
+      )}
       {dialog === "attach" && <AttachModal onClose={closeDialog} onAttached={refreshCatalog} />}
       {dialog === "newLayer" && (
         <NewLayerModal

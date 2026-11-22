@@ -32,9 +32,11 @@ export function Modal({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // Above dockview's own layers (sashes z-index 99, overlays 999), which would
+  // otherwise take clicks wherever a pane divider crosses the dialog.
   return (
     <div
-      className="fixed inset-0 z-40 flex items-center justify-center bg-gray-900/35"
+      className="fixed inset-0 z-[1001] flex items-center justify-center bg-gray-900/35"
       onClick={onClose}
     >
       <div

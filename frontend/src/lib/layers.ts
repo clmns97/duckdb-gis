@@ -184,7 +184,7 @@ async function sourceSql(s: LayerSource): Promise<string> {
 // Stable, SQL/URL-safe id derived from the fully-qualified source tuple. The
 // same (table, column) always yields the same id, which is also how we dedupe.
 // Word-char-only so it is safe as a MapLibre layer id and an unquoted table name.
-function layerId(s: LayerSource): string {
+export function layerId(s: LayerSource): string {
   return `L_${sanitizeIdent([s.db, s.schema, s.table, s.geomColumn].join("__"))}`;
 }
 

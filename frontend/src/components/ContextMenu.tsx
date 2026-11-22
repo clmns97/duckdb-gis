@@ -133,9 +133,10 @@ export function ContextMenu({
     setPos({ left, top });
   }, [x, y]);
 
+  // Above dockview's layers (sashes 99, overlays 999); below dialogs (Modal).
   return (
     <div
-      className="fixed inset-0 z-20"
+      className="fixed inset-0 z-[1000]"
       onClick={onClose}
       onContextMenu={(e) => e.preventDefault()}
     >

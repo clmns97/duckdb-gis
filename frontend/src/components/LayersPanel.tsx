@@ -7,6 +7,7 @@ import { selection } from "../lib/selection";
 import { errMsg } from "../lib/duckdb";
 import { openAttributes } from "../lib/dockBus";
 import { basemap, basemapMenuItems } from "../lib/basemaps";
+import { webServices, DOWNLOAD_CAP, type ServiceLayerState } from "../lib/webServices";
 import { ContextMenu, type MenuItem, type MenuState } from "./ContextMenu";
 import { LayerProperties } from "./LayerProperties";
 import { SymbologyGlyph } from "./SymbologyGlyph";
@@ -30,6 +31,8 @@ export function LayersPanel() {
   // Re-render on PMTiles selection changes so a layer's "Create Layer from
   // Selection" count/enablement stays current (T-058).
   useSyncExternalStore(selection.subscribe, () => selection.version);
+  // Re-render when a web-service layer refetches, for its partial/fetching badge (#121).
+  useSyncExternalStore(webServices.subscribe, () => webServices.version);
   const list = layers.list();
   const [menu, setMenu] = useState<MenuState | null>(null);
   // Inline surface for a failed "Toggle editing" (e.g. layer too large / still
@@ -77,6 +80,7 @@ export function LayersPanel() {
     // while editing one layer, the item is disabled on the others.
     const editingThis = editing.target?.kind === "existing" && editing.target.layerId === layer.id;
     const editingElsewhere = editing.isEditing() && !editingThis;
+    const service = webServices.get(layer.id);
     const items: MenuItem[] = [
       {
         label: editingThis ? "Stop editing" : "Toggle editing",
@@ -121,6 +125,28 @@ export function LayersPanel() {
                 );
               },
             } as MenuItem,
+          ]
+        : []),
+      // A layer added from a web feature service (#121) holds one fetch of its
+      // features: refetch them for the current view, or the whole layer.
+      ...(service
+        ? [
+            {
+              label: "Refresh for current view",
+              disabled: service.busy,
+              onSelect: () => {
+                setEditErr(null);
+                webServices.refreshForView(layer.id).catch((err) => setEditErr(errMsg(err)));
+              },
+            },
+            {
+              label: "Download whole layer…",
+              disabled: service.busy,
+              onSelect: () => {
+                setEditErr(null);
+                void downloadWholeLayer(layer, setEditErr);
+              },
+            },
           ]
         : []),
       {
@@ -243,6 +269,7 @@ export function LayersPanel() {
               temp
             </span>
           )}
+          <ServiceBadge state={webServices.get(layer.id)} />
           {layer.status === "loading" && (
             <span className="shrink-0 text-xs text-gray-500">loading…</span>
           )}
@@ -323,5 +350,48 @@ export function LayersPanel() {
       <LayerProperties layerId={propsId} onClose={() => setPropsId(null)} />
     )}
     </>
+  );
+}
+
+// "Download whole layer" (#121): ask the service how big the layer is first,
+// so a 2-million-feature layer isn't fetched by accident.
+async function downloadWholeLayer(layer: ActiveLayer, onError: (message: string) => void) {
+  try {
+    const total = await webServices.countAll(layer.id);
+    const cap = DOWNLOAD_CAP.toLocaleString();
+    const question =
+      total == null
+        ? `The service doesn't say how many features "${layer.name}" has. Download up to ${cap}?`
+        : total > DOWNLOAD_CAP
+          ? `"${layer.name}" has ${total.toLocaleString()} features — only the first ${cap} will be downloaded. Continue?`
+          : `Download all ${total.toLocaleString()} features of "${layer.name}"?`;
+    if (!window.confirm(question)) return;
+    await webServices.downloadAll(layer.id);
+  } catch (err) {
+    onError(errMsg(err));
+  }
+}
+
+// A web-service layer's fetch state (#121): "fetching…" while it refetches,
+// "partial" when it holds fewer features than the service has.
+function ServiceBadge({ state }: { state: ServiceLayerState | undefined }) {
+  if (!state) return null;
+  if (state.busy) {
+    return (
+      <span className="shrink-0 text-xs text-gray-500">
+        fetching{state.fetched ? ` ${state.fetched.toLocaleString()}` : ""}…
+      </span>
+    );
+  }
+  if (!state.capped) return null;
+  const of = state.total == null ? "more" : state.total.toLocaleString();
+  const where = state.scope === "view" ? " in the view" : "";
+  return (
+    <span
+      className="shrink-0 rounded bg-subtle border border-gray-200 px-1 text-[10px] leading-tight text-gray-500 uppercase tracking-wide"
+      title={`Showing ${state.fetched.toLocaleString()} of ${of} features${where} — zoom in and use “Refresh for current view”, or “Download whole layer…”`}
+    >
+      partial
+    </span>
   );
 }
