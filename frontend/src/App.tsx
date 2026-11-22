@@ -30,7 +30,7 @@ import { ROW_BASE, LEAD_SLOT, KEBAB_SLOT } from "./components/rowSlots";
 import { loadCatalog, type CatalogDatabase, type CatalogTable } from "./lib/catalog";
 import { query, errMsg } from "./lib/duckdb";
 import { getMap } from "./lib/mapBus";
-import { renderGeoArrow, clearDeck } from "./lib/deckRender";
+import { renderGeoArrow, clearDeck, drawnLayerIds } from "./lib/deckRender";
 import { selection } from "./lib/selection";
 import { layers } from "./lib/layers";
 import { editing } from "./lib/editing";
@@ -239,7 +239,7 @@ export function App() {
     if (!import.meta.env.DEV) return;
     Object.assign(window, {
       gisMap: getMap,
-      gisDeck: { renderGeoArrow, clearDeck },
+      gisDeck: { renderGeoArrow, clearDeck, drawnLayerIds },
       gisSelection: selection,
       gisEditing: editing,
       gisQuery: query,
@@ -328,8 +328,8 @@ export function App() {
                   />
                 }
                 label="Web services"
-                hint="WFS · OGC API · ArcGIS"
-                title="Add a layer from a WFS, OGC API – Features or ArcGIS REST service"
+                hint="WFS · WMS · WMTS"
+                title="Add a layer from a WFS, WMS, WMTS, OGC API – Features or ArcGIS REST service"
                 onClick={() => setDialog("webService")}
               />
 

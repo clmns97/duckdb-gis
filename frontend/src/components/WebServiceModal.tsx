@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Globe } from "lucide-react";
 import {
   webServices,
+  isRasterService,
   SERVICE_TYPE_LABEL,
   VIEW_CAP,
   type Service,
@@ -9,17 +10,20 @@ import {
 } from "../lib/webServices";
 import { FormModal, ModalNote, SelectField, TextField } from "./Modal";
 
-// Add a layer from a web feature service (#121): WFS, OGC API – Features or
-// ArcGIS REST, QGIS's "Add WFS Layer" in one dialog. Two steps on one form:
-// Connect lists the service's layers, then Add layer fetches the chosen one's
-// features in the current map view (via DuckDB, lib/webServices.ts) into a
-// working-catalog table. Editing the address or type drops the connection.
+// Add a layer from a web service: QGIS's "Add WFS Layer" and "Add WMS/WMTS
+// Layer" in one dialog. Two steps on one form: Connect lists the service's
+// layers, then Add layer either fetches the chosen one's features in the current
+// map view (WFS, OGC API – Features, ArcGIS REST — via DuckDB into a
+// working-catalog table, #121) or draws its images as raster tiles (WMS/WMTS,
+// #122). Editing the address or type drops the connection.
 
 const TYPE_OPTIONS: Array<{ value: ServiceType | "auto"; label: string }> = [
   { value: "auto", label: "Detect from address" },
   { value: "wfs", label: SERVICE_TYPE_LABEL.wfs },
   { value: "ogcapi", label: SERVICE_TYPE_LABEL.ogcapi },
   { value: "arcgis", label: SERVICE_TYPE_LABEL.arcgis },
+  { value: "wms", label: SERVICE_TYPE_LABEL.wms },
+  { value: "wmts", label: SERVICE_TYPE_LABEL.wmts },
 ];
 
 export function WebServiceModal({
@@ -35,6 +39,7 @@ export function WebServiceModal({
   const [layerId, setLayerId] = useState("");
   // Features fetched so far while adding — a slow service takes seconds a page.
   const [progress, setProgress] = useState<string | null>(null);
+  const raster = service ? isRasterService(service) : type === "wms" || type === "wmts";
 
   return (
     <FormModal
@@ -45,7 +50,7 @@ export function WebServiceModal({
         </span>
       }
       action={service ? "Add layer" : "Connect"}
-      busyAction={service ? (progress ?? "Fetching features…") : "Connecting…"}
+      busyAction={service ? (progress ?? (raster ? "Checking the images…" : "Fetching features…")) : "Connecting…"}
       canSubmit={service ? layerId !== "" : url.trim() !== ""}
       onSubmit={async () => {
         if (!service) {
@@ -70,13 +75,21 @@ export function WebServiceModal({
       }}
       onClose={onClose}
       note={
-        <>
-          DuckDB fetches the features in the current map view (up to{" "}
-          {VIEW_CAP.toLocaleString()}) into a table in the working database, so the layer
-          works like any other table. Pan or zoom first to choose the area; afterwards the
-          layer's menu can refresh it for a new view or download the whole layer. Public
-          services only for now.
-        </>
+        raster ? (
+          <>
+            The layer's images are drawn straight from the service as the map moves —
+            nothing is stored. The map needs the layer in Web Mercator (EPSG:3857), and the
+            service must allow browser access to its images (CORS).
+          </>
+        ) : (
+          <>
+            DuckDB fetches the features in the current map view (up to{" "}
+            {VIEW_CAP.toLocaleString()}) into a table in the working database, so the layer
+            works like any other table. Pan or zoom first to choose the area; afterwards the
+            layer's menu can refresh it for a new view or download the whole layer. Public
+            services only for now.
+          </>
+        )
       }
     >
       <TextField
@@ -109,7 +122,7 @@ export function WebServiceModal({
             value={layerId}
             options={service.layers.map((l) => ({
               value: l.id,
-              label: l.title === l.id ? l.id : `${l.title} — ${l.id}`,
+              label: (l.title === l.id ? l.id : `${l.title} — ${l.id}`) + (l.unsupported ? " (can't be drawn)" : ""),
             }))}
             onChange={setLayerId}
           />

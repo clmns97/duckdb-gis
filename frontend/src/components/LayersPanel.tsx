@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore } from "react";
-import { Eye, EyeOff, GripVertical, X, Map as MapIcon, EllipsisVertical } from "lucide-react";
+import { Eye, EyeOff, GripVertical, X, Map as MapIcon, EllipsisVertical, Image as ImageIcon } from "lucide-react";
 import { layers, type ActiveLayer } from "../lib/layers";
 import { editing, canEditInPlace } from "../lib/editing";
 import { createLayerFromSelection, isLargePmSelection } from "../lib/overture";
@@ -241,7 +241,11 @@ export function LayersPanel() {
             {layer.visible ? <Eye size={14} strokeWidth={2} /> : <EyeOff size={14} strokeWidth={2} />}
           </button>
           <span className={GLYPH_SLOT}>
-            <SymbologyGlyph kind={layer.geometryKind} style={layer.style} />
+            {layer.kind === "raster" ? (
+              <ImageIcon size={15} strokeWidth={2} className="text-gray-500" aria-hidden="true" />
+            ) : (
+              <SymbologyGlyph kind={layer.geometryKind} style={layer.style} />
+            )}
           </span>
           <span
             className="flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap"

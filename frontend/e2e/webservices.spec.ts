@@ -50,9 +50,13 @@ test("the service type is guessed from the address", async ({ app }) => {
       "https://example.org/arcgis/rest/services/X/MapServer",
       "https://example.org/ogcapi/collections/lakes/items",
       "https://example.org/somewhere",
+      "https://sgx.geodatenzentrum.de/wms_topplus_open",
+      "https://example.org/geoserver/ows?SERVICE=WMS&REQUEST=GetCapabilities",
+      "https://sgx.geodatenzentrum.de/wmts_topplus_open/1.0.0/WMTSCapabilities.xml",
+      "https://mapsneu.wien.gv.at/basemapneu/1.0.0/WMTSCapabilities.xml",
     ].map((u) => m.guessType(u)),
   );
-  expect(guesses).toEqual(["wfs", "wfs", "wfs", "arcgis", "arcgis", "ogcapi", null]);
+  expect(guesses).toEqual(["wfs", "wfs", "wfs", "arcgis", "arcgis", "ogcapi", null, "wms", "wms", "wmts", "wmts"]);
 });
 
 test("a non-http address is refused in the dialog", async ({ app, page }) => {
@@ -176,4 +180,142 @@ test("a WFS without GeoJSON is read as GML @network", async ({ app }) => {
   const cols = (await app.sql(`DESCRIBE memory.main."${added.table}"`)).map((c) => c.column_name);
   expect(cols).toEqual(expect.arrayContaining(["NAME", "geom"]));
   expect(cols).not.toContain("gml_id");
+});
+
+// --- WMS / WMTS (#122) -------------------------------------------------------
+
+/** A fixture capabilities document, served by Vite and fetched by DuckDB. */
+const fixture = (app: App, name: string) => new URL(`/e2e/data/${name}`, app.page.url()).href;
+
+test("WMS and WMTS capabilities become tile templates, or a reason they can't be drawn", async ({ app, page }) => {
+  const [wms, wmts] = await page.evaluate(
+    ([a, b]) => Promise.all([window.gisWebServices.connect(a, "wms"), window.gisWebServices.connect(b, "wmts")]),
+    [fixture(app, "wms-capabilities.xml"), fixture(app, "wmts-capabilities.xml")],
+  );
+
+  expect(wms.title).toBe("Fixture WMS");
+  const [topo, utm] = wms.layers;
+  expect(topo.raster).toMatchObject({ type: "wms", tileSize: 256, bounds: [5, 47, 15, 55], layer: "topo" });
+  // EPSG:3857 inherited from the parent layer; PNG preferred over JPEG.
+  expect(topo.raster.url).toContain("LAYERS=topo&STYLES=&CRS=EPSG:3857&BBOX={bbox}&WIDTH=256&HEIGHT=256&FORMAT=image%2Fpng");
+  expect(utm.raster).toBeUndefined();
+  expect(utm.unsupported).toMatch(/Web Mercator/);
+
+  const [temp, roads, parcels] = wmts.layers;
+  // RESTful: style, dimension default and set filled in; levels 2–4 by identifier.
+  expect(temp.raster).toMatchObject({
+    type: "wmts",
+    url: "https://tiles.example.org/temp/shaded/2026-01-01/merc/{z}/{y}/{x}.png",
+    matrices: [null, null, "L2", "L3", "L4"],
+    minZoom: 2,
+    maxZoom: 4,
+    bounds: [-180, -85, 180, 85],
+  });
+  // No ResourceURL: KVP GetTile at the advertised endpoint.
+  expect(roads.raster.url).toBe(
+    "https://tiles.example.org/kvp?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=roads&STYLE=default" +
+      "&TILEMATRIXSET=merc&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image%2Fjpeg",
+  );
+  expect(parcels.unsupported).toMatch(/GoogleMapsCompatible.*only utm/);
+});
+
+test("a raster layer that can't draw is refused with the reason", async ({ app, page }) => {
+  const errors = await page.evaluate(async (url) => {
+    const s = await window.gisWebServices.connect(url, "wms");
+    const msg = (p: Promise<unknown>) => p.then(() => "added", (e: Error) => e.message);
+    const [topo, utm] = s.layers;
+    return [
+      await msg(window.gisWebServices.addLayer(s, utm)),
+      // GetMap goes to the fixture address, which answers XML, not an image.
+      await msg(window.gisWebServices.addLayer(s, topo)),
+      // Nothing listens there: the same failure a server without CORS gives.
+      await msg(
+        window.gisWebServices.addLayer(s, { ...topo, raster: { ...topo.raster, url: "http://127.0.0.1:9/?bbox={bbox}" } }),
+      ),
+    ];
+  }, fixture(app, "wms-capabilities.xml"));
+  expect(errors[0]).toMatch(/isn't offered in Web Mercator/);
+  expect(errors[1]).toMatch(/didn't answer with an image \(HTTP 200, (application|text)\/xml/);
+  expect(errors[2]).toMatch(/CORS headers/);
+  expect(await app.layers()).toEqual([]);
+});
+
+test("a raster layer goes under the vector layers, reorders, and keeps opacity across save and open", async ({ app, page }, info) => {
+  const path = info.outputPath("project.duckdb");
+  await app.addLayer("cities");
+  const spec = {
+    type: "wmts",
+    url: "http://127.0.0.1:9/{z}/{x}/{y}.png", // never loads; this is about the layer, not tiles
+    matrices: ["0", "1", "2"],
+    tileSize: 256,
+    minZoom: 0,
+    maxZoom: 2,
+    bounds: null,
+    service: "http://127.0.0.1:9/wmts",
+    layer: "fake",
+  };
+  await page.evaluate((spec) => window.gisLayers.addRaster("Imagery", spec), spec);
+  const drawn = () => page.evaluate(() => window.gisDeck.drawnLayerIds() as string[]);
+  const raster = (await app.layers()).find((l) => l.name === "Imagery")!;
+
+  // Bottom of the list, drawn first (beneath the cities).
+  expect((await app.layers()).map((l) => l.name)).toEqual(["cities", "Imagery"]);
+  expect((await drawn())[0]).toBe(`raster-${raster.id}`);
+  await page.evaluate((id) => window.gisLayers.reorder(id, 0), raster.id);
+  expect((await drawn()).at(-1)).toBe(`raster-${raster.id}`);
+
+  // Opacity from Layer Properties ▸ Symbology.
+  await app.sidebarTab("Layers").click();
+  await page.locator("li[draggable=true]", { hasText: "Imagery" }).click({ button: "right" });
+  await app.menuItem("Layer properties…").click();
+  await page.getByRole("tab", { name: "Symbology" }).click();
+  await page.getByLabel("Opacity").fill("0.4");
+  await page.keyboard.press("Escape");
+  await page.evaluate((id) => window.gisLayers.setVisible(id, false), raster.id);
+
+  await app.saveProject(path);
+  await page.evaluate(() => window.gisLayers.list().forEach((l: { id: string }) => window.gisLayers.remove(l.id)));
+  await app.openProject(path);
+  const reopened = await page.evaluate((id) => window.gisLayers.get(id), raster.id);
+  expect(reopened).toMatchObject({ kind: "raster", name: "Imagery", visible: false, raster: { spec, opacity: 0.4 } });
+  expect((await app.layers()).map((l) => l.name)).toEqual(["Imagery", "cities"]);
+});
+
+test("WMS and WMTS layers draw tiles from public services @network", async ({ app, page }) => {
+  test.setTimeout(180_000);
+  const tile = (pattern: RegExp) =>
+    page.waitForResponse((r) => pattern.test(r.url()) && r.ok() && /^image\//.test(r.headers()["content-type"] ?? ""), {
+      timeout: 60_000,
+    });
+  await app.jump(10.4, 51.2, 6);
+
+  // WMS through the dialog (BKG TopPlusOpen).
+  await page.getByTitle(/Add a layer from a WFS/).click();
+  await page.getByLabel("Service address").fill("https://sgx.geodatenzentrum.de/wms_topplus_open");
+  await page.getByRole("button", { name: "Connect" }).click();
+  await expect(page.getByText(/Connected to .*\(WMS 1\.3\.0\)/)).toBeVisible({ timeout: 60_000 });
+  await page.getByLabel(/^Layer \(/).selectOption("web");
+  const wmsTile = tile(/wms_topplus_open\?.*REQUEST=GetMap/);
+  await page.getByRole("button", { name: "Add layer" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 60_000 });
+  await wmsTile;
+
+  // WMTS: BKG from its base address (KVP fails there, so the RESTful document),
+  // and basemap.at from its capabilities document.
+  for (const [url, layer, pattern] of [
+    ["https://sgx.geodatenzentrum.de/wmts_topplus_open", "web_grau", /wmts_topplus_open\/tile\/1\.0\.0\/web_grau\//],
+    ["https://mapsneu.wien.gv.at/basemapneu/1.0.0/WMTSCapabilities.xml", "bmapoverlay", /basemap\/bmapoverlay\//],
+  ] as const) {
+    const t = tile(pattern);
+    await page.evaluate(
+      async ([url, layer]) => {
+        const s = await window.gisWebServices.connect(url, "auto");
+        await window.gisWebServices.addLayer(s, s.layers.find((l: { id: string }) => l.id === layer));
+      },
+      [url, layer],
+    );
+    await t;
+  }
+  const kinds = (await app.layers()).map((l) => l.status);
+  expect(kinds).toEqual(["ready", "ready", "ready"]);
 });
