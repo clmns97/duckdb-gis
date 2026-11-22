@@ -24,6 +24,9 @@ test("clicks select on the active layer only, and each layer keeps its own selec
 
   await app.sidebarTab("Layers").click();
   await page.getByText("regions", { exact: true }).click(); // make it active
+  // deck.gl builds a layer's picking data on the draw after it first becomes
+  // pickable; a click in the same frame (only a script is that fast) misses.
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   await page.mouse.click(alps.x, alps.y);
   await expect.poll(() => size(app, regions)).toBe(1);
   expect(await size(app, cities)).toBe(1);

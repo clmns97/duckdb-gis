@@ -102,7 +102,7 @@ export class App {
   /** Replace the SQL editor's text and run it; resolves with the status line. */
   async runSql(text: string): Promise<string> {
     await this.page.locator(".cm-content").click();
-    await this.page.keyboard.press("Control+a");
+    await this.page.keyboard.press("ControlOrMeta+a");
     await this.page.keyboard.press("Delete");
     await this.page.keyboard.insertText(text); // literal: no bracket auto-close
     await this.page.locator("button:has-text('Run')").click();

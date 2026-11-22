@@ -15,7 +15,7 @@ test("the served production bundle runs the core loop", async ({ page }) => {
   await expect(status).toHaveText(/3 features/);
   for (const q of ["SELECT geom FROM demo.regions", "SELECT geom FROM demo.cities"]) {
     await page.locator(".cm-content").click();
-    await page.keyboard.press("Control+a");
+    await page.keyboard.press("ControlOrMeta+a");
     await page.keyboard.insertText(q);
     await page.locator("button:has-text('Run')").click();
     await expect(status).toHaveText(/\d+ features? ·/);

@@ -72,6 +72,28 @@ test("in-place edits (duplicate, rotate, scale, copy/paste, undo/redo) save back
   expect(await app.sql("SELECT count(*)::INT AS n FROM memory.main.shapes")).toEqual([{ n: 3 }]);
 });
 
+test("toolbar edits made in quick succession undo one at a time", async ({ app, page }) => {
+  await polygonLayer(app, "quick");
+  await page.evaluate(() => window.gisLayers.setActive(window.gisLayers.list()[0].id));
+  await page.getByTitle("Edit quick").click();
+  await expect.poll(() => featureCount(app)).toBe(1);
+  await app.jump(10, 50, 8);
+  const c = await app.mapPx(10, 50);
+  await app.tap(c.x, c.y);
+  await expect.poll(() => page.evaluate(() => window.gisEditing.selectedCount)).toBe(1);
+
+  // Two clicks' worth of edits with no pause at all: still two undo steps.
+  await page.evaluate(() => {
+    window.gisEditing.duplicateSelected();
+    window.gisEditing.duplicateSelected();
+  });
+  expect(await featureCount(app)).toBe(3);
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect.poll(() => featureCount(app)).toBe(2);
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect.poll(() => featureCount(app)).toBe(1);
+});
+
 test("stopping an edit discards it", async ({ app, page }) => {
   await polygonLayer(app, "keep");
   await page.evaluate(() => window.gisEditing.beginEdit(window.gisLayers.list()[0]));
