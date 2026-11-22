@@ -1,6 +1,8 @@
 // ---------------------------------------------------------------------------
 // Web feature services (#121): add a layer from a WFS, an OGC API – Features
-// collection or an ArcGIS REST feature layer.
+// collection or an ArcGIS REST feature layer. The same dialog and `connect`
+// also take WMS/WMTS addresses (#122), whose layers are images rather than
+// features — see rasterServices.ts.
 //
 // DuckDB does the network work, not the browser: discovery documents come
 // through `read_text` (parsed here — XML with DOMParser, JSON with JSON.parse)
@@ -30,27 +32,48 @@
 // ---------------------------------------------------------------------------
 
 import { query, str, sqlLit, ident, errMsg, type Row } from "./duckdb";
-import { ensureHttpfs } from "./remote";
+import {
+  duckUrl,
+  splitUrl,
+  withParams,
+  withoutParams,
+  download,
+  fetchText,
+  fetchJson,
+  descendants,
+  childText,
+  parseCapabilities,
+} from "./serviceHttp";
 import { WORKING_CATALOG } from "./workspace";
 import { freeTableName } from "./geoprocessing";
 import { layers, layerId, type LayerSource } from "./layers";
 import { unsavedChanges } from "./unsavedChanges";
 import { getMap } from "./mapBus";
 import { changeSignal } from "./store";
+import { connectWms, connectWmts, addRasterLayer } from "./rasterServices";
+import type { RasterSpec } from "./rasterTiles";
 
-export type ServiceType = "wfs" | "ogcapi" | "arcgis";
+export type ServiceType = "wfs" | "ogcapi" | "arcgis" | "wms" | "wmts";
 
 export const SERVICE_TYPE_LABEL: Record<ServiceType, string> = {
   wfs: "WFS",
   ogcapi: "OGC API – Features",
   arcgis: "ArcGIS REST",
+  wms: "WMS",
+  wmts: "WMTS",
 };
 
-/** One layer a service offers: a WFS feature type, an OGC API collection or an
- *  ArcGIS layer (by its numeric id). */
+/** WMS/WMTS: image services, drawn as raster tiles rather than fetched. */
+export const isRasterService = (s: Service): boolean => s.type === "wms" || s.type === "wmts";
+
+/** One layer a service offers: a WFS feature type, an OGC API collection, an
+ *  ArcGIS layer (by its numeric id), or a WMS/WMTS layer — with how to draw it
+ *  (`raster`), or why the map can't (`unsupported`). */
 export interface ServiceLayer {
   id: string;
   title: string;
+  raster?: RasterSpec;
+  unsupported?: string;
 }
 
 export interface Service {
@@ -84,78 +107,6 @@ export const VIEW_CAP = 10_000;
 export const DOWNLOAD_CAP = 100_000;
 
 // ---------------------------------------------------------------------------
-// HTTP through DuckDB
-// ---------------------------------------------------------------------------
-
-const duckUrl = (url: string): string => url.replace(/\*/g, "%2A");
-
-// Commas and colons stay literal: BBOX values and CRS URNs go out the way
-// servers document them.
-const enc = (v: string): string =>
-  encodeURIComponent(v).replace(/%2C/gi, ",").replace(/%3A/gi, ":");
-
-function splitUrl(url: string): [string, string[]] {
-  const q = url.indexOf("?");
-  if (q === -1) return [url, []];
-  return [url.slice(0, q), url.slice(q + 1).split("&").filter(Boolean)];
-}
-
-/** `url` with `params` set, replacing same-named ones (case-insensitive — a
- *  pasted GetCapabilities URL's REQUEST, say) and keeping the rest of its
- *  query (MapServer's `map=`, an access token). */
-function withParams(url: string, params: Record<string, string | number>): string {
-  const [base, pairs] = splitUrl(url);
-  const names = new Set(Object.keys(params).map((k) => k.toLowerCase()));
-  const kept = pairs.filter((kv) => !names.has(kv.split("=")[0].toLowerCase()));
-  const added = Object.entries(params).map(([k, v]) => `${k}=${enc(String(v))}`);
-  return `${base}?${[...kept, ...added].join("&")}`;
-}
-
-/** `url` without the named query params (case-insensitive). */
-function withoutParams(url: string, names: string[]): string {
-  const [base, pairs] = splitUrl(url);
-  const drop = new Set(names);
-  const kept = pairs.filter((kv) => !drop.has(kv.split("=")[0].toLowerCase()));
-  return kept.length ? `${base}?${kept.join("&")}` : base;
-}
-
-/**
- * Run `statements` (which read over HTTP) with `force_download` on, then
- * `final`, on the session connection. One request, so nothing else on the
- * session runs with the setting on; reset again if a statement fails.
- */
-async function download(statements: string, final: string): Promise<Row[]> {
-  await ensureHttpfs();
-  try {
-    return await query(
-      `SET SESSION force_download = true; ${statements}; RESET SESSION force_download; ${final}`,
-    );
-  } catch (e) {
-    await query("RESET SESSION force_download").catch(() => {});
-    throw e;
-  }
-}
-
-async function fetchText(url: string): Promise<string> {
-  const rows = await download(
-    `CREATE OR REPLACE TEMP TABLE _gis_ws_text AS SELECT content FROM read_text('${sqlLit(duckUrl(url))}')`,
-    `SELECT content FROM _gis_ws_text`,
-  );
-  await query("DROP TABLE IF EXISTS _gis_ws_text"); // or the Browser shows a temp schema
-  return str(rows[0]?.content);
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function fetchJson(url: string): Promise<any> {
-  const text = await fetchText(url);
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw new Error(`${url} did not answer with JSON`);
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Discovery
 // ---------------------------------------------------------------------------
 
@@ -163,14 +114,17 @@ async function fetchJson(url: string): Promise<any> {
 export function guessType(url: string): ServiceType | null {
   const [path] = splitUrl(url.trim());
   if (/\/(FeatureServer|MapServer)(\/\d+)?\/?$/i.test(path)) return "arcgis";
+  // Likewise "wmts" / "wms": /wmts_topplus_open, …/WMTSCapabilities.xml, /wms.
+  if (/[?&]service=wmts(&|$)/i.test(url) || /\/[^/]*wmts[^/]*\/?$/i.test(path)) return "wmts";
+  if (/[?&]service=wms(&|$)/i.test(url) || /\/[^/]*wms[^/]*\/?$/i.test(path)) return "wms";
   // "wfs" anywhere in the last path segment: /geoserver/wfs, /wfs_vg250, /ows.
   if (/[?&]service=wfs(&|$)/i.test(url) || /\/([^/]*wfs[^/]*|ows)\/?$/i.test(path)) return "wfs";
   if (/\/collections(\/[^/]+)?(\/items)?\/?$/i.test(path)) return "ogcapi";
   return null;
 }
 
-/** Connect to a service and list its feature layers. `type: "auto"` guesses
- *  from the address, then tries OGC API and WFS in turn. */
+/** Connect to a service and list its layers. `type: "auto"` guesses from the
+ *  address, then tries OGC API, WFS, WMS and WMTS in turn. */
 export async function connect(input: string, type: ServiceType | "auto"): Promise<Service> {
   const url = input.trim();
   if (!/^https?:\/\//i.test(url)) throw new Error("Enter an http:// or https:// service address.");
@@ -178,33 +132,25 @@ export async function connect(input: string, type: ServiceType | "auto"): Promis
   if (kind === "wfs") return connectWfs(url);
   if (kind === "ogcapi") return connectOgc(url);
   if (kind === "arcgis") return connectArcgis(url);
-  try {
-    return await connectOgc(url);
-  } catch {
-    // not an OGC API landing page — try WFS next
+  if (kind === "wms") return connectWms(url);
+  if (kind === "wmts") return connectWmts(url);
+  let first: unknown;
+  for (const attempt of [connectOgc, connectWfs, connectWms, connectWmts]) {
+    try {
+      return await attempt(url);
+    } catch (e) {
+      first ??= e;
+    }
   }
-  try {
-    return await connectWfs(url);
-  } catch (e) {
-    throw new Error(
-      `Couldn't recognise this address as a WFS, OGC API – Features or ArcGIS REST service (${errMsg(e)}).`,
-    );
-  }
+  throw new Error(
+    `Couldn't recognise this address as a web service — pick its type (${errMsg(first)}).`,
+  );
 }
 
 const WFS_OPERATION_PARAMS = [
   "service", "request", "version", "acceptversions", "typename", "typenames",
   "outputformat", "srsname", "bbox", "count", "maxfeatures", "startindex", "resulttype",
 ];
-
-// Namespace-agnostic XML helpers: WFS 1.1 and 2.0 put the same elements in
-// different namespaces (wfs/ows 1.0/ows 1.1).
-const descendants = (el: Element, name: string): Element[] =>
-  Array.from(el.getElementsByTagNameNS("*", name));
-const child = (el: Element | undefined, name: string): Element | undefined =>
-  el ? Array.from(el.children).find((c) => c.localName === name) : undefined;
-const childText = (el: Element | undefined, name: string): string =>
-  child(el, name)?.textContent?.trim() ?? "";
 
 /** The GeoJSON output format among a WFS's advertised ones (MapServer calls
  *  it `application/json; subtype=geojson`), preferring the plain names. */
@@ -221,15 +167,7 @@ async function connectWfs(input: string): Promise<Service> {
   const xml = await fetchText(
     withParams(url, { SERVICE: "WFS", REQUEST: "GetCapabilities", ACCEPTVERSIONS: "2.0.0,1.1.0" }),
   );
-  const doc = new DOMParser().parseFromString(xml, "application/xml");
-  const root = doc.documentElement;
-  if (doc.getElementsByTagName("parsererror").length > 0) {
-    throw new Error("the GetCapabilities answer isn't XML");
-  }
-  if (/ExceptionReport$/.test(root.localName)) {
-    throw new Error(`the server says: ${root.textContent?.trim().slice(0, 300)}`);
-  }
-  if (root.localName !== "WFS_Capabilities") throw new Error("not a WFS GetCapabilities document");
+  const root = parseCapabilities(xml, ["WFS_Capabilities"], "WFS");
 
   const version = root.getAttribute("version") ?? "";
   if (!/^(2\.0|1\.1)/.test(version)) {
@@ -403,6 +341,9 @@ function pageUrl(s: Service, layer: string, bbox: Bbox | null, offset: number, l
         resultOffset: offset,
         resultRecordCount: limit,
       });
+    case "wms":
+    case "wmts":
+      throw new Error("WMS/WMTS layers are images, not features");
   }
 }
 
@@ -458,6 +399,9 @@ async function countFeatures(s: Service, layer: string, bbox: Bbox | null): Prom
         const doc = await fetchJson(arcgisQueryUrl(s, layer, bbox, { returnCountOnly: "true", f: "json" }));
         return typeof doc?.count === "number" ? doc.count : null;
       }
+      case "wms":
+      case "wmts":
+        return null;
     }
   } catch {
     return null;
@@ -785,6 +729,7 @@ export const webServices = {
   /** Fetch `layer`'s features in the current map view into a new working
    *  table and add it as a layer. Throws when the view holds none. */
   async addLayer(service: Service, layer: ServiceLayer, onProgress?: FetchProgress): Promise<void> {
+    if (isRasterService(service)) return addRasterLayer(layer);
     const bbox = viewBbox();
     const table = await freeTableName(layer.title || layer.id);
     const r = await serial(() => fetchInto(table, service, layer.id, bbox, VIEW_CAP, onProgress));

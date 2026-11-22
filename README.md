@@ -92,6 +92,10 @@ is drawn as a temporary layer.
 - **Overture Maps** — load [Overture](https://overturemaps.org) themes
   (buildings, places, roads, …) as vector tiles, select features, and copy them
   into an editable table.
+- **Web services** — add layers from WFS, OGC API – Features and ArcGIS REST
+  services (the features in the current view, fetched by DuckDB into a table;
+  refresh for another view or download the whole layer), and WMS / WMTS layers
+  drawn as image tiles in Web Mercator (the service must allow CORS).
 - **Projects** — save and open your layers, styles, map view and working tables
   as a single `.duckdb` file; a warning before unsaved work is discarded.
 
@@ -133,8 +137,8 @@ To make it open this one, add `.ui_command start_gis()` to your `~/.duckdbrc`.
   loaded the extension — the same as typing it into DuckDB yourself. Don't load
   it into a process that holds data you wouldn't query directly.
 - **Your data stays local.** The UI and the server make network requests only
-  for things you ask for: online basemaps, Overture data, remote files you
-  query, and installing `spatial`.
+  for things you ask for: online basemaps, Overture data, web services you
+  add layers from, remote files you query, and installing `spatial`.
 
 To report a vulnerability, see [SECURITY.md](SECURITY.md).
 

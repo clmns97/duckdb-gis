@@ -43,7 +43,7 @@ export class UnsavedChangesError extends Error {
 const SAVE_ALIAS = "__gis_project_save";
 const OPEN_ALIAS = "__gis_project_open";
 
-type SourceKind = "table" | "query" | "pmtiles";
+type SourceKind = "table" | "query" | "pmtiles" | "raster";
 
 /** Quote a value for SQL, or `NULL` when absent. */
 function sqlValue(v: unknown): string {
@@ -98,7 +98,8 @@ export interface ProjectCamera {
  * source's on-disk path) rather than copied — reopening the project
  * best-effort reattaches it. `query` layers round-trip via their stored SQL.
  * `pmtiles` layers (Overture's hosted tiles) round-trip via theme + release —
- * always external, re-fetched on Open, never copied. The single `preview`
+ * always external, re-fetched on Open, never copied. `raster` layers (WMS/WMTS,
+ * #122) round-trip via their tile spec and opacity. The single `preview`
  * slot (SQL-editor Run result) is transient and is not saved.
  */
 export async function saveProject(opts: { path: string; name: string }): Promise<void> {
@@ -176,7 +177,8 @@ async function writeMetadata(
     source_db TEXT, source_schema TEXT, source_table TEXT, source_geom_column TEXT,
     external BOOLEAN, source_path TEXT,
     sql TEXT,
-    pmtiles_theme TEXT, pmtiles_theme_label TEXT, pmtiles_theme_type TEXT, pmtiles_release TEXT
+    pmtiles_theme TEXT, pmtiles_theme_label TEXT, pmtiles_theme_type TEXT, pmtiles_release TEXT,
+    raster JSON
   )`);
   await query(`CREATE TABLE ${g(alias, "style")} (layer_id TEXT, style JSON)`);
   // The service a layer was fetched from (#121), for its Refresh/Download menu.
@@ -242,6 +244,11 @@ function layerRow(layer: ActiveLayer, dbPaths: Map<string, string>): Record<stri
       pmtiles_theme_type: pmtiles.theme.type,
       pmtiles_release: pmtiles.release,
     };
+  }
+  // Added within schema_version 1 (#122): older files have no `raster` column
+  // and no raster rows; older builds skip a source_kind they don't know.
+  if (layer.kind === "raster" && layer.raster) {
+    return { source_kind: "raster", raster: JSON.stringify(layer.raster) };
   }
   return null;
 }
@@ -377,6 +384,13 @@ async function restoreProject(alias: string, force: boolean): Promise<void> {
         type: str(r.pmtiles_theme_type),
       };
       await layers.addPmtiles(theme, str(r.pmtiles_release));
+    } else if (kind === "raster") {
+      try {
+        const { spec, opacity } = JSON.parse(str(r.raster));
+        layers.addRaster(name, spec, { opacity, onTop: true });
+      } catch {
+        continue; // malformed — skip the layer
+      }
     } else {
       continue;
     }

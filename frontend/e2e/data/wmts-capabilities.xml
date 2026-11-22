@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Fixture for e2e/webservices.spec.ts (#122): a WMTS with a
+     GoogleMapsCompatible set (levels 2–4, custom identifiers), a UTM set,
+     a RESTful layer with a Time dimension, a KVP-only layer, and a UTM-only one. -->
+<Capabilities version="1.0.0" xmlns="http://www.opengis.net/wmts/1.0" xmlns:ows="http://www.opengis.net/ows/1.1" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <ows:ServiceIdentification><ows:Title>Fixture WMTS</ows:Title></ows:ServiceIdentification>
+  <ows:OperationsMetadata>
+    <ows:Operation name="GetTile">
+      <ows:DCP><ows:HTTP><ows:Get xlink:href="https://tiles.example.org/kvp?"/></ows:HTTP></ows:DCP>
+    </ows:Operation>
+  </ows:OperationsMetadata>
+  <Contents>
+    <Layer>
+      <ows:Title>Temperature</ows:Title>
+      <ows:WGS84BoundingBox><ows:LowerCorner>-180 -85</ows:LowerCorner><ows:UpperCorner>180 85</ows:UpperCorner></ows:WGS84BoundingBox>
+      <ows:Identifier>temp</ows:Identifier>
+      <Style isDefault="true"><ows:Identifier>shaded</ows:Identifier></Style>
+      <Format>image/png</Format>
+      <Dimension><ows:Identifier>Time</ows:Identifier><Default>2026-01-01</Default></Dimension>
+      <TileMatrixSetLink><TileMatrixSet>utm</TileMatrixSet></TileMatrixSetLink>
+      <TileMatrixSetLink><TileMatrixSet>merc</TileMatrixSet></TileMatrixSetLink>
+      <ResourceURL format="image/png" resourceType="tile" template="https://tiles.example.org/temp/{Style}/{Time}/{TileMatrixSet}/{TileMatrix}/{TileRow}/{TileCol}.png"/>
+    </Layer>
+    <Layer>
+      <ows:Title>Roads</ows:Title>
+      <ows:Identifier>roads</ows:Identifier>
+      <Style><ows:Identifier>default</ows:Identifier></Style>
+      <Format>image/jpeg</Format>
+      <TileMatrixSetLink><TileMatrixSet>merc</TileMatrixSet></TileMatrixSetLink>
+    </Layer>
+    <Layer>
+      <ows:Title>Parcels</ows:Title>
+      <ows:Identifier>parcels</ows:Identifier>
+      <Format>image/png</Format>
+      <TileMatrixSetLink><TileMatrixSet>utm</TileMatrixSet></TileMatrixSetLink>
+    </Layer>
+    <TileMatrixSet>
+      <ows:Identifier>merc</ows:Identifier>
+      <ows:SupportedCRS>urn:ogc:def:crs:EPSG:6.18.3:3857</ows:SupportedCRS>
+      <TileMatrix><ows:Identifier>L2</ows:Identifier><ScaleDenominator>139770566.0071794</ScaleDenominator><TopLeftCorner>-20037508.3428 20037508.3428</TopLeftCorner><TileWidth>256</TileWidth><TileHeight>256</TileHeight><MatrixWidth>4</MatrixWidth><MatrixHeight>4</MatrixHeight></TileMatrix>
+      <TileMatrix><ows:Identifier>L3</ows:Identifier><ScaleDenominator>69885283.00358972</ScaleDenominator><TopLeftCorner>-20037508.3428 20037508.3428</TopLeftCorner><TileWidth>256</TileWidth><TileHeight>256</TileHeight><MatrixWidth>8</MatrixWidth><MatrixHeight>8</MatrixHeight></TileMatrix>
+      <TileMatrix><ows:Identifier>L4</ows:Identifier><ScaleDenominator>34942641.50179486</ScaleDenominator><TopLeftCorner>-20037508.3428 20037508.3428</TopLeftCorner><TileWidth>256</TileWidth><TileHeight>256</TileHeight><MatrixWidth>16</MatrixWidth><MatrixHeight>16</MatrixHeight></TileMatrix>
+    </TileMatrixSet>
+    <TileMatrixSet>
+      <ows:Identifier>utm</ows:Identifier>
+      <ows:SupportedCRS>EPSG:25832</ows:SupportedCRS>
+      <TileMatrix><ows:Identifier>0</ows:Identifier><ScaleDenominator>17471320.75</ScaleDenominator><TopLeftCorner>-3803165.98 8805908.08</TopLeftCorner><TileWidth>256</TileWidth><TileHeight>256</TileHeight><MatrixWidth>6</MatrixWidth><MatrixHeight>5</MatrixHeight></TileMatrix>
+    </TileMatrixSet>
+  </Contents>
+</Capabilities>

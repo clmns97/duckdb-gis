@@ -12,6 +12,7 @@ import { wkbToGeoArrow } from "./wkb";
 import { getMap, fitBounds } from "./mapBus";
 import { selection, FID, fidTaggedRelation, cleanSql, type Pick } from "./selection";
 import type { PickingInfo } from "@deck.gl/core";
+import { rasterTileLayer, type RasterSpec } from "./rasterTiles";
 
 // ---------------------------------------------------------------------------
 // Unified GeoArrow render path. DuckDB returns geometry as WKB in an Arrow IPC
@@ -74,6 +75,15 @@ interface AddedLayer {
   suppressed: boolean;
 }
 const added = new Map<string, AddedLayer>();
+
+// WMS/WMTS raster layers (#122): drawn in the same order as `added`, so they
+// stack between vector layers as the Layers panel orders them.
+interface RasterEntry {
+  spec: RasterSpec;
+  opacity: number;
+  visible: boolean;
+}
+const rasters = new Map<string, RasterEntry>();
 
 // The active layer (#110): the only layer deck makes pickable, so a click or a
 // box selects features of the active layer even where another layer covers it.
@@ -558,16 +568,19 @@ function syncOverlay(): void {
   // Draw in the store-driven order when set (T-031), else Map insertion order.
   // Registered ids missing from `drawOrder` are appended last (on top) so a
   // freshly added layer is never dropped by a stale order list.
+  const all = [...added.keys(), ...rasters.keys()];
   const ids = drawOrder
-    ? [
-        ...drawOrder.filter((id) => added.has(id)),
-        ...[...added.keys()].filter((id) => !drawOrder!.includes(id)),
-      ]
-    : [...added.keys()];
+    ? [...drawOrder.filter((id) => added.has(id) || rasters.has(id)), ...all.filter((id) => !drawOrder!.includes(id))]
+    : all;
   // Hidden layers stay in the list with `visible: false` rather than being
   // dropped: deck then keeps their GPU buffers and polygon triangulation, so
   // re-showing a large polygon layer is instant instead of re-triangulating.
   for (const id of ids) {
+    const r = rasters.get(id);
+    if (r) {
+      layers.push(rasterTileLayer(id, r.spec, r.opacity, r.visible));
+      continue;
+    }
     const al = added.get(id)!;
     const visible = al.visible && !al.suppressed;
     const make = FACTORIES[al.kind];
@@ -595,8 +608,13 @@ function syncOverlay(): void {
   // deck.gl's LayerProps type — cast past it.
   const beforeId = beforeIdFn?.();
   if (beforeId) layers = layers.map((l) => l.clone({ beforeId } as never));
+  drawn = layers.map((l) => l.id);
   ensureOverlay(map).setProps({ layers });
 }
+
+// The overlay's layer ids, bottom to top, as last drawn — for the dev seam.
+let drawn: string[] = [];
+export const drawnLayerIds = (): string[] => drawn;
 
 export interface AddedLayerOutcome {
   featureCount: number;
@@ -645,15 +663,29 @@ export async function addDeckLayer(
   };
 }
 
-/** Drop a persistent added layer from the overlay. */
-export function removeDeckLayer(id: string): void {
-  selection.clear(id);
-  if (added.delete(id)) syncOverlay();
+/** Add (or replace) a WMS/WMTS raster layer's tiles (#122). */
+export function addRasterLayer(id: string, spec: RasterSpec, opacity: number): void {
+  rasters.set(id, { spec, opacity, visible: true });
+  syncOverlay();
 }
 
-/** Show/hide a persistent added layer without re-querying. */
+/** Set a raster layer's opacity (0–1). */
+export function setRasterOpacity(id: string, opacity: number): void {
+  const r = rasters.get(id);
+  if (!r) return;
+  r.opacity = opacity;
+  syncOverlay();
+}
+
+/** Drop a persistent added or raster layer from the overlay. */
+export function removeDeckLayer(id: string): void {
+  selection.clear(id);
+  if (added.delete(id) || rasters.delete(id)) syncOverlay();
+}
+
+/** Show/hide a persistent added or raster layer without re-querying. */
 export function setDeckLayerVisible(id: string, visible: boolean): void {
-  const al = added.get(id);
+  const al = added.get(id) ?? rasters.get(id);
   if (!al || al.visible === visible) return;
   al.visible = visible;
   syncOverlay();

@@ -24,6 +24,8 @@ import { changeSignal } from "./store";
 import { query, str, sqlLit, ident, errMsg, type QueryOptions } from "./duckdb";
 import {
   addDeckLayer,
+  addRasterLayer,
+  setRasterOpacity,
   removeDeckLayer,
   setDeckLayerStyle,
   setDeckLayerOrder,
@@ -40,6 +42,7 @@ import {
   setOvertureTileVisible,
 } from "./overtureTiles";
 import type { OvertureTheme } from "./overture";
+import type { RasterSpec } from "./rasterTiles";
 
 export type { LayerStyle, GeometryKind };
 
@@ -61,8 +64,10 @@ export interface LayerSource {
  *                 also a deck layer.
  *   • `preview` — the single replaceable SQL-editor Run result (deck preview slot).
  *   • `pmtiles` — a native MapLibre vector-tile layer (Overture hosted PMTiles).
+ *   • `raster`  — WMS/WMTS image tiles (#122), a deck tile layer in the same
+ *                 stack as `table`/`query`.
  */
-export type LayerKind = "table" | "query" | "preview" | "pmtiles";
+export type LayerKind = "table" | "query" | "preview" | "pmtiles" | "raster";
 
 export interface ActiveLayer {
   /** Stable id: also the MVT layer/source id and the dedupe key. */
@@ -96,6 +101,9 @@ export interface ActiveLayer {
    *  layer, not a deck layer, so visibility/removal route to `overtureTiles`.
    *  Carries the theme + release needed by "Create Layer from Selection". */
   pmtiles?: { theme: OvertureTheme; release: string };
+  /** Present for a WMS/WMTS layer (#122): how to fetch its tiles, and its
+   *  opacity (0–1) — a raster layer's only symbology. */
+  raster?: { spec: RasterSpec; opacity: number };
 }
 
 
@@ -127,6 +135,13 @@ function assertNever(x: never): never {
  *  unquoted table name fragment, or a URL path segment. */
 export function sanitizeIdent(s: string): string {
   return s.replace(/[^A-Za-z0-9]/g, "_");
+}
+
+/** A short, stable, id-safe hash of `s` (a raster layer's tile URL). */
+function hashId(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  return h.toString(36);
 }
 
 /** Fully-qualified `"db"."schema"."table"` for a layer source. */
@@ -359,6 +374,41 @@ export const layers = {
   },
 
   /**
+   * Add a WMS/WMTS layer (#122) as raster tiles. It goes to the bottom of the
+   * list — above the basemap, below the vector layers — and can be dragged up
+   * from there; `onTop` stacks it like any other new layer instead (a project
+   * being reopened, bottom layer first). Dedupes on the tile URL template.
+   * Ready at once: tiles load as the map draws them (rasterServices.ts checked
+   * one before calling this).
+   */
+  addRaster(name: string, spec: RasterSpec, { opacity = 1, onTop = false } = {}): void {
+    const id = `L_raster_${hashId(spec.url)}`;
+    if (byId.has(id)) return;
+    byId.set(id, {
+      id,
+      kind: "raster",
+      name,
+      visible: true,
+      status: "ready",
+      bounds: spec.bounds,
+      raster: { spec, opacity },
+    });
+    order = onTop ? [id, ...order] : [...order, id];
+    activeId = id;
+    addRasterLayer(id, spec, opacity);
+    syncDeckOrder();
+    signal.emit();
+  },
+
+  /** Set a raster layer's opacity (0–1). */
+  setOpacity(id: string, opacity: number): void {
+    const layer = byId.get(id);
+    if (!layer?.raster) return;
+    setRasterOpacity(id, opacity);
+    patch(id, { raster: { ...layer.raster, opacity } });
+  },
+
+  /**
    * Update a layer's symbology (T-010): merge `changes` into its style, push it
    * to the render layer live, and notify subscribers so the Symbology UI stays
    * in sync. No-op if the layer is unknown or not yet styled (still loading).
@@ -437,6 +487,7 @@ export const layers = {
         break;
       case "table":
       case "query":
+      case "raster":
         setDeckLayerVisible(id, visible);
         break;
       default:
@@ -480,6 +531,7 @@ export const layers = {
         break;
       case "table":
       case "query":
+      case "raster":
         removeDeckLayer(id);
         break;
       default:

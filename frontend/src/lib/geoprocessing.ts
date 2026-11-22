@@ -354,9 +354,9 @@ TOOLS.push(
 
 // --- Running ---------------------------------------------------------------
 
-/** Layers a tool can read: deck-drawn layers that finished loading. */
+/** Layers a tool can read: deck-drawn vector layers that finished loading. */
 export function inputLayers(): ActiveLayer[] {
-  return layers.list().filter((l) => l.kind !== "pmtiles" && l.status === "ready");
+  return layers.list().filter((l) => l.kind !== "pmtiles" && l.kind !== "raster" && l.status === "ready");
 }
 
 /** One input: a layer, and whether to read only its selected features. */

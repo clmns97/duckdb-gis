@@ -84,7 +84,13 @@ export function LayerProperties({ layerId, onClose }: { layerId: string; onClose
         </Button>
       }
     >
-      {tab === "information" ? (
+      {layer.raster ? (
+        tab === "information" ? (
+          <RasterInformation layer={layer} />
+        ) : (
+          <RasterSymbology layer={layer} />
+        )
+      ) : tab === "information" ? (
         <InformationTab layer={layer} />
       ) : (
         <SymbologyTab layer={layer} />
@@ -165,6 +171,65 @@ function InformationTab({ layer }: { layer: ActiveLayer }) {
   );
 }
 
+// A WMS/WMTS layer (#122): where its images come from, and its opacity.
+function RasterInformation({ layer }: { layer: ActiveLayer }) {
+  const spec = layer.raster!.spec;
+  return (
+    <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5 m-0 text-editor">
+      <Row label="Service">{`${spec.type.toUpperCase()} · ${spec.service}`}</Row>
+      <Row label="Layer">{spec.layer}</Row>
+      <Row label="Zoom levels">{spec.type === "wms" ? "any" : `${spec.minZoom}–${spec.maxZoom}`}</Row>
+      <Row label="Extent">{spec.bounds ? spec.bounds.map((n) => n.toFixed(5)).join(", ") : "—"}</Row>
+    </dl>
+  );
+}
+
+function RasterSymbology({ layer }: { layer: ActiveLayer }) {
+  return (
+    <RangeRow
+      label="Opacity"
+      value={layer.raster!.opacity}
+      range={[0, 1, 0.05]}
+      show={percent}
+      onChange={(v) => layers.setOpacity(layer.id, v)}
+    />
+  );
+}
+
+const percent = (v: number) => `${Math.round(v * 100)}%`;
+
+// A labelled slider with its value shown beside it.
+function RangeRow({
+  label,
+  value,
+  range: [min, max, step],
+  show,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  range: [number, number, number];
+  show: (v: number) => string;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <SymRow label={label}>
+      <span className="flex items-center gap-2">
+        <input
+          type="range"
+          className="accent-primary w-40"
+          min={min}
+          max={max}
+          step={step}
+          value={value}
+          onChange={(e) => onChange(Number(e.target.value))}
+        />
+        <output className="min-w-[42px] text-right text-gray-500 tabular-nums">{show(value)}</output>
+      </span>
+    </SymRow>
+  );
+}
+
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <>
@@ -208,30 +273,15 @@ function SymbologyTab({ layer }: { layer: ActiveLayer }) {
   const range = (
     label: string,
     key: "fillOpacity" | "lineWidth" | "pointRadius",
-    [min, max, step]: [number, number, number],
+    r: [number, number, number],
     show: (v: number) => string,
-  ) => (
-    <SymRow label={label}>
-      <span className="flex items-center gap-2">
-        <input
-          type="range"
-          className="accent-primary w-40"
-          min={min}
-          max={max}
-          step={step}
-          value={style[key]}
-          onChange={(e) => set({ [key]: Number(e.target.value) })}
-        />
-        <output className="min-w-[42px] text-right text-gray-500 tabular-nums">{show(style[key])}</output>
-      </span>
-    </SymRow>
-  );
+  ) => <RangeRow label={label} value={style[key]} range={r} show={show} onChange={(v) => set({ [key]: v })} />;
 
   return (
     <div className="flex flex-col gap-3">
       {color("Fill color", "fillColor")}
       {color("Line color", "lineColor")}
-      {range("Opacity", "fillOpacity", [0, 1, 0.05], (v) => `${Math.round(v * 100)}%`)}
+      {range("Opacity", "fillOpacity", [0, 1, 0.05], percent)}
       {range("Line width", "lineWidth", [0, 8, 0.5], (v) => `${v} px`)}
       {range("Point size", "pointRadius", [1, 12, 1], (v) => `${v} px`)}
 
