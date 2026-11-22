@@ -3,7 +3,7 @@
 //
 // A project *is* the working database (ADR-0001): Save materialises the
 // `memory` catalog into a file via `COPY FROM DATABASE`, plus a reserved
-// `_gis` metadata schema (project/layers/style) we own and version. Open does
+// `_gis` metadata schema (project/layers/style/web_services) we own and version. Open does
 // the reverse — attach, detect `_gis` (that's what distinguishes a project
 // from a plain `.duckdb`, #8), copy its tables back into a *fresh* `memory`,
 // then rebuild the layers store, styles, basemap and camera from `_gis.*`.
@@ -22,6 +22,7 @@ import { getMap } from "./mapBus";
 import { editing } from "./editing";
 import { attach } from "./attach";
 import { unsavedChanges } from "./unsavedChanges";
+import { webServices } from "./webServices";
 
 export const PROJECT_SCHEMA_VERSION = 1;
 
@@ -178,6 +179,10 @@ async function writeMetadata(
     pmtiles_theme TEXT, pmtiles_theme_label TEXT, pmtiles_theme_type TEXT, pmtiles_release TEXT
   )`);
   await query(`CREATE TABLE ${g(alias, "style")} (layer_id TEXT, style JSON)`);
+  // The service a layer was fetched from (#121), for its Refresh/Download menu.
+  // Added within schema_version 1: older files lack it (read as optional), and
+  // older builds drop `_gis` wholesale on Open, so they don't trip over it.
+  await query(`CREATE TABLE ${g(alias, "web_services")} (layer_id TEXT, state JSON)`);
 
   for (let i = 0; i < data.layers.length; i++) {
     const layer = data.layers[i];
@@ -200,6 +205,13 @@ async function writeMetadata(
     if (layer.style) {
       await query(
         `INSERT INTO ${g(alias, "style")} VALUES ('${sqlLit(layer.id)}', '${sqlLit(JSON.stringify(layer.style))}'::JSON)`,
+      );
+    }
+
+    const service = webServices.snapshot(layer.id);
+    if (service) {
+      await query(
+        `INSERT INTO ${g(alias, "web_services")} VALUES ('${sqlLit(layer.id)}', '${sqlLit(JSON.stringify(service))}'::JSON)`,
       );
     }
   }
@@ -299,6 +311,20 @@ async function restoreProject(alias: string, force: boolean): Promise<void> {
       // Malformed style JSON — leave that layer on its freshly-assigned default.
     }
   }
+  const services = new Map<string, unknown>();
+  const hasServices = await query(
+    `SELECT 1 AS x FROM duckdb_tables() WHERE database_name = '${sqlLit(alias)}' ` +
+      `AND schema_name = '_gis' AND table_name = 'web_services'`,
+  );
+  if (hasServices.length > 0) {
+    for (const r of await query(`SELECT layer_id AS id, state FROM ${g(alias, "web_services")}`)) {
+      try {
+        services.set(str(r.id), JSON.parse(str(r.state)));
+      } catch {
+        // Malformed — the layer opens as a plain table.
+      }
+    }
+  }
 
   // Everything below here mutates state, so it only starts once the file has
   // passed the checks above.
@@ -339,6 +365,7 @@ async function restoreProject(alias: string, force: boolean): Promise<void> {
         }
       }
       await layers.add({ db, schema, table, geomColumn });
+      if (services.has(id)) webServices.restore(id, services.get(id));
     } else if (kind === "query") {
       const sql = nullableStr(r.sql);
       if (!sql) continue;
